@@ -1,0 +1,26 @@
+---
+description: Leaguebound feature implementation (Match Engine, Ink, News Feed, PRD)
+alwaysApply: true
+---
+
+# Leaguebound Feature Rules (from PRD)
+
+When implementing Leaguebound features, follow the PRD (`docs/PRD.md`) and these constraints.
+
+## Match Engine
+- **Flow:** Possession Init → State Transition (Pass/Shoot/Dribble by Archetype + Game State) → Resolution `(Base Stat + Energy + BBIQ) vs (Defense + Variance)` → Key Moment trigger when player involved + critical/RNG.
+- **Key Moment UI:** Context line + distinct choice buttons (e.g. Force Shot / Pass to Corner / Reset). Show immediate stat result + one-line commentary.
+
+## Ink / Narrative
+- **Read:** Ink can read `Player.BankBalance`, `Player.Morale`, `Player.Position` (and equivalent state).
+- **Write:** Choices call functions (e.g. `updateBank(-500)`, `modifyRelationship('Coach', -10)`).
+- **Interrupts:** Support blocking events (e.g. Academic Probation) so "Next Week" is disabled until resolved.
+
+## Data & Performance
+- **Focus Ring:** Player's team + immediate rivals = play-by-play sim.
+- **Outer Ring:** Rest of league = box-score / statistical approximation in batches on "Advance Week."
+- **Offline:** 100% offline. Auto-save after Week Advance and after Key Moment resolution.
+
+## UI
+- **News Feed (Home):** Mix game results, narrative hooks (Ink), and social sim (tweets/posts). Scroll list.
+- **Key Moment:** Blurred court background, large text choice buttons, then stat + commentary line.

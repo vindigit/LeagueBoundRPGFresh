@@ -1,0 +1,33 @@
+"use strict";
+
+module.exports = {
+  minEventSeconds: 8,
+  maxEventSeconds: 24,
+  archetypeWeightAdjustments: {
+    Slasher: { pass: 0, shoot: 10, dribble: 18 },
+    Sharpshooter: { pass: 3, shoot: 20, dribble: -5 },
+    Playmaker: { pass: 18, shoot: -4, dribble: 8 },
+    "Lockdown Defender": { pass: 8, shoot: -5, dribble: 4 },
+    "Paint Beast": { pass: 2, shoot: 12, dribble: -8 },
+    "Stretch Big": { pass: 4, shoot: 14, dribble: -6 },
+  },
+  baseActionWeights: { pass: 34, shoot: 38, dribble: 28 },
+  highPressureAdjustments: { pass: 8, shoot: 10, dribble: -6 },
+  lowPressureAdjustments: { pass: 0, shoot: 0, dribble: 0 },
+  energyModifierScale: 0.18,
+  bbiqModifierScale: 0.15,
+  varianceBaseSpread: 6,
+  varianceBbiqSpread: 8,
+  shotMakeBase: 0.4,
+  shotMakeDivisor: 280,
+  shotMakeMin: 0.34,
+  shotMakeMax: 0.66,
+  failureBase: 0.14,
+  failureDivisor: 390,
+  failureMin: 0.03,
+  failureMax: 0.17,
+  threePointOffset: 35,
+  threePointDivisor: 90,
+  threePointMin: 0.12,
+  threePointMax: 0.5,
+};

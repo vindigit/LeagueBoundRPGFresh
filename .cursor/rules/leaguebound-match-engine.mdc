@@ -1,0 +1,25 @@
+---
+description: Leaguebound Match Engine (Markov possessions, resolution, Key Moments)
+alwaysApply: true
+---
+
+# Match Engine (Build Order)
+
+When building the match engine, follow **Granularity Protocol:** 1. Data Types, 2. Logic/Math, 3. Integration. After logic changes, add a small node test script to verify math (e.g. sim 100 possessions, check shooting %).
+
+## Possession Flow (Markov)
+
+1. **Possession Init** — Who has the ball (e.g. from Team Offensive vs Defensive Rating).
+2. **State Transition** — Ball handler: choose Pass / Shoot / Dribble from **Archetype** + **Game State** (score, time).
+3. **Resolution** — `Outcome = (Base Stat + Energy Modifier + BBIQ Modifier) vs (Opponent Defense + Variance)`.
+4. **Next State** — Update score, clock, possession; loop or trigger Key Moment.
+
+## Resolution & Constraints
+
+- **Attributes:** All out of 99. Math must scale from Middle School (low) to Pro (elite).
+- **BBIQ:** Fog of War modifier (decision-time / information transparency). Do not allow unrealistic variance (e.g. 80% 3PT).
+- **Key Moment:** When the *player* is involved in the resolution *and* game state is critical (or RNG), pause sim and present UI choice (e.g. Force Shot / Pass to Corner / Reset). No UI in this phase — console/headless only until integration.
+
+## First Milestone (PRD Phase 1)
+
+Match engine as **generic logic, no UI.** Console log output only. Prove the Markov loop and resolution math before wiring to React.

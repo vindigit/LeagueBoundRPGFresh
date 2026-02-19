@@ -10,7 +10,7 @@ const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
   athleticism: "Athleticism",
   defense: "Defense",
   rebounding: "Rebounding",
-  bbiq: "BBIQ",
+  bbiq: "Basketball IQ",
   stamina: "Stamina",
 };
 
@@ -29,7 +29,7 @@ export const getTopAttributes = (attributes: PlayerAttributes): TopAttribute[] =
       }
       return a.index - b.index;
     })
-    .slice(0, 3)
+    .slice(0, 6)
     .map(({ key, value }) => ({
       key,
       label: ATTRIBUTE_LABELS[key],

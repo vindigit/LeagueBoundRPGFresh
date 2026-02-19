@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { PlayerAttributes } from "../../../types/player";
 import { useCareerStore } from "../../../store/useCareerStore";
 import { useMatchStore } from "../store/useMatchStore";
@@ -9,6 +9,10 @@ interface SimulatedTickResult {
   points?: 2 | 3;
   text: string;
 }
+
+const REAL_SECONDS_PER_TICK = 1;
+const GAME_SECONDS_PER_TICK = 10;
+const POSSESSION_LENGTH = 24;
 
 const flipPossession = (team: "home" | "away"): "home" | "away" =>
   team === "home" ? "away" : "home";
@@ -40,6 +44,8 @@ const simulateTick = (
 };
 
 export const useMatchLoop = (): void => {
+  const possessionProgressRef = useRef<number>(0);
+
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const isPaused = useMatchStore((state) => state.isPaused);
   const gameFinished = useMatchStore((state) => state.gameFinished);
@@ -57,12 +63,13 @@ export const useMatchLoop = (): void => {
 
     const intervalId = setInterval(() => {
       const { timeRemaining, quarter, possession, homeScore, awayScore } = useMatchStore.getState();
-      const nextTimeRemaining = Math.max(0, timeRemaining - 1);
+      const nextTimeRemaining = Math.max(0, timeRemaining - GAME_SECONDS_PER_TICK);
 
       updateGame({ timeRemaining: nextTimeRemaining });
 
       if (nextTimeRemaining === 0) {
         pauseMatch();
+        possessionProgressRef.current = 0;
         const nextQuarter = quarter + 1;
 
         if (nextQuarter > 4) {
@@ -93,6 +100,13 @@ export const useMatchLoop = (): void => {
         return;
       }
 
+      possessionProgressRef.current += GAME_SECONDS_PER_TICK;
+
+      if (possessionProgressRef.current < POSSESSION_LENGTH) {
+        return;
+      }
+
+      possessionProgressRef.current = 0;
       const result = simulateTick(playerAttributes, possession);
 
       if (result.type === "score") {
@@ -108,7 +122,7 @@ export const useMatchLoop = (): void => {
           });
         }
       } else {
-        updateGame({ possession: flipPossession(possession) });
+        updateGame({ possession: flipPossession(result.team) });
       }
 
       addLog({
@@ -119,7 +133,7 @@ export const useMatchLoop = (): void => {
         type: result.type,
         team: result.team,
       });
-    }, 1000);
+    }, REAL_SECONDS_PER_TICK * 1000);
 
     return () => {
       clearInterval(intervalId);

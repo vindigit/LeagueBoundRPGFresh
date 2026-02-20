@@ -42,6 +42,8 @@ export interface CareerActions {
   setGoatPath(isGoatPath: boolean): void;
   setCurrentYear(year: number): void;
   startNarrative(fileName: string): void;
+  navigateToMatch(): void;
+  navigateToHub(): void;
   hydrateCareer(state: CareerState): void;
   resetCareer(state: CareerState): void;
 }

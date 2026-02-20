@@ -90,13 +90,13 @@ const pushTrace = (trace: MarkovStateNode[], node: MarkovStateNode): void => {
   trace.push(node);
 };
 
-const normalizeWeights = <T extends string>(entries: Array<{ key: T; weight: number }>): Array<{ key: T; weight: number }> => {
+const normalizeWeights = <T extends string | number>(entries: Array<{ key: T; weight: number }>): Array<{ key: T; weight: number }> => {
   const sanitized = entries.map((entry) => ({ key: entry.key, weight: Math.max(0.001, entry.weight) }));
   const total = sanitized.reduce((sum, entry) => sum + entry.weight, 0);
   return sanitized.map((entry) => ({ key: entry.key, weight: entry.weight / total }));
 };
 
-const weightedPick = <T extends string>(entries: Array<{ key: T; weight: number }>, rng: () => number): T => {
+const weightedPick = <T extends string | number>(entries: Array<{ key: T; weight: number }>, rng: () => number): T => {
   const normalized = normalizeWeights(entries);
   const target = rng();
   let cumulative = 0;
@@ -614,7 +614,7 @@ export const simulatePossession = (
     }
 
     if (!offensiveRebound || eventType === "putback_miss") {
-      eventType = eventType === "putback_miss" ? "def_reb" : eventType === "off_reb" ? "def_reb" : eventType;
+      eventType = eventType === "putback_miss" ? "def_reb" : eventType;
     }
   }
 

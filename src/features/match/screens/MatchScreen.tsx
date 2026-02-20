@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { FlatList, Pressable, SafeAreaView, Text, View } from "react-native";
 import { useMatchLoop } from "../hooks/useMatchLoop";
+import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
 import { useMatchStore } from "../store/useMatchStore";
 
@@ -61,6 +62,7 @@ export function MatchScreen() {
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
+  const navigateToHub = useCareerStore((state) => state.navigateToHub);
 
   useEffect(() => {
     initializeMatch(HOME_NAME, AWAY_NAME);
@@ -115,8 +117,11 @@ export function MatchScreen() {
               </Pressable>
             )
           ) : (
-            <Pressable className="items-center justify-center rounded-xl bg-slate-700 py-3" onPress={() => {}}>
-              <Text className="text-base font-semibold text-white">Post Game</Text>
+            <Pressable
+              className="items-center justify-center rounded-xl bg-slate-700 py-3"
+              onPress={navigateToHub}
+            >
+              <Text className="text-base font-semibold text-white">Back to Hub</Text>
             </Pressable>
           )}
         </View>

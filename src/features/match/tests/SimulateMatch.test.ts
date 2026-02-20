@@ -1,14 +1,21 @@
-// Linked from: c:\Users\valexander\Downloads\ai_studio_code.ts
-// @ts-nocheck
-
 import { act, renderHook } from "@testing-library/react-native";
 import { useMatchStore } from "../store/useMatchStore";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 
+import type { CareerState } from "../../../types/career";
+import type { CareerActions } from "../../../types/career";
+
 jest.mock("../../../store/useCareerStore", () => ({
-  useCareerStore: (selector) =>
+  useCareerStore: (selector: (state: CareerState & CareerActions) => unknown) =>
     selector({
       player: {
+        id: "test-player",
+        name: "Test Player",
+        age: 18,
+        BankBalance: 0,
+        Morale: 50,
+        Position: "PG" as const,
+        archetype: "Playmaker" as const,
         attributes: {
           shooting: 80,
           finishing: 70,
@@ -20,8 +27,17 @@ jest.mock("../../../store/useCareerStore", () => ({
           bbiq: 74,
           stamina: 80,
         },
+        gameStats: {
+          points: 0,
+          assists: 0,
+          rebounds: 0,
+          steals: 0,
+          blocks: 0,
+          fga: 0,
+          fgm: 0,
+        },
       },
-    }),
+    } as CareerState & CareerActions),
 }));
 
 describe("Terminal Match Simulation", () => {

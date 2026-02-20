@@ -141,6 +141,12 @@ export const useCareerStore = create<CareerStore>()(
           currentNarrativeFile: fileName,
         }));
       },
+      navigateToMatch: () => {
+        set(() => ({ view: "MATCH" }));
+      },
+      navigateToHub: () => {
+        set(() => ({ view: "HUB" }));
+      },
       hydrateCareer: (state) => {
         set(() => ({ ...state }));
       },

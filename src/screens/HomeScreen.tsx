@@ -1,6 +1,7 @@
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
+import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { useCareerStore } from "../store/useCareerStore";
 
 const formatLeagueLevel = (value: string): string =>
@@ -19,6 +20,7 @@ export function HomeScreen() {
   const currentYear = useCareerStore((state) => state.currentYear);
   const bankBalance = useCareerStore((state) => state.player.BankBalance);
   const startNarrative = useCareerStore((state) => state.startNarrative);
+  const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
 
   return (
     <SafeAreaView className="relative flex-1 bg-premium-bg">
@@ -53,7 +55,14 @@ export function HomeScreen() {
           </View>
 
           <Pressable
-            className="mt-6 items-center justify-center rounded-xl bg-premium-accent px-4 py-4"
+            className="mt-6 items-center justify-center rounded-xl bg-sky-600 px-4 py-4"
+            onPress={navigateToMatch}
+          >
+            <Text className="text-base font-semibold text-white">Play Match</Text>
+          </Pressable>
+
+          <Pressable
+            className="mt-3 items-center justify-center rounded-xl bg-premium-accent px-4 py-4"
             onPress={() => {
               startNarrative("practice_coach.ink");
             }}
@@ -64,6 +73,8 @@ export function HomeScreen() {
       ) : null}
 
       {view === "NARRATIVE" ? <NarrativeOverlay /> : null}
+
+      {view === "MATCH" ? <MatchScreen /> : null}
     </SafeAreaView>
   );
 }

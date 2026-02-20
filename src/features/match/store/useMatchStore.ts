@@ -151,7 +151,7 @@ const withPlayerStatDelta = (
   index: number | undefined,
   delta: Partial<Pick<PlayerBoxScoreLine, "pts" | "reb" | "ast" | "stl" | "blk" | "to" | "fgm" | "fga">>,
 ): PlayerBoxScoreLine[] => {
-  if (index === undefined || index < 0 || index >= players.length) {
+  if (index === undefined || !Number.isInteger(index) || index < 0 || index >= players.length) {
     return players;
   }
 

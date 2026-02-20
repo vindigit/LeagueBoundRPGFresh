@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { FlatList, Pressable, SafeAreaView, Text, View } from "react-native";
+import Slider from "@react-native-community/slider";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
@@ -15,7 +16,17 @@ const formatClock = (seconds: number): string => {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 };
 
-const getLogTextClassName = (type: PlayLog["type"]): string => {
+const getPeriodLabel = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePeriod: number): string =>
+  isOvertime ? `OT${overtimePeriod}` : `Q${quarter}`;
+
+const formatSpeedLabel = (speed: number): string => (Number.isInteger(speed) ? `${speed}x` : `${speed.toFixed(1)}x`);
+
+const getLogTextClassName = (item: PlayLog): string => {
+  if (item.isUserAction) {
+    return "text-yellow-300";
+  }
+
+  const { type } = item;
   if (type === "score") {
     return "text-emerald-300";
   }
@@ -25,7 +36,7 @@ const getLogTextClassName = (type: PlayLog["type"]): string => {
   }
 
   if (type === "turnover") {
-    return "text-amber-300";
+    return "text-red-300";
   }
 
   return "text-slate-200";
@@ -39,34 +50,66 @@ const getLogContainerClassName = (team: PlayLog["team"]): string => {
   return "border-l-4 border-sky-500 bg-sky-950/30";
 };
 
+const getLogPeriodLabel = (item: PlayLog): string =>
+  item.overtimePeriod && item.overtimePeriod > 0 ? `OT${item.overtimePeriod}` : `Q${item.quarter}`;
+
 const renderLogItem = ({ item }: { item: PlayLog }) => (
   <View className={`mb-2 rounded-xl p-3 ${getLogContainerClassName(item.team)}`}>
     <View className="mb-1 flex-row items-center justify-between">
-      <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Q{item.quarter}</Text>
+      <View className="flex-row items-center gap-2">
+        <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">{getLogPeriodLabel(item)}</Text>
+        {item.isUserAction ? (
+          <View className="rounded-full border border-yellow-400/50 bg-yellow-400/15 px-2 py-0.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-yellow-300">You</Text>
+          </View>
+        ) : null}
+      </View>
       <Text className="text-xs font-semibold text-slate-400">{formatClock(item.timeRemaining)}</Text>
     </View>
-    <Text className={`text-sm font-medium ${getLogTextClassName(item.type)}`}>{item.text}</Text>
+    <Text className={`text-sm font-medium ${getLogTextClassName(item)}`}>{item.text}</Text>
   </View>
 );
 
 export function MatchScreen() {
   useMatchLoop();
+  const hasAppliedResultRef = useRef(false);
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const gameFinished = useMatchStore((state) => state.gameFinished);
   const homeScore = useMatchStore((state) => state.homeScore);
   const awayScore = useMatchStore((state) => state.awayScore);
   const quarter = useMatchStore((state) => state.quarter);
+  const isOvertime = useMatchStore((state) => state.isOvertime);
+  const overtimePeriod = useMatchStore((state) => state.overtimePeriod);
   const timeRemaining = useMatchStore((state) => state.timeRemaining);
   const logs = useMatchStore((state) => state.logs);
+  const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
+  const simSpeed = useMatchStore((state) => state.simSpeed);
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
-  const navigateToHub = useCareerStore((state) => state.navigateToHub);
+  const setSimSpeed = useMatchStore((state) => state.setSimSpeed);
+  const completeMatch = useCareerStore((state) => state.completeMatch);
 
   useEffect(() => {
+    hasAppliedResultRef.current = false;
     initializeMatch(HOME_NAME, AWAY_NAME);
   }, [initializeMatch]);
+
+  useEffect(() => {
+    if (!gameFinished || hasAppliedResultRef.current) {
+      return;
+    }
+
+    hasAppliedResultRef.current = true;
+    const { homeTotals, awayTotals } = matchBoxScore;
+    if (homeTotals.pts !== homeScore || awayTotals.pts !== awayScore) {
+      console.warn(
+        `[boxscore-integrity] score mismatch at game end: scoreboard ${homeScore}-${awayScore}, boxscore ${homeTotals.pts}-${awayTotals.pts}`,
+      );
+    }
+    completeMatch({ homeScore, awayScore, overtimePeriods: overtimePeriod, boxScore: matchBoxScore });
+  }, [awayScore, completeMatch, gameFinished, homeScore, matchBoxScore, overtimePeriod]);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
@@ -80,7 +123,7 @@ export function MatchScreen() {
 
             <View className="items-center px-2">
               <Text className="text-3xl font-bold text-white">{formatClock(timeRemaining)}</Text>
-              <Text className="mt-1 text-sm font-semibold text-slate-300">Q{quarter}</Text>
+              <Text className="mt-1 text-sm font-semibold text-slate-300">{getPeriodLabel(quarter, isOvertime, overtimePeriod)}</Text>
             </View>
 
             <View className="flex-1 items-end pl-3">
@@ -106,6 +149,25 @@ export function MatchScreen() {
         </View>
 
         <View className="border-t border-slate-800 bg-slate-900 px-4 py-4">
+          <View className="mb-4">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sim Speed</Text>
+              <Text className="text-sm font-semibold text-white">{formatSpeedLabel(simSpeed)}</Text>
+            </View>
+            <Slider
+              minimumValue={0.5}
+              maximumValue={4}
+              step={0.5}
+              value={simSpeed}
+              minimumTrackTintColor="#22d3ee"
+              maximumTrackTintColor="#334155"
+              thumbTintColor="#f8fafc"
+              disabled={gameFinished}
+              onValueChange={(value) => {
+                setSimSpeed(value);
+              }}
+            />
+          </View>
           {!gameFinished ? (
             isPlaying ? (
               <Pressable className="items-center justify-center rounded-xl bg-amber-500 py-3" onPress={pauseMatch}>
@@ -117,12 +179,9 @@ export function MatchScreen() {
               </Pressable>
             )
           ) : (
-            <Pressable
-              className="items-center justify-center rounded-xl bg-slate-700 py-3"
-              onPress={navigateToHub}
-            >
-              <Text className="text-base font-semibold text-white">Back to Hub</Text>
-            </Pressable>
+            <View className="items-center justify-center rounded-xl bg-slate-700 py-3">
+              <Text className="text-base font-semibold text-white">Building Postgame Summary...</Text>
+            </View>
           )}
         </View>
     </SafeAreaView>

@@ -9,10 +9,12 @@ import {
   type CareerState,
 } from "../types/career";
 import type { Player, PlayerAttributes } from "../types/player";
+import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
 
 const clampAttribute = (value: number): number => Math.min(99, Math.max(0, value));
+const clampMorale = (value: number): number => Math.min(100, Math.max(0, value));
 
 const defaultPlayer: Player = {
   id: "",
@@ -55,7 +57,33 @@ const initialCareerState: CareerState = {
   isGoatPath: false,
   view: "HUB",
   currentNarrativeFile: "",
+  lastMatchResult: null,
 };
+
+const emptyBoxScore = (): MatchBoxScore => ({
+  homePlayers: [],
+  awayPlayers: [],
+  homeTotals: {
+    pts: 0,
+    reb: 0,
+    ast: 0,
+    stl: 0,
+    blk: 0,
+    to: 0,
+    fgm: 0,
+    fga: 0,
+  },
+  awayTotals: {
+    pts: 0,
+    reb: 0,
+    ast: 0,
+    stl: 0,
+    blk: 0,
+    to: 0,
+    fgm: 0,
+    fga: 0,
+  },
+});
 
 export const useCareerStore = create<CareerStore>()(
   persist(
@@ -142,10 +170,47 @@ export const useCareerStore = create<CareerStore>()(
         }));
       },
       navigateToMatch: () => {
-        set(() => ({ view: "MATCH" }));
+        set(() => ({
+          view: "MATCH",
+          lastMatchResult: null,
+        }));
       },
       navigateToHub: () => {
-        set(() => ({ view: "HUB" }));
+        set(() => ({
+          view: "HUB",
+          lastMatchResult: null,
+        }));
+      },
+      completeMatch: ({ homeScore, awayScore, overtimePeriods, boxScore }) => {
+        set((state) => {
+          const didWin = homeScore > awayScore;
+          const bankDelta = didWin ? 500 : 300;
+          const moraleDelta = didWin ? 5 : -3;
+          const nextMorale = clampMorale(state.player.Morale + moraleDelta);
+          const nextWeek = state.currentWeek + 1;
+
+          return {
+            currentWeek: nextWeek,
+            view: "POSTGAME",
+            player: {
+              ...state.player,
+              BankBalance: state.player.BankBalance + bankDelta,
+              bankBalance: state.player.BankBalance + bankDelta,
+              Morale: nextMorale,
+              morale: nextMorale,
+            },
+            lastMatchResult: {
+              homeScore,
+              awayScore,
+              didWin,
+              bankDelta,
+              moraleDelta,
+              weekAfter: nextWeek,
+              overtimePeriods: overtimePeriods ?? 0,
+              boxScore,
+            },
+          };
+        });
       },
       hydrateCareer: (state) => {
         set(() => ({ ...state }));
@@ -168,6 +233,12 @@ export const useCareerStore = create<CareerStore>()(
         isGoatPath: state.isGoatPath,
         view: state.view,
         currentNarrativeFile: state.currentNarrativeFile,
+        lastMatchResult: state.lastMatchResult
+          ? {
+              ...state.lastMatchResult,
+              boxScore: state.lastMatchResult.boxScore ?? emptyBoxScore(),
+            }
+          : null,
       }),
     },
   ),

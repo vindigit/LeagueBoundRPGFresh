@@ -8,10 +8,12 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
-    "test:match": "jest src/features/match/tests/SimulateMatch.test.ts --runInBand"
+    "test:match": "jest src/features/match/tests/SimulateMatch.test.ts --runInBand",
+    "sim:avg10": "node src/verifyMatchEngine.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/slider": "5.0.1",
     "expo": "~54.0.33",
     "expo-status-bar": "~3.0.9",
     "inkjs": "^2.3.2",
@@ -21,6 +23,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@expo/ngrok": "^4.1.3",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.2.3",

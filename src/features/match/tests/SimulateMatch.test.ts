@@ -41,6 +41,8 @@ jest.mock("../../../store/useCareerStore", () => ({
 }));
 
 describe("Terminal Match Simulation", () => {
+  jest.setTimeout(30000);
+
   beforeEach(() => {
     jest.useFakeTimers();
     useMatchStore.getState().initializeMatch("Terminal City", "Console United");
@@ -50,7 +52,7 @@ describe("Terminal Match Simulation", () => {
     jest.useRealTimers();
   });
 
-  it("plays a full quarter and logs output", () => {
+  it("plays a full 48-minute game and logs aggregate stats", () => {
     renderHook(() => useMatchLoop());
 
     console.log("\n=== TIP OFF ===\n");
@@ -58,18 +60,67 @@ describe("Terminal Match Simulation", () => {
       useMatchStore.getState().startMatch();
     });
 
-    for (let i = 0; i < 12; i += 1) {
+    const seenLogIds = new Set<string>();
+    let totalEvents = 0;
+    let scoreEvents = 0;
+    let missEvents = 0;
+    let turnoverEvents = 0;
+    let infoEvents = 0;
+    let lastPrintedQuarter = 1;
+
+    while (!useMatchStore.getState().gameFinished) {
+      const beforeTick = useMatchStore.getState();
+      if (!beforeTick.isPlaying && beforeTick.isPaused) {
+        act(() => {
+          useMatchStore.getState().startMatch();
+        });
+      }
+
       act(() => {
-        jest.advanceTimersByTime(60 * 1000);
+        jest.advanceTimersByTime(1000);
       });
 
-      const state = useMatchStore.getState();
-      console.log(
-        `[${state.quarter}Q - ${state.timeRemaining}s left] Score: ${state.homeScore} - ${state.awayScore}`,
-      );
+      const stateAfterTick = useMatchStore.getState();
+      const logs = stateAfterTick.logs;
+      for (const log of logs) {
+        if (seenLogIds.has(log.id)) {
+          continue;
+        }
+        seenLogIds.add(log.id);
+        totalEvents += 1;
+
+        if (log.type === "score") scoreEvents += 1;
+        if (log.type === "miss") missEvents += 1;
+        if (log.type === "turnover") turnoverEvents += 1;
+        if (log.type === "info") infoEvents += 1;
+      }
+
+      if (stateAfterTick.quarter !== lastPrintedQuarter) {
+        console.log(`\n=== START Q${stateAfterTick.quarter} ===`);
+        lastPrintedQuarter = stateAfterTick.quarter;
+      }
+
+      if (stateAfterTick.timeRemaining % 60 === 0) {
+        console.log(
+          `[${stateAfterTick.quarter}Q - ${stateAfterTick.timeRemaining}s left] Score: ${stateAfterTick.homeScore} - ${stateAfterTick.awayScore}`,
+        );
+      }
     }
 
-    const finalLogs = useMatchStore.getState().logs;
+    const finalState = useMatchStore.getState();
+    const finalLogs = finalState.logs;
+
+    console.log("\n=== FINAL SCORE ===");
+    console.log(`Terminal City ${finalState.homeScore} - ${finalState.awayScore} Console United`);
+
+    console.log("\n=== AGGREGATE STATS ===");
+    console.log(`Total logged events: ${totalEvents}`);
+    console.log(`Score events: ${scoreEvents}`);
+    console.log(`Miss events: ${missEvents}`);
+    console.log(`Turnover events: ${turnoverEvents}`);
+    console.log(`Info events: ${infoEvents}`);
+    console.log(`Stored play-by-play entries (capped): ${finalLogs.length}`);
+
     console.log("\n=== PLAY-BY-PLAY HIGHLIGHTS ===");
     finalLogs.slice(0, 10).forEach((log) => {
       console.log(`[${log.timeRemaining}] ${log.text}`);

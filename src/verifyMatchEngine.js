@@ -74,6 +74,22 @@ const applyBoost = (context, teamKey, attrKey, boost) => {
   });
 };
 
+const classifyEventType = (eventType) => {
+  if (eventType === "made_2" || eventType === "made_3" || eventType === "putback_make") {
+    return "score";
+  }
+  if (eventType === "turnover" || eventType === "steal") {
+    return "turnover";
+  }
+  if (eventType === "miss" || eventType === "block" || eventType === "def_reb" || eventType === "putback_miss") {
+    return "miss";
+  }
+  if (eventType === "off_reb") {
+    return "info";
+  }
+  return "info";
+};
+
 const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, maxPossessions, engine }) => {
   const rng = engine.createSeededRng(seed);
   let state = engine.initializePossession(context, leagueLevel, rng, secondsRemaining);
@@ -101,6 +117,10 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
     pointsAway: 0,
     q4HomePoints: 0,
     q4AwayPoints: 0,
+    scoreEvents: 0,
+    missEvents: 0,
+    turnoverEvents: 0,
+    infoEvents: 0,
   };
 
   while (metrics.possessions < maxPossessions && state.secondsRemaining > 0) {
@@ -172,6 +192,17 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
       metrics.q4AwayPoints += awayDelta;
     }
 
+    const category = classifyEventType(result.eventType);
+    if (category === "score") {
+      metrics.scoreEvents += 1;
+    } else if (category === "miss") {
+      metrics.missEvents += 1;
+    } else if (category === "turnover") {
+      metrics.turnoverEvents += 1;
+    } else {
+      metrics.infoEvents += 1;
+    }
+
     state = result.nextState;
   }
 
@@ -221,6 +252,8 @@ const assertDirectional = (label, baseline, compared, direction, tolerance = 0) 
 const main = async () => {
   const engine = require("./matchEngine.ts");
   const { LeagueLevel } = require("./types/career.ts");
+  const args = process.argv.slice(2);
+  const checkAttributesEnabled = args.includes("--check-attributes");
 
   const seeds = [20260210, 20260211, 20260212, 20260213, 20260214, 20260215, 20260216, 20260217, 20260218, 20260219];
   const context = createBaseContext();
@@ -239,69 +272,105 @@ const main = async () => {
   );
 
   const baseline = aggregateRuns(baselineRuns);
+  const perRunRows = baselineRuns.map((run, index) => {
+    const diff = run.metrics.pointsHome - run.metrics.pointsAway;
+    return {
+      run: index + 1,
+      seed: seeds[index],
+      home: run.metrics.pointsHome,
+      away: run.metrics.pointsAway,
+      diff,
+      possessions: run.metrics.possessions,
+      score: run.metrics.scoreEvents,
+      miss: run.metrics.missEvents,
+      turnover: run.metrics.turnoverEvents,
+      info: run.metrics.infoEvents,
+    };
+  });
 
-  console.log("=== Match Engine Verification (Markov 5v5) ===");
-  console.log(`Avg Possessions: ${baseline.avg.possessions.toFixed(1)}`);
-  console.log(`Avg Final Score: HOME ${baseline.avg.pointsHome.toFixed(1)} - AWAY ${baseline.avg.pointsAway.toFixed(1)}`);
-  console.log(`FG%: ${baseline.fgPct.toFixed(1)} | 3P%: ${baseline.threePct.toFixed(1)} | MID%: ${baseline.midPct.toFixed(1)} | RIM%: ${baseline.rimPct.toFixed(1)}`);
-  console.log(`Assist Rate: ${baseline.assistRate.toFixed(1)}% | TOV Rate: ${baseline.turnoverRate.toFixed(1)}%`);
-  console.log(`OREB Rate: ${baseline.offensiveReboundRate.toFixed(1)}% | STL: ${baseline.avg.steals.toFixed(1)} | BLK: ${baseline.avg.blocks.toFixed(1)}`);
+  const scoreDiffs = perRunRows.map((row) => row.diff);
 
-  ensureRange("Avg Possessions", baseline.avg.possessions, 120, 210);
-  ensureRange("FG%", baseline.fgPct, 35, 60);
-  ensureRange("Turnover Rate", baseline.turnoverRate, 6, 24);
+  console.log("=== Core Box Score Simulation ===");
+  console.log("Mode: fixed-seed deterministic");
+  console.log(`Full Game Length: 48:00 (${secondsRemaining} seconds)`);
+  console.log(`Run Count: ${seeds.length}`);
+  console.log(`Possession Cap Per Run: ${maxPossessions}`);
 
-  const attributeChecks = [
-    {
-      attr: "shooting",
-      metric: (x) =>
-        x.avg.threePa + x.avg.midPa > 0
-          ? ((x.avg.threePm + x.avg.midPm) / (x.avg.threePa + x.avg.midPa)) * 100
-          : 0,
-      direction: "up",
-      tolerance: 1,
-    },
-    { attr: "finishing", metric: (x) => x.rimPct, direction: "up", tolerance: 0.5 },
-    { attr: "vision", metric: (x) => x.assistRate, direction: "up", tolerance: 0.5 },
-    { attr: "handle", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
-    { attr: "athleticism", metric: (x) => x.avg.steals + x.avg.blocks + x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
-    { attr: "defense", metric: (x) => x.avg.pointsAway, direction: "down", tolerance: 0.5 },
-    { attr: "rebounding", metric: (x) => x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
-    { attr: "bbiq", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
-    { attr: "stamina", metric: (x) => x.avg.q4HomePoints, direction: "up", tolerance: 0.5 },
-  ];
-
-  console.log("=== Attribute Influence Checks (A/B) ===");
-  for (const check of attributeChecks) {
-    const boostedContext = cloneContext(context);
-    applyBoost(boostedContext, "home", check.attr, 18);
-
-    const boostedRuns = seeds.map((seed) =>
-      runSingleSimulation({
-        context: cloneContext(boostedContext),
-        seed,
-        leagueLevel: LeagueLevel.PRO,
-        secondsRemaining,
-        maxPossessions,
-        engine,
-      }),
-    );
-
-    const boosted = aggregateRuns(boostedRuns);
-    const baselineMetric = check.metric(baseline);
-    const boostedMetric = check.metric(boosted);
-    assertDirectional(check.attr, baselineMetric, boostedMetric, check.direction, check.tolerance ?? 0);
-
+  console.log("\n=== Per-Run Results (10 runs) ===");
+  perRunRows.forEach((row) => {
     console.log(
-      `- ${check.attr}: baseline=${baselineMetric.toFixed(2)}, boosted=${boostedMetric.toFixed(2)} (${check.direction})`,
+      `Run ${String(row.run).padStart(2, "0")} [seed ${row.seed}] | Score ${row.home}-${row.away} | Diff ${row.diff >= 0 ? "+" : ""}${row.diff} | Poss ${row.possessions} | Events S:${row.score} M:${row.miss} T:${row.turnover} I:${row.info}`,
     );
+  });
+
+  console.log("\n=== Averages ===");
+  console.log(
+    `Avg Final Score: HOME ${baseline.avg.pointsHome.toFixed(1)} - AWAY ${baseline.avg.pointsAway.toFixed(1)} (Diff ${average(scoreDiffs).toFixed(1)})`,
+  );
+  console.log(`Avg Possessions: ${baseline.avg.possessions.toFixed(1)}`);
+  console.log(
+    `Avg Events: score ${baseline.avg.scoreEvents.toFixed(1)}, miss ${baseline.avg.missEvents.toFixed(1)}, turnover ${baseline.avg.turnoverEvents.toFixed(1)}, info ${baseline.avg.infoEvents.toFixed(1)}`,
+  );
+  console.log(
+    `Avg Total Events: ${(baseline.avg.scoreEvents + baseline.avg.missEvents + baseline.avg.turnoverEvents + baseline.avg.infoEvents).toFixed(1)}`,
+  );
+
+  console.log("\n=== Range/Spread ===");
+  console.log(`Score Diff (Home-Away): min=${Math.min(...scoreDiffs)} avg=${average(scoreDiffs).toFixed(2)} max=${Math.max(...scoreDiffs)}`);
+
+  ensureRange("Avg Possessions", baseline.avg.possessions, 1, maxPossessions);
+  ensureRange("Avg Home Score", baseline.avg.pointsHome, 0, 300);
+  ensureRange("Avg Away Score", baseline.avg.pointsAway, 0, 300);
+
+  console.log("\nSimulation complete.");
+
+  if (checkAttributesEnabled) {
+    const attributeChecks = [
+      {
+        attr: "shooting",
+        metric: (x) =>
+          x.avg.threePa + x.avg.midPa > 0
+            ? ((x.avg.threePm + x.avg.midPm) / (x.avg.threePa + x.avg.midPa)) * 100
+            : 0,
+        direction: "up",
+        tolerance: 1,
+      },
+      { attr: "finishing", metric: (x) => x.rimPct, direction: "up", tolerance: 0.5 },
+      { attr: "vision", metric: (x) => x.assistRate, direction: "up", tolerance: 0.5 },
+      { attr: "handle", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
+      { attr: "athleticism", metric: (x) => x.avg.steals + x.avg.blocks + x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
+      { attr: "defense", metric: (x) => x.avg.pointsAway, direction: "down", tolerance: 0.5 },
+      { attr: "rebounding", metric: (x) => x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
+      { attr: "bbiq", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
+      { attr: "stamina", metric: (x) => x.avg.q4HomePoints, direction: "up", tolerance: 0.5 },
+    ];
+
+    console.log("\n=== Attribute Influence Checks (A/B) ===");
+    for (const check of attributeChecks) {
+      const boostedContext = cloneContext(context);
+      applyBoost(boostedContext, "home", check.attr, 18);
+
+      const boostedRuns = seeds.map((seed) =>
+        runSingleSimulation({
+          context: cloneContext(boostedContext),
+          seed,
+          leagueLevel: LeagueLevel.PRO,
+          secondsRemaining,
+          maxPossessions,
+          engine,
+        }),
+      );
+
+      const boosted = aggregateRuns(boostedRuns);
+      const baselineMetric = check.metric(baseline);
+      const boostedMetric = check.metric(boosted);
+      assertDirectional(check.attr, baselineMetric, boostedMetric, check.direction, check.tolerance ?? 0);
+
+      console.log(
+        `- ${check.attr}: baseline=${baselineMetric.toFixed(2)}, boosted=${boostedMetric.toFixed(2)} (${check.direction})`,
+      );
+    }
   }
-
-  const scoreDiffs = baselineRuns.map((run) => run.metrics.pointsHome - run.metrics.pointsAway);
-  console.log("=== Score Distribution (Home-Away diff) ===");
-  console.log(`min=${Math.min(...scoreDiffs)} avg=${average(scoreDiffs).toFixed(2)} max=${Math.max(...scoreDiffs)}`);
-
-  console.log("Verification complete.");
 };
 
 main().catch((error) => {

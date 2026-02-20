@@ -9,6 +9,10 @@ import { useMatchStore } from "../store/useMatchStore";
 const REAL_SECONDS_PER_TICK = 1;
 const GAME_SECONDS_PER_TICK = 10;
 const POSSESSION_LENGTH = 24;
+const OVERTIME_SECONDS = 300;
+const USER_PLAYER_INDEX = 0;
+const HOME_ROSTER_NAMES = ["User", "Home SG", "Home SF", "Home PF", "Home C"] as const;
+const AWAY_ROSTER_NAMES = ["Away PG", "Away SG", "Away SF", "Away PF", "Away C"] as const;
 
 const defaultGameStats: PlayerGameStats = {
   points: 0,
@@ -136,8 +140,11 @@ export const useMatchLoop = (): void => {
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const isPaused = useMatchStore((state) => state.isPaused);
   const gameFinished = useMatchStore((state) => state.gameFinished);
+  const simSpeed = useMatchStore((state) => state.simSpeed);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const endMatch = useMatchStore((state) => state.endMatch);
+  const initializeBoxScore = useMatchStore((state) => state.initializeBoxScore);
+  const recordBoxScoreEvent = useMatchStore((state) => state.recordBoxScoreEvent);
   const updateGame = useMatchStore((state) => state.updateGame);
   const addLog = useMatchStore((state) => state.addLog);
 
@@ -145,20 +152,17 @@ export const useMatchLoop = (): void => {
 
   useEffect(() => {
     if (!isPlaying && !isPaused && !gameFinished) {
-      const snapshot = useMatchStore.getState();
-      if (
-        snapshot.quarter === 1 &&
-        snapshot.timeRemaining === 720 &&
-        snapshot.homeScore === 0 &&
-        snapshot.awayScore === 0
-      ) {
-        contextRef.current = null;
-        possessionStateRef.current = null;
-        possessionProgressRef.current = 0;
-        rngRef.current = createSeededRng(Date.now());
+      contextRef.current = null;
+      possessionStateRef.current = null;
+      possessionProgressRef.current = 0;
+      rngRef.current = createSeededRng(Date.now());
+
+      const { matchBoxScore } = useMatchStore.getState();
+      if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
+        initializeBoxScore([...HOME_ROSTER_NAMES], [...AWAY_ROSTER_NAMES]);
       }
     }
-  }, [gameFinished, isPaused, isPlaying]);
+  }, [gameFinished, initializeBoxScore, isPaused, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying || isPaused || gameFinished) {
@@ -170,19 +174,73 @@ export const useMatchLoop = (): void => {
     }
 
     const intervalId = setInterval(() => {
-      const { timeRemaining, quarter, possession, homeScore, awayScore } = useMatchStore.getState();
+      const { timeRemaining, quarter, isOvertime, overtimePeriod, possession, homeScore, awayScore } = useMatchStore.getState();
       const nextTimeRemaining = Math.max(0, timeRemaining - GAME_SECONDS_PER_TICK);
 
       if (nextTimeRemaining === 0) {
         pauseMatch();
         possessionProgressRef.current = 0;
-        const nextQuarter = quarter + 1;
 
-        if (nextQuarter > 4) {
+        if (isOvertime) {
+          if (homeScore === awayScore) {
+            const nextOvertime = overtimePeriod + 1;
+            updateGame({
+              timeRemaining: OVERTIME_SECONDS,
+              isOvertime: true,
+              overtimePeriod: nextOvertime,
+            });
+            addLog({
+              id: `ot-${Date.now()}`,
+              quarter,
+              overtimePeriod,
+              isUserAction: false,
+              timeRemaining: 0,
+              text: `End OT${overtimePeriod}. OT${nextOvertime} ready.`,
+              type: "info",
+              team: possession,
+            });
+            return;
+          }
+
           endMatch();
           addLog({
             id: `end-${Date.now()}`,
             quarter,
+            overtimePeriod,
+            isUserAction: false,
+            timeRemaining: 0,
+            text: "Final buzzer",
+            type: "info",
+            team: possession,
+          });
+          return;
+        }
+
+        const nextQuarter = quarter + 1;
+        if (nextQuarter > 4) {
+          if (homeScore === awayScore) {
+            updateGame({
+              timeRemaining: OVERTIME_SECONDS,
+              isOvertime: true,
+              overtimePeriod: 1,
+            });
+            addLog({
+              id: `ot-${Date.now()}`,
+              quarter,
+              isUserAction: false,
+              timeRemaining: 0,
+              text: "End Q4 tied. OT1 ready.",
+              type: "info",
+              team: possession,
+            });
+            return;
+          }
+
+          endMatch();
+          addLog({
+            id: `end-${Date.now()}`,
+            quarter,
+            isUserAction: false,
             timeRemaining: 0,
             text: "Final buzzer",
             type: "info",
@@ -193,11 +251,14 @@ export const useMatchLoop = (): void => {
 
         updateGame({
           quarter: nextQuarter as 1 | 2 | 3 | 4,
+          isOvertime: false,
+          overtimePeriod: 0,
           timeRemaining: 720,
         });
         addLog({
           id: `q-${Date.now()}`,
           quarter,
+          isUserAction: false,
           timeRemaining: 0,
           text: `End Q${quarter}. Q${nextQuarter} ready.`,
           type: "info",
@@ -228,12 +289,52 @@ export const useMatchLoop = (): void => {
         score: { home: homeScore, away: awayScore },
         secondsRemaining: nextTimeRemaining,
       };
+      const wasUserBallHandler = possessionState.ballHandlerIndex === USER_PLAYER_INDEX;
 
       const result = simulatePossession(contextRef.current, possessionState, LeagueLevel.PRO, rngRef.current);
       possessionStateRef.current = {
         ...result.nextState,
         secondsRemaining: nextTimeRemaining,
       };
+
+      const offenseTeam = possession;
+      const defenseTeam = possession === "home" ? "away" : "home";
+      const shotAttempted =
+        !result.turnoverLikeFailure &&
+        (result.eventType === "made_2" ||
+          result.eventType === "made_3" ||
+          result.eventType === "miss" ||
+          result.eventType === "block" ||
+          result.eventType === "putback_make" ||
+          (result.eventType === "def_reb" && result.putbackAttempted));
+      const shotMade = result.eventType === "made_2" || result.eventType === "made_3" || result.eventType === "putback_make";
+      const points = result.points ?? 0;
+      const turnoverTeam = result.eventType === "turnover" || result.eventType === "steal" ? offenseTeam : undefined;
+      const turnoverPlayerIndex = turnoverTeam ? possessionState.ballHandlerIndex : undefined;
+      const defenderTeam = result.eventType === "steal" || result.eventType === "block" ? defenseTeam : undefined;
+      const stealDefenderIndex = result.eventType === "steal" ? result.defensivePlay.defenderIndex : undefined;
+      const blockDefenderIndex = result.eventType === "block" ? result.defensivePlay.defenderIndex : undefined;
+      const reboundTeam = result.offensiveRebound ? offenseTeam : result.eventType === "def_reb" ? defenseTeam : undefined;
+      const { matchBoxScore } = useMatchStore.getState();
+      if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
+        initializeBoxScore([...HOME_ROSTER_NAMES], [...AWAY_ROSTER_NAMES]);
+      }
+
+      recordBoxScoreEvent({
+        scoringTeam: shotAttempted ? offenseTeam : undefined,
+        shooterIndex: shotAttempted ? result.shooterIndex : undefined,
+        points,
+        shotAttempted,
+        shotMade,
+        assisterIndex: shotMade ? result.assisterIndex : undefined,
+        turnoverTeam,
+        turnoverPlayerIndex,
+        defenderTeam,
+        stealDefenderIndex,
+        blockDefenderIndex,
+        reboundTeam,
+        rebounderIndex: reboundTeam ? result.rebounderIndex : undefined,
+      });
 
       updateGame({
         timeRemaining: nextTimeRemaining,
@@ -243,18 +344,31 @@ export const useMatchLoop = (): void => {
       });
 
       const mappedLog = getLogFromEvent(result, possession);
+      const isUserOffenseAction =
+        possession === "home" &&
+        (result.shooterIndex === USER_PLAYER_INDEX ||
+          result.assisterIndex === USER_PLAYER_INDEX ||
+          (result.turnoverLikeFailure && wasUserBallHandler));
+      const isUserDefenseAction =
+        possession === "away" &&
+        (result.eventType === "steal" || result.eventType === "block") &&
+        result.defensivePlay.defenderIndex === USER_PLAYER_INDEX;
+      const isUserAction = isUserOffenseAction || isUserDefenseAction;
+
       addLog({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         quarter,
+        overtimePeriod: isOvertime ? overtimePeriod : undefined,
+        isUserAction,
         timeRemaining: nextTimeRemaining,
         text: mappedLog.text,
         type: mappedLog.type,
         team: possession,
       });
-    }, REAL_SECONDS_PER_TICK * 1000);
+    }, (REAL_SECONDS_PER_TICK * 1000) / simSpeed);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [addLog, endMatch, gameFinished, isPaused, isPlaying, pauseMatch, playerAttributes, updateGame]);
+  }, [addLog, endMatch, gameFinished, isPaused, isPlaying, pauseMatch, playerAttributes, recordBoxScoreEvent, simSpeed, updateGame]);
 };

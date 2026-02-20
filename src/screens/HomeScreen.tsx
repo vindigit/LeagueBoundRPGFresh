@@ -2,6 +2,7 @@ import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
+import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
 
 const formatLeagueLevel = (value: string): string =>
@@ -75,6 +76,8 @@ export function HomeScreen() {
       {view === "NARRATIVE" ? <NarrativeOverlay /> : null}
 
       {view === "MATCH" ? <MatchScreen /> : null}
+
+      {view === "POSTGAME" ? <PostgameScreen /> : null}
     </SafeAreaView>
   );
 }

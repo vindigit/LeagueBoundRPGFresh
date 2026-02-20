@@ -69,6 +69,7 @@ export interface PossessionResult {
   shotZone?: ShotZone;
   shooterIndex: number;
   assisterIndex?: number;
+  rebounderIndex?: number;
   defensivePlay: DefensivePlay;
   offensiveRebound: boolean;
   putbackAttempted: boolean;
@@ -288,6 +289,22 @@ const pickAssistReceiverIndex = (
         weight: impact.shooting * 0.5 + impact.finishing * 0.5,
       };
     });
+  return weightedPick(weighted, rng);
+};
+
+const pickRebounderIndex = (
+  team: Team,
+  state: PossessionState,
+  leagueLevel: LeagueLevel,
+  rng: () => number,
+): number => {
+  const weighted = team.roster.map((player, index) => {
+    const impact = getPlayerImpact(player, state, leagueLevel);
+    return {
+      key: index as 0 | 1 | 2 | 3 | 4,
+      weight: impact.rebounding * 0.7 + impact.athleticism * 0.3,
+    };
+  });
   return weightedPick(weighted, rng);
 };
 
@@ -563,6 +580,7 @@ export const simulatePossession = (
   let points: 0 | 2 | 3 = 0;
   let eventType: PossessionEventType = "miss";
   let offensiveRebound = false;
+  let rebounderIndex: number | undefined;
   let putbackAttempted = false;
   let score = state.score;
 
@@ -586,10 +604,10 @@ export const simulatePossession = (
 
     if (offensiveRebound) {
       eventType = "off_reb";
+      rebounderIndex = pickRebounderIndex(offenseTeam, state, leagueLevel, rng);
       pushTrace(trace, "PUTBACK_ATTEMPT");
       putbackAttempted = true;
 
-      const rebounderIndex = pickBallHandlerIndex(offenseTeam, state, leagueLevel, rng);
       const rebounderImpact = getPlayerImpact(getPlayerByIndex(offenseTeam, rebounderIndex), state, leagueLevel);
       const rimDefenderIndex = pickDefenderIndex(defenseTeam, state, leagueLevel, rng);
       const rimDefenderImpact = getPlayerImpact(getPlayerByIndex(defenseTeam, rimDefenderIndex), state, leagueLevel);
@@ -615,6 +633,9 @@ export const simulatePossession = (
 
     if (!offensiveRebound || eventType === "putback_miss") {
       eventType = eventType === "putback_miss" ? "def_reb" : eventType;
+      if (eventType === "def_reb") {
+        rebounderIndex = pickRebounderIndex(defenseTeam, state, leagueLevel, rng);
+      }
     }
   }
 
@@ -636,6 +657,7 @@ export const simulatePossession = (
     shotZone,
     shooterIndex,
     assisterIndex,
+    rebounderIndex,
     defensivePlay: {
       steal: false,
       block: blocked,

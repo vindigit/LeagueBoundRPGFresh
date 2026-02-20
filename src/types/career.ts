@@ -1,4 +1,5 @@
 import type { Player, PlayerArchetype, PlayerAttributes } from "./player";
+import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 export enum LeagueLevel {
   MIDDLE_SCHOOL = "MIDDLE_SCHOOL",
@@ -14,7 +15,18 @@ export enum CareerStatus {
   AMATEUR_LOCKED = "AMATEUR_LOCKED",
 }
 
-export type CareerView = "HUB" | "NARRATIVE" | "MATCH";
+export type CareerView = "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
+
+export interface LastMatchResult {
+  homeScore: number;
+  awayScore: number;
+  didWin: boolean;
+  bankDelta: number;
+  moraleDelta: number;
+  weekAfter: number;
+  overtimePeriods: number;
+  boxScore: MatchBoxScore;
+}
 
 export interface CareerState {
   player: Player;
@@ -27,6 +39,7 @@ export interface CareerState {
   isGoatPath: boolean;
   view: CareerView;
   currentNarrativeFile: string;
+  lastMatchResult: LastMatchResult | null;
 }
 
 export interface CareerActions {
@@ -44,6 +57,7 @@ export interface CareerActions {
   startNarrative(fileName: string): void;
   navigateToMatch(): void;
   navigateToHub(): void;
+  completeMatch(result: { homeScore: number; awayScore: number; overtimePeriods?: number; boxScore: MatchBoxScore }): void;
   hydrateCareer(state: CareerState): void;
   resetCareer(state: CareerState): void;
 }

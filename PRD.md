@@ -1,5 +1,7 @@
 \# Product Requirements Document (PRD): Leaguebound - Road to the League
 
+Archive note (repo hygiene): `LeagueBoundRPG/` is an archived reference folder; active development/runtime target is repo root `leaguebound-fresh`.
+
 \| \*\*Version\*\* \| \*\*Date\*\* \| \*\*Author\*\* \| \*\*Status\*\*
 \| \| :\-\-- \| :\-\-- \| :\-\-- \| :\-\-- \| \| 1.0 \| Feb 14, 2026 \|
 Product Team \| \*\*Draft\*\* \|

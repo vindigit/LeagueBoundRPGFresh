@@ -3,11 +3,11 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "node -e \"console.error('Archived project. Run Expo from repo root instead: C:\\\\Users\\\\valexander\\\\leaguebound-fresh'); process.exit(1);\"",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "android": "node -e \"console.error('Archived project. Run Expo from repo root instead: C:\\\\Users\\\\valexander\\\\leaguebound-fresh'); process.exit(1);\"",
+    "ios": "node -e \"console.error('Archived project. Run Expo from repo root instead: C:\\\\Users\\\\valexander\\\\leaguebound-fresh'); process.exit(1);\"",
+    "web": "node -e \"console.error('Archived project. Run Expo from repo root instead: C:\\\\Users\\\\valexander\\\\leaguebound-fresh'); process.exit(1);\"",
     "lint": "expo lint"
   },
   "dependencies": {

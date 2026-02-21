@@ -6,8 +6,17 @@ import { createSeededRng, initializePossession, simulatePossession, type MatchCo
 import { useCareerStore } from "../../../store/useCareerStore";
 import { useMatchStore } from "../store/useMatchStore";
 
+/**
+ * Real-world seconds per simulation tick before speed multiplier is applied.
+ */
 const REAL_SECONDS_PER_TICK = 1;
+/**
+ * In-game seconds advanced on each tick; controls simulation pace independent of wall-clock time.
+ */
 const GAME_SECONDS_PER_TICK = 10;
+/**
+ * In-game seconds required before resolving the next possession (shot-clock cadence).
+ */
 const POSSESSION_LENGTH = 24;
 const OVERTIME_SECONDS = 300;
 const USER_PLAYER_INDEX = 0;

@@ -6,7 +6,6 @@ import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
 import { useMatchStore } from "../store/useMatchStore";
 
-const HOME_NAME = "My Player";
 const AWAY_NAME = "Rivals High";
 
 const formatClock = (seconds: number): string => {
@@ -73,6 +72,8 @@ const renderLogItem = ({ item }: { item: PlayLog }) => (
 export function MatchScreen() {
   useMatchLoop();
   const hasAppliedResultRef = useRef(false);
+  const playerName = useCareerStore((state) => state.player.name);
+  const homeDisplayName = playerName.trim().length > 0 ? playerName : "My Player";
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const gameFinished = useMatchStore((state) => state.gameFinished);
@@ -93,8 +94,8 @@ export function MatchScreen() {
 
   useEffect(() => {
     hasAppliedResultRef.current = false;
-    initializeMatch(HOME_NAME, AWAY_NAME);
-  }, [initializeMatch]);
+    initializeMatch(homeDisplayName, AWAY_NAME);
+  }, [homeDisplayName, initializeMatch]);
 
   useEffect(() => {
     if (!gameFinished || hasAppliedResultRef.current) {
@@ -117,7 +118,7 @@ export function MatchScreen() {
           <View className="flex-row items-center justify-between">
             <View className="flex-1 pr-3">
               <Text className="text-xs uppercase tracking-wider text-slate-400">Home</Text>
-              <Text className="mt-1 text-lg font-bold text-white">{HOME_NAME}</Text>
+              <Text className="mt-1 text-lg font-bold text-white">{homeDisplayName}</Text>
               <Text className="mt-1 text-3xl font-black text-emerald-300">{homeScore}</Text>
             </View>
 

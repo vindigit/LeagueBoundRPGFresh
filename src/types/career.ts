@@ -1,5 +1,6 @@
-import type { Player, PlayerArchetype, PlayerAttributes } from "./player";
+import type { Player, PlayerAttributes } from "./player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
+import type { AttributeGainSource, BackstoryInput, CareerNewsItem } from "./backstory";
 
 export enum LeagueLevel {
   MIDDLE_SCHOOL = "MIDDLE_SCHOOL",
@@ -15,7 +16,7 @@ export enum CareerStatus {
   AMATEUR_LOCKED = "AMATEUR_LOCKED",
 }
 
-export type CareerView = "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
+export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
 
 export interface LastMatchResult {
   homeScore: number;
@@ -40,10 +41,12 @@ export interface CareerState {
   view: CareerView;
   currentNarrativeFile: string;
   lastMatchResult: LastMatchResult | null;
+  newsFeed: CareerNewsItem[];
 }
 
 export interface CareerActions {
-  initializeCareer(playerName: string, archetype: PlayerArchetype): void;
+  initializeCareer(input: BackstoryInput): void;
+  applyAttributeGain(attr: keyof PlayerAttributes, amount: number, source?: AttributeGainSource): void;
   updateAttribute(attr: keyof PlayerAttributes, amount: number): void;
   updateBankBalance(amount: number): void;
   advanceWeek(): void;

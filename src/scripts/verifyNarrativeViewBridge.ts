@@ -5,7 +5,16 @@ const run = async (): Promise<void> => {
   const { useCareerStore } = await import("../store/useCareerStore");
   const { loadNarrativeInkManager } = await import("../narrative/inkManager");
 
-  useCareerStore.getState().initializeCareer("Narrative Bridge Tester", "Playmaker");
+  useCareerStore.getState().initializeCareer({
+    firstName: "Narrative",
+    lastName: "Tester",
+    hometownSlug: "lewisville-tx",
+    archetype: "Playmaker",
+    ageStarted: 8,
+    bodyFrame: "Athletic",
+    dominantHand: "Right",
+    generationSeed: 20260221,
+  });
   useCareerStore.getState().startNarrative("practice_coach.ink");
 
   const stateAfterStart = useCareerStore.getState();

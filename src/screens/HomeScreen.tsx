@@ -1,6 +1,7 @@
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
+import { BackstoryScreen } from "../features/backstory/screens/BackstoryScreen";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
@@ -20,6 +21,7 @@ export function HomeScreen() {
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const currentYear = useCareerStore((state) => state.currentYear);
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
+  const newsFeed = useCareerStore((state) => state.newsFeed);
   const startNarrative = useCareerStore((state) => state.startNarrative);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
 
@@ -32,6 +34,22 @@ export function HomeScreen() {
 
           <View className="mt-5">
             <PlayerCard />
+          </View>
+
+          <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Hometown Feed</Text>
+            {newsFeed.length > 0 ? (
+              <View className="mt-3 gap-2">
+                {newsFeed.slice(0, 4).map((item) => (
+                  <View key={item.id} className="rounded-lg bg-premium-bg px-3 py-2">
+                    <Text className="text-sm font-semibold text-white">{item.headline}</Text>
+                    {item.subhead ? <Text className="mt-1 text-xs text-premium-muted">{item.subhead}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className="mt-3 text-sm text-premium-muted">Local coverage will appear after your first game.</Text>
+            )}
           </View>
 
           <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
@@ -78,6 +96,8 @@ export function HomeScreen() {
       {view === "MATCH" ? <MatchScreen /> : null}
 
       {view === "POSTGAME" ? <PostgameScreen /> : null}
+
+      {view === "BACKSTORY" ? <BackstoryScreen /> : null}
     </SafeAreaView>
   );
 }

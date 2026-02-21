@@ -114,7 +114,7 @@ const createPlayerLine = (id: string, name: string, team: "home" | "away"): Play
   fga: 0,
 });
 
-const DEFAULT_HOME_BOX_NAMES = ["User", "Home SG", "Home SF", "Home PF", "Home C"] as const;
+const DEFAULT_HOME_BOX_NAMES = ["My Player", "Home SG", "Home SF", "Home PF", "Home C"] as const;
 const DEFAULT_AWAY_BOX_NAMES = ["Away PG", "Away SG", "Away SF", "Away PF", "Away C"] as const;
 
 const buildBoxScoreFromNames = (homeNames: readonly string[], awayNames: readonly string[]): MatchBoxScore => ({
@@ -192,10 +192,11 @@ const initialMatchState: MatchState = {
 
 export const useMatchStore = create<MatchStore>((set) => ({
   ...initialMatchState,
-  initializeMatch: (_homeName, _awayName) => {
+  initializeMatch: (homeName, _awayName) => {
+    const homeNames = [homeName, ...DEFAULT_HOME_BOX_NAMES.slice(1)];
     set(() => ({
       ...initialMatchState,
-      matchBoxScore: buildBoxScoreFromNames(DEFAULT_HOME_BOX_NAMES, DEFAULT_AWAY_BOX_NAMES),
+      matchBoxScore: buildBoxScoreFromNames(homeNames, DEFAULT_AWAY_BOX_NAMES),
     }));
   },
   initializeBoxScore: (homeNames, awayNames) => {

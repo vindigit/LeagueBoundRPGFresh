@@ -6,7 +6,16 @@ const run = async (): Promise<void> => {
   const { useCareerStore } = await import("../store/useCareerStore");
 
   const runChoiceVerification = (choiceIndex: number, attributeKey: "bbiq" | "athleticism", label: string): void => {
-    useCareerStore.getState().initializeCareer("Ink Bridge Tester", "Playmaker");
+    useCareerStore.getState().initializeCareer({
+      firstName: "Ink",
+      lastName: "Tester",
+      hometownSlug: "lewisville-tx",
+      archetype: "Playmaker",
+      ageStarted: 8,
+      bodyFrame: "Athletic",
+      dominantHand: "Right",
+      generationSeed: 20260221,
+    });
 
     const before = useCareerStore.getState().player.attributes[attributeKey];
     const manager = loadPracticeCoachInkManager();

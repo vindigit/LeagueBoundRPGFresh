@@ -174,10 +174,27 @@ describe("Player state compatibility", () => {
           fgm: 0,
         },
       },
-    }) as { player: { bankBalance: number; morale: number; position: string } };
+    }) as {
+      player: {
+        bankBalance: number;
+        morale: number;
+        position: string;
+        identity: unknown;
+        dna: { caps: { shooting: number; finishing: number } };
+        attributes: { shooting: number; finishing: number };
+      };
+      newsFeed: unknown[];
+      view: string;
+    };
 
     expect(migrated.player.bankBalance).toBe(777);
     expect(migrated.player.morale).toBe(64);
     expect(migrated.player.position).toBe("SF");
+    expect(migrated.player.identity).toBeTruthy();
+    expect(migrated.player.dna).toBeTruthy();
+    expect(migrated.player.dna.caps.shooting).toBeGreaterThanOrEqual(migrated.player.attributes.shooting);
+    expect(migrated.player.dna.caps.finishing).toBeGreaterThanOrEqual(migrated.player.attributes.finishing);
+    expect(Array.isArray(migrated.newsFeed)).toBe(true);
+    expect(migrated.view).not.toBe("BACKSTORY");
   });
 });

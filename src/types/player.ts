@@ -1,3 +1,4 @@
+import type { PlayerDNA, PlayerIdentity } from "./backstory";
 export type Position = "PG" | "SG" | "SF" | "PF" | "C";
 
 export type PlayerArchetype =
@@ -140,6 +141,8 @@ export interface Player {
   morale: number;
   position: Position;
   archetype: PlayerArchetype;
+  identity: PlayerIdentity | null;
+  dna: PlayerDNA | null;
   attributes: PlayerAttributes;
   gameStats: PlayerGameStats;
 }
@@ -150,7 +153,9 @@ export interface InkPlayerState {
   Position: Position;
 }
 
-export type LegacyPlayerStateInput = Omit<Player, "bankBalance" | "morale" | "position"> & {
+export type LegacyPlayerStateInput = Omit<Player, "bankBalance" | "morale" | "position" | "identity" | "dna"> & {
+  identity?: PlayerIdentity | null;
+  dna?: PlayerDNA | null;
   bankBalance?: number;
   morale?: number;
   position?: Position;
@@ -175,5 +180,7 @@ export const normalizePlayerStateForInk = (player: LegacyPlayerStateInput): Play
     bankBalance,
     morale,
     position,
+    identity: player.identity ?? null,
+    dna: player.dna ?? null,
   };
 };

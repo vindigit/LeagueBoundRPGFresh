@@ -6,7 +6,16 @@ import { useCareerStore } from "../src/store/useCareerStore";
 
 describe("Career Store Persistence", () => {
   beforeEach(() => {
-    useCareerStore.getState().initializeCareer("Test Pro", "Slasher");
+    useCareerStore.getState().initializeCareer({
+      firstName: "Test",
+      lastName: "Pro",
+      hometownSlug: "lewisville-tx",
+      archetype: "Slasher",
+      ageStarted: 8,
+      bodyFrame: "Athletic",
+      dominantHand: "Right",
+      generationSeed: 20260221,
+    });
   });
 
   it("initializes career with correct player name and archetype", () => {

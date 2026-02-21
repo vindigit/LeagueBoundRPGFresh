@@ -11,6 +11,12 @@ describe("Match store index validation", () => {
     useMatchStore.getState().initializeBoxScore(HOME_NAMES, AWAY_NAMES);
   });
 
+  it("uses the caller-provided home player name instead of a generic placeholder", () => {
+    useMatchStore.getState().initializeMatch("Jordan Lewis", "Rivals High");
+    const player = useMatchStore.getState().matchBoxScore.homePlayers[0];
+    expect(player.name).toBe("Jordan Lewis");
+  });
+
   it("does not mutate stats when shooterIndex is undefined", () => {
     const before = { ...getHomePlayer(0) };
 

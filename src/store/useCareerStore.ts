@@ -1,7 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { ARCHETYPE_DEFAULTS } from "../constants/archetypes";
+import { ATTRIBUTE_SOURCE_MULTIPLIERS } from "../features/backstory/constants/attributeGrowthSources";
+import { BACKSTORY_V1_ENABLED } from "../features/backstory/constants/flags";
+import { createBackstorySeed, enforceCapsAtLeastCurrent, generateBackstoryFromInput, synthesizeBackstoryInputFromLegacy } from "../features/backstory/generator";
+import { createCareerCreationNewsItem, createPostgameNewsItem } from "../features/backstory/news";
 import {
   CareerStatus,
   LeagueLevel,
@@ -9,10 +12,12 @@ import {
   type CareerState,
 } from "../types/career";
 import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
+import type { BackstoryInput } from "../types/backstory";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
 
+const NEWS_FEED_LIMIT = 100;
 const clampAttribute = (value: number): number => Math.min(99, Math.max(0, value));
 const clampMorale = (value: number): number => Math.min(100, Math.max(0, value));
 
@@ -21,9 +26,11 @@ const defaultPlayer: Player = {
   name: "",
   age: 0,
   bankBalance: 0,
-  morale: 0,
+  morale: 50,
   position: "PG",
   archetype: "Slasher",
+  identity: null,
+  dna: null,
   attributes: {
     shooting: 0,
     finishing: 0,
@@ -46,6 +53,8 @@ const defaultPlayer: Player = {
   },
 };
 
+const getInitialCareerView = (): CareerState["view"] => (BACKSTORY_V1_ENABLED ? "BACKSTORY" : "HUB");
+
 const initialCareerState: CareerState = {
   player: defaultPlayer,
   leagueLevel: LeagueLevel.MIDDLE_SCHOOL,
@@ -55,9 +64,10 @@ const initialCareerState: CareerState = {
   currentWeek: 1,
   teamId: null,
   isGoatPath: false,
-  view: "HUB",
+  view: getInitialCareerView(),
   currentNarrativeFile: "",
   lastMatchResult: null,
+  newsFeed: [],
 };
 
 const emptyBoxScore = (): MatchBoxScore => ({
@@ -87,38 +97,88 @@ const emptyBoxScore = (): MatchBoxScore => ({
 
 const normalizePersistedPlayer = (player: LegacyPlayerStateInput): Player => normalizePlayerStateForInk(player);
 
+const isInitializedPlayer = (player: Player): boolean =>
+  player.id.trim().length > 0 && player.name.trim().length > 0 && Boolean(player.identity) && Boolean(player.dna);
+
+const appendNewsItem = (existingNews: CareerState["newsFeed"], item: CareerState["newsFeed"][number]): CareerState["newsFeed"] =>
+  [item, ...existingNews].slice(0, NEWS_FEED_LIMIT);
+
+const migratePlayerWithBackstory = (player: Player): Player => {
+  let migratedPlayer = { ...player };
+  if (!migratedPlayer.identity || !migratedPlayer.dna) {
+    const backstoryInput = synthesizeBackstoryInputFromLegacy(migratedPlayer as LegacyPlayerStateInput);
+    const seed = createBackstorySeed(backstoryInput);
+    const generated = generateBackstoryFromInput(backstoryInput, { seedOverride: seed });
+    migratedPlayer = {
+      ...migratedPlayer,
+      name: generated.identity.displayName,
+      archetype: generated.identity.archetype,
+      identity: generated.identity,
+      dna: {
+        ...generated.dna,
+        caps: enforceCapsAtLeastCurrent(generated.dna.caps, migratedPlayer.attributes),
+      },
+    };
+  } else {
+    migratedPlayer = {
+      ...migratedPlayer,
+      dna: {
+        ...migratedPlayer.dna,
+        caps: enforceCapsAtLeastCurrent(migratedPlayer.dna.caps, migratedPlayer.attributes),
+      },
+    };
+  }
+  return migratedPlayer;
+};
+
 export const useCareerStore = create<CareerStore>()(
   persist(
     (set, get) => ({
       ...initialCareerState,
-      initializeCareer: (playerName, archetype) => {
-        const attributes = ARCHETYPE_DEFAULTS[archetype];
+      initializeCareer: (input: BackstoryInput) => {
+        const seed = input.generationSeed ?? Date.now();
+        const generated = generateBackstoryFromInput(input, { seedOverride: seed });
+        const creationNews = createCareerCreationNewsItem(generated.identity, initialCareerState.currentWeek);
+
         set(() => ({
           ...initialCareerState,
           player: {
             ...initialCareerState.player,
-            id: Date.now().toString(),
-            name: playerName,
+            id: seed.toString(),
+            name: generated.identity.displayName,
             age: 13,
-            archetype,
-            attributes,
+            archetype: generated.identity.archetype,
+            identity: generated.identity,
+            dna: generated.dna,
+            attributes: generated.startingAttributes,
           },
+          view: "HUB",
+          newsFeed: [creationNews],
         }));
       },
-      updateAttribute: (attr, amount) => {
+      applyAttributeGain: (attr, amount, source = "SYSTEM") => {
         set((state) => {
           const currentValue = state.player.attributes[attr];
-          const nextValue = clampAttribute(currentValue + amount) as PlayerAttributes[typeof attr];
+          const growthByLeague = state.player.dna?.growthByLeague[state.leagueLevel] ?? 1;
+          const sourceMultiplier = ATTRIBUTE_SOURCE_MULTIPLIERS[source];
+          const cap = state.player.dna?.caps[attr] ?? 99;
+          const effectiveDelta = amount > 0 ? Math.round(amount * sourceMultiplier * growthByLeague) : amount;
+          const nextValue = clampAttribute(currentValue + effectiveDelta);
+          const cappedValue = Math.min(nextValue, cap) as PlayerAttributes[typeof attr];
+
           return {
             player: {
               ...state.player,
               attributes: {
                 ...state.player.attributes,
-                [attr]: nextValue,
+                [attr]: cappedValue,
               },
             },
           };
         });
+      },
+      updateAttribute: (attr, amount) => {
+        get().applyAttributeGain(attr, amount, "SYSTEM");
       },
       updateBankBalance: (amount) => {
         set((state) => {
@@ -183,6 +243,21 @@ export const useCareerStore = create<CareerStore>()(
           const moraleDelta = didWin ? 5 : -3;
           const nextMorale = clampMorale(state.player.morale + moraleDelta);
           const nextWeek = state.currentWeek + 1;
+          const lastMatchResult = {
+            homeScore,
+            awayScore,
+            didWin,
+            bankDelta,
+            moraleDelta,
+            weekAfter: nextWeek,
+            overtimePeriods: overtimePeriods ?? 0,
+            boxScore,
+          };
+
+          const newsFeed =
+            state.player.identity
+              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, lastMatchResult))
+              : state.newsFeed;
 
           return {
             currentWeek: nextWeek,
@@ -192,16 +267,8 @@ export const useCareerStore = create<CareerStore>()(
               bankBalance: state.player.bankBalance + bankDelta,
               morale: nextMorale,
             },
-            lastMatchResult: {
-              homeScore,
-              awayScore,
-              didWin,
-              bankDelta,
-              moraleDelta,
-              weekAfter: nextWeek,
-              overtimePeriods: overtimePeriods ?? 0,
-              boxScore,
-            },
+            lastMatchResult,
+            newsFeed,
           };
         });
       },
@@ -214,21 +281,38 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
           return persistedState;
         }
 
-        const typedState = persistedState as CareerStore;
+        const typedState = persistedState as Partial<CareerStore> & { player?: LegacyPlayerStateInput };
         if (!typedState.player) {
-          return typedState;
+          return {
+            ...typedState,
+            view: getInitialCareerView(),
+            newsFeed: [],
+          };
         }
+
+        const normalizedPlayer = normalizePersistedPlayer(typedState.player);
+        const migratedPlayer = migratePlayerWithBackstory(normalizedPlayer);
+        const newsFeed = Array.isArray(typedState.newsFeed) ? typedState.newsFeed : [];
+        const shouldUseBackstoryView = !isInitializedPlayer(migratedPlayer) && BACKSTORY_V1_ENABLED;
 
         return {
           ...typedState,
-          player: normalizePersistedPlayer(typedState.player as unknown as LegacyPlayerStateInput),
+          player: migratedPlayer,
+          view: shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB",
+          newsFeed,
+          lastMatchResult: typedState.lastMatchResult
+            ? {
+                ...typedState.lastMatchResult,
+                boxScore: typedState.lastMatchResult.boxScore ?? emptyBoxScore(),
+              }
+            : null,
         };
       },
       partialize: (state) => ({
@@ -248,6 +332,7 @@ export const useCareerStore = create<CareerStore>()(
               boxScore: state.lastMatchResult.boxScore ?? emptyBoxScore(),
             }
           : null,
+        newsFeed: state.newsFeed,
       }),
     },
   ),

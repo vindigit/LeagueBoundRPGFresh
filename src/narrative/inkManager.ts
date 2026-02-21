@@ -90,7 +90,7 @@ const parseActionTag = (tag: string): ParsedAction | null => {
 
 const applyAction = (action: ParsedAction): void => {
   if (action.type === "updateAttribute") {
-    useCareerStore.getState().updateAttribute(action.attributeKey, action.amount);
+    useCareerStore.getState().applyAttributeGain(action.attributeKey, action.amount, "NARRATIVE");
   }
 };
 

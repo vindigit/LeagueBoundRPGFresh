@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { LeagueLevel } from "../../../types/career";
 import type { Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
 import type { Team } from "../../../types/team";
@@ -20,7 +20,7 @@ const GAME_SECONDS_PER_TICK = 10;
 const POSSESSION_LENGTH = 24;
 const OVERTIME_SECONDS = 300;
 const USER_PLAYER_INDEX = 0;
-const HOME_ROSTER_NAMES = ["User", "Home SG", "Home SF", "Home PF", "Home C"] as const;
+const HOME_ROSTER_NAMES = ["Home PG", "Home SG", "Home SF", "Home PF", "Home C"] as const;
 const AWAY_ROSTER_NAMES = ["Away PG", "Away SG", "Away SF", "Away PF", "Away C"] as const;
 
 const defaultGameStats: PlayerGameStats = {
@@ -62,16 +62,24 @@ const makePlayer = (
   morale: 50,
   position,
   archetype,
+  identity: null,
+  dna: null,
   attributes,
   gameStats: { ...defaultGameStats },
 });
 
-const buildMatchContext = (userAttributes: PlayerAttributes): MatchContext => {
+const buildHomeBoxNames = (userDisplayName: string): string[] => [userDisplayName, ...HOME_ROSTER_NAMES.slice(1)];
+
+const buildMatchContext = (
+  userAttributes: PlayerAttributes,
+  userDisplayName: string,
+  userArchetype: PlayerArchetype,
+): MatchContext => {
   const home: Team = {
     name: "Home",
     teamOvr: 0,
     roster: [
-      makePlayer("h1", "User", "Playmaker", "PG", userAttributes),
+      makePlayer("h1", userDisplayName, userArchetype, "PG", userAttributes),
       makePlayer("h2", "Home SG", "Sharpshooter", "SG", withDelta(userAttributes, { shooting: 8, finishing: -6, vision: -4, defense: -2 })),
       makePlayer("h3", "Home SF", "Slasher", "SF", withDelta(userAttributes, { finishing: 7, athleticism: 6, shooting: -5, vision: -2 })),
       makePlayer("h4", "Home PF", "Stretch Big", "PF", withDelta(userAttributes, { rebounding: 8, defense: 7, shooting: 4, handle: -12 })),
@@ -154,7 +162,13 @@ export const useMatchLoop = (): void => {
   const updateGame = useMatchStore((state) => state.updateGame);
   const addLog = useMatchStore((state) => state.addLog);
 
+  const playerName = useCareerStore((state) => state.player.name);
+  const playerArchetype = useCareerStore((state) => state.player.archetype);
   const playerAttributes = useCareerStore((state) => state.player.attributes);
+  const homeBoxNames = useMemo(
+    () => buildHomeBoxNames(playerName.trim().length > 0 ? playerName : "My Player"),
+    [playerName],
+  );
 
   useEffect(() => {
     if (!isPlaying && !isPaused && !gameFinished) {
@@ -165,10 +179,10 @@ export const useMatchLoop = (): void => {
 
       const { matchBoxScore } = useMatchStore.getState();
       if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
-        initializeBoxScore([...HOME_ROSTER_NAMES], [...AWAY_ROSTER_NAMES]);
+        initializeBoxScore(homeBoxNames, [...AWAY_ROSTER_NAMES]);
       }
     }
-  }, [gameFinished, initializeBoxScore, isPaused, isPlaying]);
+  }, [gameFinished, homeBoxNames, initializeBoxScore, isPaused, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying || isPaused || gameFinished) {
@@ -176,7 +190,7 @@ export const useMatchLoop = (): void => {
     }
 
     if (!contextRef.current) {
-      contextRef.current = buildMatchContext(playerAttributes);
+      contextRef.current = buildMatchContext(playerAttributes, homeBoxNames[0], playerArchetype);
     }
 
     const intervalId = setInterval(() => {
@@ -281,7 +295,7 @@ export const useMatchLoop = (): void => {
 
       possessionProgressRef.current = 0;
       if (!contextRef.current) {
-        contextRef.current = buildMatchContext(playerAttributes);
+        contextRef.current = buildMatchContext(playerAttributes, homeBoxNames[0], playerArchetype);
       }
 
       if (!possessionStateRef.current) {
@@ -323,7 +337,7 @@ export const useMatchLoop = (): void => {
       const reboundTeam = result.offensiveRebound ? offenseTeam : result.eventType === "def_reb" ? defenseTeam : undefined;
       const { matchBoxScore } = useMatchStore.getState();
       if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
-        initializeBoxScore([...HOME_ROSTER_NAMES], [...AWAY_ROSTER_NAMES]);
+        initializeBoxScore(homeBoxNames, [...AWAY_ROSTER_NAMES]);
       }
 
       recordBoxScoreEvent({
@@ -376,5 +390,5 @@ export const useMatchLoop = (): void => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [addLog, endMatch, gameFinished, isPaused, isPlaying, pauseMatch, playerAttributes, recordBoxScoreEvent, simSpeed, updateGame]);
+  }, [addLog, endMatch, gameFinished, homeBoxNames, initializeBoxScore, isPaused, isPlaying, pauseMatch, playerArchetype, playerAttributes, recordBoxScoreEvent, simSpeed, updateGame]);
 };

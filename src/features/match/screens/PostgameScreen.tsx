@@ -48,6 +48,7 @@ const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => 
 export function PostgameScreen() {
   const result = useCareerStore((state) => state.lastMatchResult);
   const navigateToHub = useCareerStore((state) => state.navigateToHub);
+  const localHeadline = useCareerStore((state) => state.newsFeed.find((item) => item.category === "POSTGAME_RECAP")?.headline);
   const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home");
 
   if (!result) {
@@ -143,6 +144,13 @@ export function PostgameScreen() {
             <Text className="text-sm text-slate-300">Current Week</Text>
             <Text className="text-sm font-semibold text-white">{result.weekAfter}</Text>
           </View>
+
+          {localHeadline ? (
+            <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hometown Buzz</Text>
+              <Text className="mt-1 text-sm text-slate-100">{localHeadline}</Text>
+            </View>
+          ) : null}
         </View>
 
         <Pressable className="mt-6 items-center justify-center rounded-xl bg-emerald-500 py-4" onPress={navigateToHub}>

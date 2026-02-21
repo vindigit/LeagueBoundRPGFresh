@@ -1,5 +1,5 @@
 import type { Team } from "./types/team";
-import type { Player, PlayerStateInput, Position } from "./types/player";
+import type { InkPlayerState, LegacyPlayerStateInput, Player } from "./types/player";
 import { normalizePlayerStateForInk } from "./types/player";
 import { LeagueLevel } from "./types/career";
 import {
@@ -13,7 +13,7 @@ import {
 } from "./matchEngine";
 
 type TeamInput = Omit<Team, "roster"> & {
-  roster: [PlayerStateInput, PlayerStateInput, PlayerStateInput, PlayerStateInput, PlayerStateInput];
+  roster: [LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput];
 };
 
 type KeyMomentChoiceId = "force_shot" | "pass_to_corner" | "reset";
@@ -42,7 +42,7 @@ export interface AdapterStepOutput {
   metrics: SimMetrics;
   result?: PossessionResult;
   keyMoment?: KeyMomentEvent;
-  userInkState?: Pick<Player, "id" | "BankBalance" | "Morale" | "Position">;
+  userInkState?: { id: string } & InkPlayerState;
 }
 
 export interface AdapterRunOutput {
@@ -56,7 +56,7 @@ export interface MatchEngineAdapter {
   stepPossession(): AdapterStepOutput;
   runPossessions(possessions: number): AdapterRunOutput;
   getState(): AdapterStepOutput;
-  updateUserInkState(next: Pick<Player, "BankBalance" | "Morale" | "Position">): AdapterStepOutput;
+  updateUserInkState(next: InkPlayerState): AdapterStepOutput;
 }
 
 export interface MatchEngineAdapterOptions {
@@ -113,6 +113,19 @@ const getPlayerById = (context: MatchContext, playerId: string): Player | undefi
   return pool.find((player) => player.id === playerId);
 };
 
+const toInkPlayerState = (player: Pick<Player, "bankBalance" | "morale" | "position">): InkPlayerState => ({
+  BankBalance: player.bankBalance,
+  Morale: player.morale,
+  Position: player.position,
+});
+
+const applyInkPlayerState = (player: Player, inkState: InkPlayerState): Player => ({
+  ...player,
+  bankBalance: inkState.BankBalance,
+  morale: inkState.Morale,
+  position: inkState.Position,
+});
+
 export const createMatchEngineAdapter = (
   options: MatchEngineAdapterOptions,
 ): MatchEngineAdapter => {
@@ -139,15 +152,11 @@ export const createMatchEngineAdapter = (
     }
     return {
       id: userPlayer.id,
-      BankBalance: userPlayer.BankBalance,
-      Morale: userPlayer.Morale,
-      Position: userPlayer.Position as Position,
+      ...toInkPlayerState(userPlayer),
     };
   };
 
-  const updateUserInkState = (
-    next: Pick<Player, "BankBalance" | "Morale" | "Position">,
-  ): AdapterStepOutput => {
+  const updateUserInkState = (next: InkPlayerState): AdapterStepOutput => {
     const userPlayer = getPlayerById(context, options.userPlayerId);
     if (!userPlayer) {
       return {
@@ -157,13 +166,10 @@ export const createMatchEngineAdapter = (
       };
     }
 
-    // Persist to canonical Ink-facing fields and compatibility aliases.
-    userPlayer.BankBalance = next.BankBalance;
-    userPlayer.Morale = next.Morale;
-    userPlayer.Position = next.Position;
-    userPlayer.bankBalance = next.BankBalance;
-    userPlayer.morale = next.Morale;
-    userPlayer.position = next.Position;
+    const updatedUser = applyInkPlayerState(userPlayer, next);
+    userPlayer.bankBalance = updatedUser.bankBalance;
+    userPlayer.morale = updatedUser.morale;
+    userPlayer.position = updatedUser.position;
 
     return {
       state,

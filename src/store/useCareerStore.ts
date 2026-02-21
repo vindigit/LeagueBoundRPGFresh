@@ -8,7 +8,7 @@ import {
   type CareerActions,
   type CareerState,
 } from "../types/career";
-import type { Player, PlayerAttributes } from "../types/player";
+import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
@@ -20,9 +20,9 @@ const defaultPlayer: Player = {
   id: "",
   name: "",
   age: 0,
-  BankBalance: 0,
-  Morale: 0,
-  Position: "PG",
+  bankBalance: 0,
+  morale: 0,
+  position: "PG",
   archetype: "Slasher",
   attributes: {
     shooting: 0,
@@ -85,6 +85,8 @@ const emptyBoxScore = (): MatchBoxScore => ({
   },
 });
 
+const normalizePersistedPlayer = (player: LegacyPlayerStateInput): Player => normalizePlayerStateForInk(player);
+
 export const useCareerStore = create<CareerStore>()(
   persist(
     (set, get) => ({
@@ -98,12 +100,6 @@ export const useCareerStore = create<CareerStore>()(
             id: Date.now().toString(),
             name: playerName,
             age: 13,
-            BankBalance: initialCareerState.player.BankBalance,
-            bankBalance: initialCareerState.player.BankBalance,
-            Morale: initialCareerState.player.Morale,
-            morale: initialCareerState.player.Morale,
-            Position: initialCareerState.player.Position,
-            position: initialCareerState.player.Position,
             archetype,
             attributes,
           },
@@ -126,11 +122,10 @@ export const useCareerStore = create<CareerStore>()(
       },
       updateBankBalance: (amount) => {
         set((state) => {
-          const nextBankBalance = state.player.BankBalance + amount;
+          const nextBankBalance = state.player.bankBalance + amount;
           return {
             player: {
               ...state.player,
-              BankBalance: nextBankBalance,
               bankBalance: nextBankBalance,
             },
           };
@@ -186,7 +181,7 @@ export const useCareerStore = create<CareerStore>()(
           const didWin = homeScore > awayScore;
           const bankDelta = didWin ? 500 : 300;
           const moraleDelta = didWin ? 5 : -3;
-          const nextMorale = clampMorale(state.player.Morale + moraleDelta);
+          const nextMorale = clampMorale(state.player.morale + moraleDelta);
           const nextWeek = state.currentWeek + 1;
 
           return {
@@ -194,9 +189,7 @@ export const useCareerStore = create<CareerStore>()(
             view: "POSTGAME",
             player: {
               ...state.player,
-              BankBalance: state.player.BankBalance + bankDelta,
-              bankBalance: state.player.BankBalance + bankDelta,
-              Morale: nextMorale,
+              bankBalance: state.player.bankBalance + bankDelta,
               morale: nextMorale,
             },
             lastMatchResult: {
@@ -221,7 +214,23 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
+      version: 1,
       storage: createJSONStorage(() => AsyncStorage),
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState;
+        }
+
+        const typedState = persistedState as CareerStore;
+        if (!typedState.player) {
+          return typedState;
+        }
+
+        return {
+          ...typedState,
+          player: normalizePersistedPlayer(typedState.player as unknown as LegacyPlayerStateInput),
+        };
+      },
       partialize: (state) => ({
         player: state.player,
         leagueLevel: state.leagueLevel,

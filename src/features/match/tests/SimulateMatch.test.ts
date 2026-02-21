@@ -12,9 +12,9 @@ jest.mock("../../../store/useCareerStore", () => ({
         id: "test-player",
         name: "Test Player",
         age: 18,
-        BankBalance: 0,
-        Morale: 50,
-        Position: "PG" as const,
+        bankBalance: 0,
+        morale: 50,
+        position: "PG" as const,
         archetype: "Playmaker" as const,
         attributes: {
           shooting: 80,

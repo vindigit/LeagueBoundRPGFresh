@@ -19,7 +19,7 @@ export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const currentYear = useCareerStore((state) => state.currentYear);
-  const bankBalance = useCareerStore((state) => state.player.BankBalance);
+  const bankBalance = useCareerStore((state) => state.player.bankBalance);
   const startNarrative = useCareerStore((state) => state.startNarrative);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
 

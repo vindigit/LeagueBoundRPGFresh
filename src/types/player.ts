@@ -136,42 +136,44 @@ export interface Player {
   id: string;
   name: string;
   age: number;
-  BankBalance: number;
-  Morale: number;
-  Position: Position;
-  bankBalance?: number;
-  morale?: number;
-  position?: Position;
+  bankBalance: number;
+  morale: number;
+  position: Position;
   archetype: PlayerArchetype;
   attributes: PlayerAttributes;
   gameStats: PlayerGameStats;
 }
 
-export type PlayerStateInput = Omit<Player, "BankBalance" | "Morale" | "Position"> & {
-  BankBalance?: number;
-  Morale?: number;
-  Position?: Position;
+export interface InkPlayerState {
+  BankBalance: number;
+  Morale: number;
+  Position: Position;
+}
+
+export type LegacyPlayerStateInput = Omit<Player, "bankBalance" | "morale" | "position"> & {
   bankBalance?: number;
   morale?: number;
   position?: Position;
+  BankBalance?: number;
+  Morale?: number;
+  Position?: Position;
 };
 
-export const normalizePlayerStateForInk = (player: PlayerStateInput): Player => {
-  const BankBalance = player.BankBalance ?? player.bankBalance;
-  const Morale = player.Morale ?? player.morale;
-  const Position = player.Position ?? player.position;
+export const normalizePlayerStateForInk = (player: LegacyPlayerStateInput): Player => {
+  const bankBalance = player.bankBalance ?? player.BankBalance;
+  const morale = player.morale ?? player.Morale;
+  const position = player.position ?? player.Position;
 
-  if (BankBalance === undefined || Morale === undefined || Position === undefined) {
+  if (bankBalance === undefined || morale === undefined || position === undefined) {
     throw new Error("Player state normalization requires balance, morale, and position values.");
   }
 
+  const { BankBalance: _legacyBalance, Morale: _legacyMorale, Position: _legacyPosition, ...rest } = player;
+
   return {
-    ...player,
-    BankBalance,
-    Morale,
-    Position,
-    bankBalance: BankBalance,
-    morale: Morale,
-    position: Position,
+    ...rest,
+    bankBalance,
+    morale,
+    position,
   };
 };

@@ -29,6 +29,6 @@ describe("Career Store Persistence", () => {
 
   it("updates bank balance correctly", () => {
     useCareerStore.getState().updateBankBalance(500);
-    expect(useCareerStore.getState().player.BankBalance).toBe(500);
+    expect(useCareerStore.getState().player.bankBalance).toBe(500);
   });
 });

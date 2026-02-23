@@ -174,6 +174,9 @@ const scaleBonus = (
   return scaled;
 };
 
+/**
+ * Default secondary position fallback when primary/secondary collide or are missing.
+ */
 export const getDefaultSecondaryPosition = (primaryPosition: Position): Position => {
   const defaults: Record<Position, Position> = {
     PG: "SG",
@@ -195,6 +198,12 @@ const getCurveLabel = (growthCurve: GrowthCurve): string => {
   return "Steady Climber";
 };
 
+/**
+ * Lightweight deterministic PRNG (LCG).
+ *
+ * Same seed => same random sequence, which guarantees repeatable backstory generation
+ * (potential roll, resulting tier, and derived caps) for identical inputs.
+ */
 const createSeededRng = (seed: number): (() => number) => {
   let state = (seed >>> 0) || 1;
   return () => {
@@ -212,6 +221,13 @@ const hashString = (value: string): number => {
   return hash >>> 0;
 };
 
+/**
+ * Weighted potential roll:
+ * - 10%: 90-97
+ * - 30%: 80-89
+ * - 45%: 65-79
+ * - 15%: 55-64
+ */
 const rollPotential = (rng: () => number): number => {
   const roll = rng();
   if (roll < 0.1) {
@@ -248,6 +264,7 @@ const buildCapTable = (
   const curveBonus = CURVE_CAP_BONUSES[growthCurve];
   const primaryPositionBonus = POSITION_CAP_BONUSES[primaryPosition];
   const secondaryPositionBonus = scaleBonus(POSITION_CAP_BONUSES[secondaryPosition], SECONDARY_POSITION_SCALE);
+  // Exact body values are mapped to presets first, then presets apply small cap deltas.
   const heightBonus = HEIGHT_PRESET_CONFIG[heightPreset].capBonus;
   const weightBonus = WEIGHT_PRESET_CONFIG[weightPreset].capBonus;
   const buildBonus = combineBonuses(primaryPositionBonus, secondaryPositionBonus, heightBonus, weightBonus);
@@ -296,8 +313,19 @@ const buildStartingAttributes = (
   return attributes;
 };
 
+/**
+ * Returns player-facing growth copy for a curve key.
+ */
 export const getBackstoryGrowthOutlook = (growthCurve: GrowthCurve): string => GROWTH_OUTLOOK_BY_CURVE[growthCurve];
 
+/**
+ * Generates a stable seed from user-facing builder inputs.
+ *
+ * Seed effects:
+ * - Drives deterministic RNG in `generateBackstoryFromInput`
+ * - Controls hidden potential roll and resulting public tier
+ * - Ensures Step 5 preview can match persisted career when same seed is reused
+ */
 export const createBackstorySeed = (input: BackstoryInput): number =>
   hashString(
     [
@@ -317,6 +345,12 @@ export const createBackstorySeed = (input: BackstoryInput): number =>
     ].join("|"),
   );
 
+/**
+ * Generates identity, DNA, and starting attributes from builder input.
+ *
+ * When `seedOverride` is provided, output is fully deterministic and should match
+ * preview/start-career flows exactly for the same input+seed.
+ */
 export const generateBackstoryFromInput = (
   rawInput: BackstoryInput,
   options: { seedOverride?: number } = {},
@@ -331,6 +365,7 @@ export const generateBackstoryFromInput = (
   const normalizedWeight = clampWeight(rawInput.weightLbs);
   const heightPreset = toHeightPreset(normalizedHeight);
   const weightPreset = toWeightPreset(normalizedWeight);
+  // Explicit override is used by preview/start-career flow to lock identical outcomes.
   const generationSeed = options.seedOverride ?? createBackstorySeed({ ...rawInput, firstName, lastName, ageStarted });
   const rng = createSeededRng(generationSeed);
   const potential = rollPotential(rng);
@@ -408,6 +443,12 @@ const splitDisplayName = (name: string): { firstName: string; lastName: string }
   };
 };
 
+/**
+ * Backfills modern backstory input from legacy player data for migration flows.
+ *
+ * Returned values are deterministic from legacy fields + stable fallbacks so
+ * rehydration does not depend on runtime randomness.
+ */
 export const synthesizeBackstoryInputFromLegacy = (player: LegacyPlayerStateInput): BackstoryInput => {
   const name = splitDisplayName(player.name);
   const seed = hashString(`${player.id}|${player.name}|${player.archetype}`);
@@ -447,6 +488,10 @@ export const synthesizeBackstoryInputFromLegacy = (player: LegacyPlayerStateInpu
   };
 };
 
+/**
+ * Ensures generated caps never drop below already-earned current attributes.
+ * Used during migration/rebuild paths to prevent stat regression.
+ */
 export const enforceCapsAtLeastCurrent = (caps: PlayerAttributes, current: PlayerAttributes): PlayerAttributes => {
   const adjusted = { ...caps };
   for (const key of ALL_ATTRIBUTE_KEYS) {

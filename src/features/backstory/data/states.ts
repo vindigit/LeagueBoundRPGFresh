@@ -1,5 +1,8 @@
 import type { StateOption } from "../../../types/backstory";
 
+/**
+ * Canonical list of U.S. states used by the backstory state selector.
+ */
 export const US_STATES: readonly StateOption[] = [
   {
     "code": "AL",
@@ -203,4 +206,7 @@ export const US_STATES: readonly StateOption[] = [
   }
 ] as const;
 
+/**
+ * Default state used by migration and fallback hometown resolution paths.
+ */
 export const DEFAULT_STATE_CODE: StateOption["code"] = "TX";

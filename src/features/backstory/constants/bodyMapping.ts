@@ -1,9 +1,9 @@
 import type { ExactHeight, HeightPreset, WeightPreset } from "../../../types/backstory";
 
-const HEIGHT_MIN_TOTAL_INCHES = 4 * 12;
-const HEIGHT_MAX_TOTAL_INCHES = 7 * 12 + 11;
-const WEIGHT_MIN = 110;
-const WEIGHT_MAX = 320;
+const HEIGHT_MIN_TOTAL_INCHES = 5 * 12 + 4;
+const HEIGHT_MAX_TOTAL_INCHES = 7 * 12 + 1;
+const WEIGHT_MIN = 120;
+const WEIGHT_MAX = 270;
 
 const heightPresetRanges: Record<HeightPreset, { min: number; max: number; midpoint: number }> = {
   "5_8_5_10": { min: 68, max: 70, midpoint: 69 },
@@ -29,6 +29,10 @@ const fromTotalInches = (totalInches: number): ExactHeight => ({
   inches: totalInches % 12,
 });
 
+/**
+ * Normalizes exact height input into the supported builder bounds.
+ * Clamp is applied on total inches so combinations like 5'0" correctly snap to 5'4".
+ */
 export const clampHeight = (height: ExactHeight): ExactHeight => {
   const normalizedInches = Math.max(0, Math.round(height.inches));
   const normalizedFeet = Math.max(0, Math.round(height.feet));
@@ -39,8 +43,16 @@ export const clampHeight = (height: ExactHeight): ExactHeight => {
   return fromTotalInches(total);
 };
 
+/**
+ * Normalizes exact weight input into supported builder bounds.
+ */
 export const clampWeight = (weightLbs: number): number => Math.min(WEIGHT_MAX, Math.max(WEIGHT_MIN, Math.round(weightLbs)));
 
+/**
+ * Maps exact height to nearest gameplay preset bucket.
+ *
+ * This keeps identity values exact while routing balance math through fixed preset modifiers.
+ */
 export const toHeightPreset = (height: ExactHeight): HeightPreset => {
   const total = toTotalInches(clampHeight(height));
   let best: HeightPreset = "6_2_6_4";
@@ -58,6 +70,9 @@ export const toHeightPreset = (height: ExactHeight): HeightPreset => {
   return best;
 };
 
+/**
+ * Maps exact weight to nearest gameplay preset bucket for deterministic modifier lookup.
+ */
 export const toWeightPreset = (weightLbs: number): WeightPreset => {
   const clamped = clampWeight(weightLbs);
   let best: WeightPreset = "181_200";
@@ -75,6 +90,12 @@ export const toWeightPreset = (weightLbs: number): WeightPreset => {
   return best;
 };
 
+/**
+ * Returns deterministic representative height for legacy preset-only saves.
+ */
 export const heightFromPresetMidpoint = (preset: HeightPreset): ExactHeight => fromTotalInches(heightPresetRanges[preset].midpoint);
 
+/**
+ * Returns deterministic representative weight for legacy preset-only saves.
+ */
 export const weightFromPresetMidpoint = (preset: WeightPreset): number => weightPresetRanges[preset].midpoint;

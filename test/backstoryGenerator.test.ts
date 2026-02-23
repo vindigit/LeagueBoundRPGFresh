@@ -21,7 +21,10 @@ describe("Backstory generator", () => {
     const second = generateBackstoryFromInput(baseInput, { seedOverride: 20260221 });
 
     expect(first.dna.potential).toBe(second.dna.potential);
+    expect(first.dna.potentialTier).toBe(second.dna.potentialTier);
     expect(first.dna.growthCurve).toBe(second.dna.growthCurve);
+    expect(first.dna.caps).toEqual(second.dna.caps);
+    expect(first.dna.publicTraits).toEqual(second.dna.publicTraits);
     expect(first.startingAttributes).toEqual(second.startingAttributes);
   });
 

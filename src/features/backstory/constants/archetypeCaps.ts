@@ -1,5 +1,11 @@
 import type { PlayerArchetype, PlayerAttributes } from "../../../types/player";
 
+/**
+ * Base per-attribute cap targets by archetype before DNA/build modifiers are applied.
+ *
+ * Final caps are computed in the generator by layering potential, growth curve, frame,
+ * position, and body-preset bonuses on top of these values.
+ */
 export const ARCHETYPE_BASE_CAPS: Record<PlayerArchetype, PlayerAttributes> = {
   Slasher: {
     shooting: 82,

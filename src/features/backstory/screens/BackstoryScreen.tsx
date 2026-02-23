@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
-import { getBackstoryGrowthOutlook, generateBackstoryFromInput, getDefaultSecondaryPosition } from "../generator";
+import { createBackstorySeed, getBackstoryGrowthOutlook, generateBackstoryFromInput, getDefaultSecondaryPosition } from "../generator";
 import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
 import { clampHeight, clampWeight } from "../constants/bodyMapping";
 import type { BackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
@@ -23,7 +23,7 @@ const MAX_HOMETOWN_RESULTS = 24;
 const MAX_STATE_RESULTS = 12;
 
 const clampAgeStarted = (value: number): number => Math.min(12, Math.max(4, Math.round(value)));
-const clampFeet = (value: number): number => Math.min(7, Math.max(4, Math.round(value)));
+const clampFeet = (value: number): number => Math.min(7, Math.max(5, Math.round(value)));
 const clampInches = (value: number): number => Math.min(11, Math.max(0, Math.round(value)));
 
 const StepPill = ({ current, total }: { current: number; total: number }) => (
@@ -107,6 +107,15 @@ export function BackstoryScreen() {
   const [ageStarted, setAgeStarted] = useState(8);
   const stepTransition = useRef(new Animated.Value(1)).current;
 
+  const setClampedHeight = (nextFeet: number, nextInches: number): void => {
+    const normalized = clampHeight({
+      feet: clampFeet(nextFeet),
+      inches: clampInches(nextInches),
+    });
+    setHeightFeet(normalized.feet);
+    setHeightInches(normalized.inches);
+  };
+
   const availableCities = useMemo(() => getCitiesForState(stateCode), [stateCode]);
 
   const filteredStates = useMemo((): readonly StateOption[] => {
@@ -182,7 +191,8 @@ export function BackstoryScreen() {
     ],
   );
 
-  const preview = useMemo(() => generateBackstoryFromInput(draftInput), [draftInput]);
+  const previewSeed = useMemo(() => createBackstorySeed(draftInput), [draftInput]);
+  const preview = useMemo(() => generateBackstoryFromInput(draftInput, { seedOverride: previewSeed }), [draftInput, previewSeed]);
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
   const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
@@ -370,14 +380,14 @@ export function BackstoryScreen() {
           <Stepper
             label="Height - Feet"
             value={heightFeet}
-            onDec={() => setHeightFeet((value) => clampFeet(value - 1))}
-            onInc={() => setHeightFeet((value) => clampFeet(value + 1))}
+            onDec={() => setClampedHeight(heightFeet - 1, heightInches)}
+            onInc={() => setClampedHeight(heightFeet + 1, heightInches)}
           />
           <Stepper
             label="Height - Inches"
             value={heightInches}
-            onDec={() => setHeightInches((value) => clampInches(value - 1))}
-            onInc={() => setHeightInches((value) => clampInches(value + 1))}
+            onDec={() => setClampedHeight(heightFeet, heightInches - 1)}
+            onInc={() => setClampedHeight(heightFeet, heightInches + 1)}
           />
           <Stepper
             label="Weight (lbs)"
@@ -385,6 +395,8 @@ export function BackstoryScreen() {
             onDec={() => setWeightLbs((value) => clampWeight(value - 1))}
             onInc={() => setWeightLbs((value) => clampWeight(value + 1))}
           />
+          <Text className="mt-2 text-[11px] text-slate-400">Height range: 5'4" to 7'1"</Text>
+          <Text className="mt-1 text-[11px] text-slate-400">Weight range: 120 to 270 lbs</Text>
 
           <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Body Frame</Text>
           <SelectGroup options={BODY_FRAMES} selected={bodyFrame} onSelect={setBodyFrame} />
@@ -441,7 +453,10 @@ export function BackstoryScreen() {
             <Text className="mt-1 text-sm font-semibold text-slate-100">{getBackstoryGrowthOutlook(preview.dna.growthCurve)}</Text>
           </View>
 
-          <Pressable className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4" onPress={() => initializeCareer(draftInput)}>
+          <Pressable
+            className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"
+            onPress={() => initializeCareer({ ...draftInput, generationSeed: previewSeed })}
+          >
             <Text className="text-base font-semibold text-black">Start Career</Text>
           </Pressable>
         </Animated.View>

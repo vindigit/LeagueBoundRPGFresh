@@ -3,6 +3,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 import { useCareerStore } from "../src/store/useCareerStore";
+import { generateBackstoryFromInput } from "../src/features/backstory/generator";
 
 describe("Career Store Persistence", () => {
   beforeEach(() => {
@@ -44,5 +45,27 @@ describe("Career Store Persistence", () => {
   it("updates bank balance correctly", () => {
     useCareerStore.getState().updateBankBalance(500);
     expect(useCareerStore.getState().player.bankBalance).toBe(500);
+  });
+
+  it("keeps potential tier deterministic for the same seed", () => {
+    const expected = generateBackstoryFromInput(
+      {
+        firstName: "Test",
+        lastName: "Pro",
+        stateCode: "TX",
+        citySlug: "houston-tx",
+        archetype: "Slasher",
+        ageStarted: 8,
+        bodyFrame: "Athletic",
+        dominantHand: "Right",
+        primaryPosition: "SF",
+        secondaryPosition: "SG",
+        height: { feet: 6, inches: 6 },
+        weightLbs: 210,
+      },
+      { seedOverride: 20260221 },
+    );
+
+    expect(useCareerStore.getState().player.dna?.potentialTier).toBe(expected.dna.potentialTier);
   });
 });

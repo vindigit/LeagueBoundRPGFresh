@@ -1,5 +1,9 @@
 import type { CityOption, StateOption } from "../../../types/backstory";
 
+/**
+ * Static runtime dataset: exactly 100 curated cities per state for step-2 selection.
+ * Ordering is deterministic to keep search and defaults stable across runs.
+ */
 export const CITIES_BY_STATE: Record<StateOption["code"], readonly CityOption[]> = {
   "AL": [
     {

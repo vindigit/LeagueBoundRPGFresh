@@ -17,6 +17,16 @@ export interface WeightPresetConfig {
   startBonus: AttributeModifiers;
 }
 
+/**
+ * Body preset balance table used by generator math.
+ *
+ * Why this exists:
+ * - Exact height/weight are user-facing identity values.
+ * - Gameplay uses bounded preset buckets so balance stays predictable.
+ * - Taller/heavier presets generally trade perimeter skill for interior impact.
+ *
+ * `capBonus` affects long-term ceilings, `startBonus` affects initial ratings only.
+ */
 export const HEIGHT_PRESET_CONFIG: Record<HeightPreset, HeightPresetConfig> = {
   "5_8_5_10": {
     key: "5_8_5_10",
@@ -56,6 +66,10 @@ export const HEIGHT_PRESET_CONFIG: Record<HeightPreset, HeightPresetConfig> = {
   },
 };
 
+/**
+ * Weight bucket balance table with small, bounded modifiers.
+ * Heavier builds gain some interior durability/finishing at the cost of handle/explosiveness.
+ */
 export const WEIGHT_PRESET_CONFIG: Record<WeightPreset, WeightPresetConfig> = {
   "150_165": {
     key: "150_165",

@@ -1,11 +1,11 @@
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useCareerStore } from "../store/useCareerStore";
-import { getTopAttributes } from "./playerCardUtils";
+import { getAllAttributesSorted } from "./playerCardUtils";
 import { getBackstoryGrowthOutlook } from "../features/backstory/generator";
 
 export function PlayerCard() {
   const { name, archetype, attributes, identity, dna } = useCareerStore((state) => state.player);
-  const topAttributes = getTopAttributes(attributes);
+  const allAttributes = getAllAttributesSorted(attributes);
   const hometownLabel = identity ? `${identity.hometown.city}, ${identity.hometown.state}` : "Unknown hometown";
   const growthOutlook = dna ? getBackstoryGrowthOutlook(dna.growthCurve) : "Unavailable";
   const buildLabel =
@@ -44,8 +44,8 @@ export function PlayerCard() {
         <Text className="mt-1 text-sm font-semibold text-slate-100">{growthOutlook}</Text>
       </View>
 
-      <View className="mt-5 gap-3">
-        {topAttributes.map((attribute) => (
+      <ScrollView className="mt-5" contentContainerStyle={{ gap: 12, paddingBottom: 4 }} style={{ maxHeight: 320 }} nestedScrollEnabled>
+        {allAttributes.map((attribute) => (
           <View
             key={attribute.key}
             className="flex-row items-center justify-between rounded-lg border border-premium-surfaceAlt bg-premium-bg px-3 py-2"
@@ -54,7 +54,7 @@ export function PlayerCard() {
             <Text className="text-base font-semibold text-premium-accent">{attribute.value}</Text>
           </View>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }

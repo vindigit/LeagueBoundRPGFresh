@@ -11,17 +11,34 @@ const toHometown = (city: CityOption): Hometown => ({
 
 export const ALL_STATES: readonly StateOption[] = US_STATES;
 
+/**
+ * Returns state metadata for a two-letter state code.
+ */
 export const getStateByCode = (stateCode: string): StateOption | undefined =>
   ALL_STATES.find((state) => state.code === stateCode);
 
+/**
+ * Returns the curated city list for a state. Empty array when state is unknown.
+ */
 export const getCitiesForState = (stateCode: string): readonly CityOption[] =>
   CITIES_BY_STATE[stateCode as keyof typeof CITIES_BY_STATE] ?? [];
 
 export const DEFAULT_HOMETOWN: Hometown = toHometown(CITIES_BY_STATE[DEFAULT_STATE_CODE][0]);
 
+/**
+ * Looks up a city by slug within a specific state list.
+ */
 export const findCityBySlug = (stateCode: string, citySlug: string): CityOption | undefined =>
   getCitiesForState(stateCode).find((city) => city.slug === citySlug);
 
+/**
+ * Resolves potentially invalid state/city input into a safe hometown object.
+ *
+ * Fallback order:
+ * 1) Requested city inside validated state
+ * 2) First city in validated state
+ * 3) Global default city
+ */
 export const resolveHometown = (stateCode: string, citySlug: string): Hometown => {
   const preferredStateCode = getStateByCode(stateCode)?.code ?? DEFAULT_STATE_CODE;
   const preferredCities = getCitiesForState(preferredStateCode);
@@ -33,13 +50,22 @@ export const resolveHometown = (stateCode: string, citySlug: string): Hometown =
   return toHometown(resolvedCity);
 };
 
+/**
+ * Returns the default state code used by backstory initialization fallbacks.
+ */
 export const getDefaultStateCode = (): string => DEFAULT_STATE_CODE;
 
+/**
+ * Returns the first curated city for a state, or global default as fallback.
+ */
 export const getDefaultCityForState = (stateCode: string): CityOption => {
   const cities = getCitiesForState(stateCode);
   return cities[0] ?? CITIES_BY_STATE[DEFAULT_STATE_CODE][0];
 };
 
+/**
+ * Finds a hometown by legacy pre-state city slug for save migrations.
+ */
 export const findCityByLegacySlug = (legacySlug: string): Hometown | undefined => {
   const normalized = legacySlug.trim().toLowerCase();
   for (const state of ALL_STATES) {

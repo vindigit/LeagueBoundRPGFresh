@@ -3,6 +3,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 import { useCareerStore } from "../src/store/useCareerStore";
+import { createBackstorySeed, generateBackstoryFromInput } from "../src/features/backstory/generator";
 
 describe("Backstory flow", () => {
   beforeEach(() => {
@@ -52,5 +53,29 @@ describe("Backstory flow", () => {
     expect(state.player.identity?.hometown.stateCode).toBe("TX");
     expect(state.player.position).toBe("SF");
     expect(state.player.secondaryPosition).toBe("SG");
+  });
+
+  it("persists the same potential tier as preview when using the same seed", () => {
+    const input = {
+      firstName: "Seed",
+      lastName: "Lock",
+      stateCode: "TX",
+      citySlug: "houston-tx",
+      archetype: "Playmaker" as const,
+      ageStarted: 8,
+      bodyFrame: "Athletic" as const,
+      dominantHand: "Right" as const,
+      primaryPosition: "PG" as const,
+      secondaryPosition: "SG" as const,
+      height: { feet: 6, inches: 2 },
+      weightLbs: 185,
+    };
+    const seed = createBackstorySeed(input);
+    const preview = generateBackstoryFromInput(input, { seedOverride: seed });
+
+    useCareerStore.getState().initializeCareer({ ...input, generationSeed: seed });
+    const persistedTier = useCareerStore.getState().player.dna?.potentialTier;
+
+    expect(persistedTier).toBe(preview.dna.potentialTier);
   });
 });

@@ -20,7 +20,7 @@ export interface TopAttribute {
   value: number;
 }
 
-export const getTopAttributes = (attributes: PlayerAttributes): TopAttribute[] => {
+export const getAllAttributesSorted = (attributes: PlayerAttributes): TopAttribute[] => {
   return (Object.entries(attributes) as Array<[AttributeKey, number]>)
     .map(([key, value], index) => ({ key, value, index }))
     .sort((a, b) => {
@@ -29,10 +29,11 @@ export const getTopAttributes = (attributes: PlayerAttributes): TopAttribute[] =
       }
       return a.index - b.index;
     })
-    .slice(0, 6)
     .map(({ key, value }) => ({
       key,
       label: ATTRIBUTE_LABELS[key],
       value,
     }));
 };
+
+export const getTopAttributes = (attributes: PlayerAttributes): TopAttribute[] => getAllAttributesSorted(attributes).slice(0, 6);

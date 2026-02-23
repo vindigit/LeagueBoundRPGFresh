@@ -5,6 +5,9 @@ const createNewsId = (prefix: string): string => `${prefix}-${Date.now()}-${Math
 
 const toPossessive = (value: string): string => (value.endsWith("s") ? `${value}'` : `${value}'s`);
 
+/**
+ * Creates the first hometown headline shown when a career is initialized.
+ */
 export const createCareerCreationNewsItem = (
   identity: PlayerIdentity,
   week: number,
@@ -21,6 +24,12 @@ const getPlayerPoints = (result: LastMatchResult): number => {
   return line?.pts ?? 0;
 };
 
+/**
+ * Builds a postgame hometown recap headline from the latest result.
+ *
+ * Template priority favors standout wins first, then general wins/losses,
+ * and falls back to a quiet-night line when no stronger condition is met.
+ */
 export const createPostgameNewsItem = (
   identity: PlayerIdentity,
   result: LastMatchResult,

@@ -9,10 +9,10 @@ import {
 
 describe("Backstory exact body mapping", () => {
   it("clamps out-of-range values", () => {
-    expect(clampHeight({ feet: 8, inches: 99 })).toEqual({ feet: 7, inches: 11 });
-    expect(clampHeight({ feet: 3, inches: -4 })).toEqual({ feet: 4, inches: 0 });
-    expect(clampWeight(999)).toBe(320);
-    expect(clampWeight(80)).toBe(110);
+    expect(clampHeight({ feet: 8, inches: 99 })).toEqual({ feet: 7, inches: 1 });
+    expect(clampHeight({ feet: 3, inches: -4 })).toEqual({ feet: 5, inches: 4 });
+    expect(clampWeight(999)).toBe(270);
+    expect(clampWeight(80)).toBe(120);
   });
 
   it("maps exact values to nearest presets", () => {

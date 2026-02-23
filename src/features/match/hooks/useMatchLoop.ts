@@ -19,9 +19,8 @@ const GAME_SECONDS_PER_TICK = 10;
  */
 const POSSESSION_LENGTH = 24;
 const OVERTIME_SECONDS = 300;
-const USER_PLAYER_INDEX = 0;
-const HOME_ROSTER_NAMES = ["Home PG", "Home SG", "Home SF", "Home PF", "Home C"] as const;
-const AWAY_ROSTER_NAMES = ["Away PG", "Away SG", "Away SF", "Away PF", "Away C"] as const;
+const POSITIONS: readonly Position[] = ["PG", "SG", "SF", "PF", "C"];
+const AWAY_ROSTER_NAMES = POSITIONS.map((position) => `Away ${position}`) as string[];
 
 const defaultGameStats: PlayerGameStats = {
   points: 0,
@@ -61,6 +60,7 @@ const makePlayer = (
   bankBalance: 0,
   morale: 50,
   position,
+  secondaryPosition: position,
   archetype,
   identity: null,
   dna: null,
@@ -68,23 +68,38 @@ const makePlayer = (
   gameStats: { ...defaultGameStats },
 });
 
-const buildHomeBoxNames = (userDisplayName: string): string[] => [userDisplayName, ...HOME_ROSTER_NAMES.slice(1)];
+const getHomeNameForPosition = (position: Position): string => `Home ${position}`;
+
+const buildHomeBoxNames = (userDisplayName: string, userPosition: Position): string[] =>
+  POSITIONS.map((position) => (position === userPosition ? userDisplayName : getHomeNameForPosition(position)));
+
+const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: Partial<Record<keyof PlayerAttributes, number>> }> = {
+  PG: { archetype: "Playmaker", delta: { vision: 7, handle: 6, defense: -3 } },
+  SG: { archetype: "Sharpshooter", delta: { shooting: 8, finishing: -6, vision: -4, defense: -2 } },
+  SF: { archetype: "Slasher", delta: { finishing: 7, athleticism: 6, shooting: -5, vision: -2 } },
+  PF: { archetype: "Stretch Big", delta: { rebounding: 8, defense: 7, shooting: 4, handle: -12 } },
+  C: { archetype: "Paint Beast", delta: { finishing: 11, rebounding: 13, defense: 10, shooting: -14, handle: -18 } },
+};
 
 const buildMatchContext = (
   userAttributes: PlayerAttributes,
   userDisplayName: string,
   userArchetype: PlayerArchetype,
+  userPosition: Position,
 ): MatchContext => {
+  const homeRoster = POSITIONS.map((position, index) => {
+    if (position === userPosition) {
+      return makePlayer(`h${index + 1}`, userDisplayName, userArchetype, userPosition, userAttributes);
+    }
+
+    const profile = teammateProfileByPosition[position];
+    return makePlayer(`h${index + 1}`, getHomeNameForPosition(position), profile.archetype, position, withDelta(userAttributes, profile.delta));
+  });
+
   const home: Team = {
     name: "Home",
     teamOvr: 0,
-    roster: [
-      makePlayer("h1", userDisplayName, userArchetype, "PG", userAttributes),
-      makePlayer("h2", "Home SG", "Sharpshooter", "SG", withDelta(userAttributes, { shooting: 8, finishing: -6, vision: -4, defense: -2 })),
-      makePlayer("h3", "Home SF", "Slasher", "SF", withDelta(userAttributes, { finishing: 7, athleticism: 6, shooting: -5, vision: -2 })),
-      makePlayer("h4", "Home PF", "Stretch Big", "PF", withDelta(userAttributes, { rebounding: 8, defense: 7, shooting: 4, handle: -12 })),
-      makePlayer("h5", "Home C", "Paint Beast", "C", withDelta(userAttributes, { finishing: 11, rebounding: 13, defense: 10, shooting: -14, handle: -18 })),
-    ],
+    roster: homeRoster,
   };
 
   const awayBase: PlayerAttributes = {
@@ -164,10 +179,12 @@ export const useMatchLoop = (): void => {
 
   const playerName = useCareerStore((state) => state.player.name);
   const playerArchetype = useCareerStore((state) => state.player.archetype);
+  const playerPosition = useCareerStore((state) => state.player.position);
   const playerAttributes = useCareerStore((state) => state.player.attributes);
+  const userPlayerIndex = POSITIONS.indexOf(playerPosition);
   const homeBoxNames = useMemo(
-    () => buildHomeBoxNames(playerName.trim().length > 0 ? playerName : "My Player"),
-    [playerName],
+    () => buildHomeBoxNames(playerName.trim().length > 0 ? playerName : "My Player", playerPosition),
+    [playerName, playerPosition],
   );
 
   useEffect(() => {
@@ -190,7 +207,12 @@ export const useMatchLoop = (): void => {
     }
 
     if (!contextRef.current) {
-      contextRef.current = buildMatchContext(playerAttributes, homeBoxNames[0], playerArchetype);
+      contextRef.current = buildMatchContext(
+        playerAttributes,
+        playerName.trim().length > 0 ? playerName : "My Player",
+        playerArchetype,
+        playerPosition,
+      );
     }
 
     const intervalId = setInterval(() => {
@@ -295,7 +317,12 @@ export const useMatchLoop = (): void => {
 
       possessionProgressRef.current = 0;
       if (!contextRef.current) {
-        contextRef.current = buildMatchContext(playerAttributes, homeBoxNames[0], playerArchetype);
+        contextRef.current = buildMatchContext(
+          playerAttributes,
+          playerName.trim().length > 0 ? playerName : "My Player",
+          playerArchetype,
+          playerPosition,
+        );
       }
 
       if (!possessionStateRef.current) {
@@ -309,7 +336,7 @@ export const useMatchLoop = (): void => {
         score: { home: homeScore, away: awayScore },
         secondsRemaining: nextTimeRemaining,
       };
-      const wasUserBallHandler = possessionState.ballHandlerIndex === USER_PLAYER_INDEX;
+      const wasUserBallHandler = possessionState.ballHandlerIndex === userPlayerIndex;
 
       const result = simulatePossession(contextRef.current, possessionState, LeagueLevel.PRO, rngRef.current);
       possessionStateRef.current = {
@@ -366,13 +393,13 @@ export const useMatchLoop = (): void => {
       const mappedLog = getLogFromEvent(result, possession);
       const isUserOffenseAction =
         possession === "home" &&
-        (result.shooterIndex === USER_PLAYER_INDEX ||
-          result.assisterIndex === USER_PLAYER_INDEX ||
+        (result.shooterIndex === userPlayerIndex ||
+          result.assisterIndex === userPlayerIndex ||
           (result.turnoverLikeFailure && wasUserBallHandler));
       const isUserDefenseAction =
         possession === "away" &&
         (result.eventType === "steal" || result.eventType === "block") &&
-        result.defensivePlay.defenderIndex === USER_PLAYER_INDEX;
+        result.defensivePlay.defenderIndex === userPlayerIndex;
       const isUserAction = isUserOffenseAction || isUserDefenseAction;
 
       addLog({
@@ -390,5 +417,22 @@ export const useMatchLoop = (): void => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [addLog, endMatch, gameFinished, homeBoxNames, initializeBoxScore, isPaused, isPlaying, pauseMatch, playerArchetype, playerAttributes, recordBoxScoreEvent, simSpeed, updateGame]);
+  }, [
+    addLog,
+    endMatch,
+    gameFinished,
+    homeBoxNames,
+    initializeBoxScore,
+    isPaused,
+    isPlaying,
+    pauseMatch,
+    playerArchetype,
+    playerAttributes,
+    playerName,
+    playerPosition,
+    recordBoxScoreEvent,
+    simSpeed,
+    updateGame,
+    userPlayerIndex,
+  ]);
 };

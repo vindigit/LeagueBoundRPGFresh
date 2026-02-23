@@ -1,17 +1,37 @@
 import type { LeagueLevel } from "./career";
-import type { PlayerArchetype, PlayerAttributes } from "./player";
+import type { PlayerArchetype, PlayerAttributes, Position } from "./player";
 
 export type BodyFrame = "Lean" | "Athletic" | "Stocky";
 export type DominantHand = "Left" | "Right";
 export type AgeStartedBand = "EARLY" | "STANDARD" | "LATE";
 export type GrowthCurve = "EARLY_STARTER" | "STEADY" | "LATE_BLOOMER";
 export type AttributeGainSource = "NARRATIVE" | "MATCH_REWARD" | "TRAINING" | "SYSTEM";
+export type HeightPreset = "5_8_5_10" | "5_11_6_1" | "6_2_6_4" | "6_5_6_7" | "6_8_6_10" | "6_11_7_1";
+export type WeightPreset = "150_165" | "166_180" | "181_200" | "201_220" | "221_245" | "246_270";
+export type PotentialTier = "Bronze" | "Silver" | "Gold" | "Platinum";
+
+export interface ExactHeight {
+  feet: number;
+  inches: number;
+}
 
 export interface Hometown {
   slug: string;
   city: string;
+  stateCode: string;
   state: string;
-  prestige: 1 | 2 | 3 | 4 | 5;
+}
+
+export interface StateOption {
+  code: string;
+  name: string;
+}
+
+export interface CityOption {
+  slug: string;
+  city: string;
+  stateCode: string;
+  state: string;
 }
 
 export interface PlayerIdentity {
@@ -24,10 +44,15 @@ export interface PlayerIdentity {
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   archetype: PlayerArchetype;
+  primaryPosition: Position;
+  secondaryPosition: Position;
+  height: ExactHeight;
+  weightLbs: number;
 }
 
 export interface PlayerDNA {
   potential: number;
+  potentialTier: PotentialTier;
   growthCurve: GrowthCurve;
   generationSeed: number;
   growthByLeague: Record<LeagueLevel, number>;
@@ -38,11 +63,16 @@ export interface PlayerDNA {
 export interface BackstoryInput {
   firstName: string;
   lastName: string;
-  hometownSlug: string;
+  stateCode: string;
+  citySlug: string;
   archetype: PlayerArchetype;
   ageStarted: number;
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
+  primaryPosition: Position;
+  secondaryPosition: Position;
+  height: ExactHeight;
+  weightLbs: number;
   generationSeed?: number;
 }
 

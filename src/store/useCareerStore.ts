@@ -2,8 +2,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { ATTRIBUTE_SOURCE_MULTIPLIERS } from "../features/backstory/constants/attributeGrowthSources";
+import { heightFromPresetMidpoint, weightFromPresetMidpoint } from "../features/backstory/constants/bodyMapping";
 import { BACKSTORY_V1_ENABLED } from "../features/backstory/constants/flags";
-import { createBackstorySeed, enforceCapsAtLeastCurrent, generateBackstoryFromInput, synthesizeBackstoryInputFromLegacy } from "../features/backstory/generator";
+import { getPotentialTier } from "../features/backstory/constants/potentialTier";
+import { findCityByLegacySlug, getDefaultCityForState, getDefaultStateCode, resolveHometown } from "../features/backstory/data/hometowns";
+import {
+  createBackstorySeed,
+  enforceCapsAtLeastCurrent,
+  generateBackstoryFromInput,
+  getDefaultSecondaryPosition,
+  synthesizeBackstoryInputFromLegacy,
+} from "../features/backstory/generator";
 import { createCareerCreationNewsItem, createPostgameNewsItem } from "../features/backstory/news";
 import {
   CareerStatus,
@@ -12,7 +21,7 @@ import {
   type CareerState,
 } from "../types/career";
 import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
-import type { BackstoryInput } from "../types/backstory";
+import type { BackstoryInput, HeightPreset, WeightPreset } from "../types/backstory";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
@@ -28,6 +37,7 @@ const defaultPlayer: Player = {
   bankBalance: 0,
   morale: 50,
   position: "PG",
+  secondaryPosition: "SG",
   archetype: "Slasher",
   identity: null,
   dna: null,
@@ -103,8 +113,45 @@ const isInitializedPlayer = (player: Player): boolean =>
 const appendNewsItem = (existingNews: CareerState["newsFeed"], item: CareerState["newsFeed"][number]): CareerState["newsFeed"] =>
   [item, ...existingNews].slice(0, NEWS_FEED_LIMIT);
 
+const normalizePlayerIdentityHometown = (player: Player): Player => {
+  if (!player.identity) {
+    return player;
+  }
+
+  const defaultStateCode = getDefaultStateCode();
+  const rawHometown = player.identity.hometown as Partial<Player["identity"]["hometown"]> & { stateCode?: string };
+  const legacyBySlug = rawHometown.slug ? findCityByLegacySlug(rawHometown.slug) : undefined;
+  const normalizedStateCode = rawHometown.stateCode?.trim() || legacyBySlug?.stateCode || defaultStateCode;
+  const fallbackCitySlug = getDefaultCityForState(normalizedStateCode).slug;
+  const normalizedCitySlug = rawHometown.slug || legacyBySlug?.slug || fallbackCitySlug;
+  const normalizedHometown = resolveHometown(normalizedStateCode, normalizedCitySlug);
+
+  const primaryPosition = player.identity.primaryPosition ?? player.position;
+  const secondaryPosition =
+    player.identity.secondaryPosition ??
+    player.secondaryPosition ??
+    getDefaultSecondaryPosition(primaryPosition);
+
+  return {
+    ...player,
+    secondaryPosition: player.secondaryPosition ?? secondaryPosition,
+    identity: {
+      ...player.identity,
+      hometown: normalizedHometown,
+      primaryPosition,
+      secondaryPosition,
+      height:
+        player.identity.height ??
+        heightFromPresetMidpoint((player.identity as { heightPreset?: HeightPreset }).heightPreset ?? "6_2_6_4"),
+      weightLbs:
+        player.identity.weightLbs ??
+        weightFromPresetMidpoint((player.identity as { weightPreset?: WeightPreset }).weightPreset ?? "181_200"),
+    },
+  };
+};
+
 const migratePlayerWithBackstory = (player: Player): Player => {
-  let migratedPlayer = { ...player };
+  let migratedPlayer = normalizePlayerIdentityHometown({ ...player });
   if (!migratedPlayer.identity || !migratedPlayer.dna) {
     const backstoryInput = synthesizeBackstoryInputFromLegacy(migratedPlayer as LegacyPlayerStateInput);
     const seed = createBackstorySeed(backstoryInput);
@@ -122,8 +169,13 @@ const migratePlayerWithBackstory = (player: Player): Player => {
   } else {
     migratedPlayer = {
       ...migratedPlayer,
+      secondaryPosition:
+        migratedPlayer.secondaryPosition ??
+        migratedPlayer.identity?.secondaryPosition ??
+        getDefaultSecondaryPosition(migratedPlayer.position),
       dna: {
         ...migratedPlayer.dna,
+        potentialTier: migratedPlayer.dna.potentialTier ?? getPotentialTier(migratedPlayer.dna.potential),
         caps: enforceCapsAtLeastCurrent(migratedPlayer.dna.caps, migratedPlayer.attributes),
       },
     };
@@ -147,6 +199,8 @@ export const useCareerStore = create<CareerStore>()(
             id: seed.toString(),
             name: generated.identity.displayName,
             age: 13,
+            position: generated.identity.primaryPosition,
+            secondaryPosition: generated.identity.secondaryPosition,
             archetype: generated.identity.archetype,
             identity: generated.identity,
             dna: generated.dna,
@@ -281,7 +335,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 2,
+      version: 5,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {

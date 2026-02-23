@@ -10,11 +10,16 @@ describe("Career growth and cap enforcement", () => {
     useCareerStore.getState().initializeCareer({
       firstName: "Cap",
       lastName: "Tester",
-      hometownSlug: "lewisville-tx",
+      stateCode: "TX",
+      citySlug: "houston-tx",
       archetype: "Playmaker",
       ageStarted: 8,
       bodyFrame: "Athletic",
       dominantHand: "Right",
+      primaryPosition: "PG",
+      secondaryPosition: "SG",
+      height: { feet: 6, inches: 0 },
+      weightLbs: 175,
       generationSeed: 20260221,
     });
   });

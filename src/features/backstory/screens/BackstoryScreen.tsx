@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
-import { getBackstoryGrowthOutlook, generateBackstoryFromInput } from "../generator";
-import { CURATED_HOMETOWNS, DEFAULT_HOMETOWN } from "../data/hometowns";
-import type { BackstoryInput, BodyFrame, DominantHand } from "../../../types/backstory";
-import type { PlayerArchetype } from "../../../types/player";
+import { getBackstoryGrowthOutlook, generateBackstoryFromInput, getDefaultSecondaryPosition } from "../generator";
+import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
+import { clampHeight, clampWeight } from "../constants/bodyMapping";
+import type { BackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
+import type { PlayerArchetype, Position } from "../../../types/player";
 import { useCareerStore } from "../../../store/useCareerStore";
+import { POSITION_RECOMMENDATIONS } from "../constants/positionRecommendations";
 
 const ARCHETYPES: readonly PlayerArchetype[] = [
   "Slasher",
@@ -14,11 +16,15 @@ const ARCHETYPES: readonly PlayerArchetype[] = [
   "Paint Beast",
   "Stretch Big",
 ];
+const POSITIONS: readonly Position[] = ["PG", "SG", "SF", "PF", "C"];
 const BODY_FRAMES: readonly BodyFrame[] = ["Lean", "Athletic", "Stocky"];
 const DOMINANT_HANDS: readonly DominantHand[] = ["Right", "Left"];
 const MAX_HOMETOWN_RESULTS = 24;
+const MAX_STATE_RESULTS = 12;
 
-const clampAgeStarted = (value: number): number => Math.min(14, Math.max(4, Math.round(value)));
+const clampAgeStarted = (value: number): number => Math.min(12, Math.max(4, Math.round(value)));
+const clampFeet = (value: number): number => Math.min(7, Math.max(4, Math.round(value)));
+const clampInches = (value: number): number => Math.min(11, Math.max(0, Math.round(value)));
 
 const StepPill = ({ current, total }: { current: number; total: number }) => (
   <View className="mt-3 flex-row gap-2">
@@ -56,58 +62,131 @@ function SelectGroup<T extends string>({
   );
 }
 
+const Stepper = ({
+  label,
+  value,
+  onDec,
+  onInc,
+}: {
+  label: string;
+  value: string | number;
+  onDec: () => void;
+  onInc: () => void;
+}) => (
+  <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
+    <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</Text>
+    <View className="mt-2 flex-row items-center justify-between">
+      <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={onDec}>
+        <Text className="text-sm font-semibold text-white">-</Text>
+      </Pressable>
+      <Text className="text-lg font-bold text-emerald-300">{value}</Text>
+      <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={onInc}>
+        <Text className="text-sm font-semibold text-white">+</Text>
+      </Pressable>
+    </View>
+  </View>
+);
+
 export function BackstoryScreen() {
   const initializeCareer = useCareerStore((state) => state.initializeCareer);
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [hometownQuery, setHometownQuery] = useState("");
-  const [hometownSlug, setHometownSlug] = useState(DEFAULT_HOMETOWN.slug);
+  const [stateQuery, setStateQuery] = useState("");
+  const [cityQuery, setCityQuery] = useState("");
+  const [stateCode, setStateCode] = useState<string>(getDefaultStateCode());
+  const [citySlug, setCitySlug] = useState<string>(() => getDefaultCityForState(getDefaultStateCode()).slug);
   const [archetype, setArchetype] = useState<PlayerArchetype>("Slasher");
+  const [primaryPosition, setPrimaryPosition] = useState<Position>("PG");
+  const [secondaryPosition, setSecondaryPosition] = useState<Position>("SG");
+  const [heightFeet, setHeightFeet] = useState(6);
+  const [heightInches, setHeightInches] = useState(2);
+  const [weightLbs, setWeightLbs] = useState(185);
   const [bodyFrame, setBodyFrame] = useState<BodyFrame>("Athletic");
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
   const [ageStarted, setAgeStarted] = useState(8);
-  const [generationSeed, setGenerationSeed] = useState(() => Date.now());
   const stepTransition = useRef(new Animated.Value(1)).current;
 
-  const filteredHometowns = useMemo(() => {
-    const query = hometownQuery.trim().toLowerCase();
+  const availableCities = useMemo(() => getCitiesForState(stateCode), [stateCode]);
+
+  const filteredStates = useMemo((): readonly StateOption[] => {
+    const query = stateQuery.trim().toLowerCase();
     if (query.length === 0) {
-      return CURATED_HOMETOWNS.slice(0, MAX_HOMETOWN_RESULTS);
+      return ALL_STATES.slice(0, MAX_STATE_RESULTS);
     }
 
     const tokens = query.split(/\s+/).filter((token) => token.length > 0);
-    return CURATED_HOMETOWNS.filter((hometown) => {
-      const searchable = `${hometown.city} ${hometown.state} ${hometown.slug}`.toLowerCase();
+    return ALL_STATES.filter((state) => {
+      const searchable = `${state.name} ${state.code}`.toLowerCase();
+      return tokens.every((token) => searchable.includes(token));
+    }).slice(0, MAX_STATE_RESULTS);
+  }, [stateQuery]);
+
+  const filteredCities = useMemo(() => {
+    const query = cityQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return availableCities.slice(0, MAX_HOMETOWN_RESULTS);
+    }
+
+    const tokens = query.split(/\s+/).filter((token) => token.length > 0);
+    return availableCities.filter((city) => {
+      const searchable = `${city.city} ${city.state} ${city.slug}`.toLowerCase();
       return tokens.every((token) => searchable.includes(token));
     }).slice(0, MAX_HOMETOWN_RESULTS);
-  }, [hometownQuery]);
+  }, [availableCities, cityQuery]);
 
-  const selectedHometown = useMemo(
-    () => CURATED_HOMETOWNS.find((hometown) => hometown.slug === hometownSlug) ?? DEFAULT_HOMETOWN,
-    [hometownSlug],
+  const selectedState = useMemo(
+    () => ALL_STATES.find((state) => state.code === stateCode) ?? ALL_STATES[0],
+    [stateCode],
   );
+  const selectedCity = useMemo(
+    () => availableCities.find((city) => city.slug === citySlug) ?? availableCities[0] ?? getDefaultCityForState(getDefaultStateCode()),
+    [availableCities, citySlug],
+  );
+
+  const recommendedArchetypes = useMemo(() => POSITION_RECOMMENDATIONS[primaryPosition], [primaryPosition]);
+  const isRecommendedArchetype = recommendedArchetypes.includes(archetype);
+
+  const normalizedHeight = useMemo(() => clampHeight({ feet: heightFeet, inches: heightInches }), [heightFeet, heightInches]);
+  const normalizedWeight = useMemo(() => clampWeight(weightLbs), [weightLbs]);
+  const safeSecondaryPosition = secondaryPosition === primaryPosition ? getDefaultSecondaryPosition(primaryPosition) : secondaryPosition;
 
   const draftInput: BackstoryInput = useMemo(
     () => ({
       firstName,
       lastName,
-      hometownSlug,
+      stateCode,
+      citySlug,
       archetype,
       ageStarted,
       bodyFrame,
       dominantHand,
-      generationSeed,
+      primaryPosition,
+      secondaryPosition: safeSecondaryPosition,
+      height: normalizedHeight,
+      weightLbs: normalizedWeight,
     }),
-    [ageStarted, archetype, bodyFrame, dominantHand, firstName, generationSeed, hometownSlug, lastName],
+    [
+      firstName,
+      lastName,
+      stateCode,
+      citySlug,
+      archetype,
+      ageStarted,
+      bodyFrame,
+      dominantHand,
+      primaryPosition,
+      safeSecondaryPosition,
+      normalizedHeight,
+      normalizedWeight,
+    ],
   );
 
-  const preview = useMemo(
-    () => generateBackstoryFromInput(draftInput, { seedOverride: generationSeed }),
-    [draftInput, generationSeed],
-  );
+  const preview = useMemo(() => generateBackstoryFromInput(draftInput), [draftInput]);
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
+  const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
+  const canAdvanceFromBuild = primaryPosition !== secondaryPosition;
 
   useEffect(() => {
     stepTransition.setValue(0);
@@ -132,6 +211,12 @@ export function BackstoryScreen() {
 
   const goNext = (): void => {
     if (step === 1 && !canAdvanceFromName) {
+      return;
+    }
+    if (step === 2 && !canAdvanceFromLocation) {
+      return;
+    }
+    if (step === 3 && !canAdvanceFromBuild) {
       return;
     }
     setStep((value) => Math.min(5, value + 1));
@@ -168,10 +253,40 @@ export function BackstoryScreen() {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
           <Text className="text-sm font-semibold text-white">Step 2: Hometown</Text>
+          <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">State</Text>
           <TextInput
-            value={hometownQuery}
-            onChangeText={setHometownQuery}
-            placeholder="Search city/state (e.g. tx, lewisville)"
+            value={stateQuery}
+            onChangeText={setStateQuery}
+            placeholder="Search state (e.g. Texas or TX)"
+            placeholderTextColor="#64748b"
+            className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-white"
+          />
+          <View className="mt-3 flex-row flex-wrap gap-2">
+            {filteredStates.map((state) => {
+              const isSelected = state.code === stateCode;
+              return (
+                <Pressable
+                  key={state.code}
+                  className={`rounded-lg border px-3 py-2 ${isSelected ? "border-emerald-400 bg-emerald-400/20" : "border-slate-700 bg-slate-950"}`}
+                  onPress={() => {
+                    setStateCode(state.code);
+                    setCitySlug(getDefaultCityForState(state.code).slug);
+                    setCityQuery("");
+                  }}
+                >
+                  <Text className={`text-xs font-semibold ${isSelected ? "text-emerald-200" : "text-slate-200"}`}>
+                    {state.name} ({state.code})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">City ({selectedState.code})</Text>
+          <TextInput
+            value={cityQuery}
+            onChangeText={setCityQuery}
+            placeholder={`Search ${selectedState.name} cities`}
             placeholderTextColor="#64748b"
             className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-white"
           />
@@ -179,36 +294,33 @@ export function BackstoryScreen() {
           <View className="mt-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
             <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Selected</Text>
             <Text className="mt-0.5 text-sm font-semibold text-white">
-              {selectedHometown.city}, {selectedHometown.state} (Prestige {selectedHometown.prestige}/5)
+              {selectedCity.city}, {selectedCity.stateCode}
             </Text>
           </View>
 
-          {filteredHometowns.length > 0 ? (
+          {filteredCities.length > 0 ? (
             <View className="mt-3 flex-row flex-wrap justify-between">
-              {filteredHometowns.map((hometown) => {
-                const isSelected = hometown.slug === hometownSlug;
+              {filteredCities.map((city) => {
+                const isSelected = city.slug === citySlug;
                 return (
                   <Pressable
-                    key={hometown.slug}
+                    key={city.slug}
                     className={`mb-2 w-[48%] rounded-md border px-2 py-2 ${
                       isSelected ? "border-emerald-400 bg-emerald-400/20" : "border-slate-700 bg-slate-950"
                     }`}
-                    onPress={() => setHometownSlug(hometown.slug)}
+                    onPress={() => setCitySlug(city.slug)}
                   >
-                    <Text
-                      numberOfLines={1}
-                      className={`text-xs font-semibold ${isSelected ? "text-emerald-200" : "text-slate-200"}`}
-                    >
-                      {hometown.city}, {hometown.state}
+                    <Text numberOfLines={1} className={`text-xs font-semibold ${isSelected ? "text-emerald-200" : "text-slate-200"}`}>
+                      {city.city}
                     </Text>
-                    <Text className="mt-0.5 text-[10px] text-slate-400">Prestige {hometown.prestige}/5</Text>
+                    <Text className="mt-0.5 text-[10px] text-slate-400">{city.stateCode}</Text>
                   </Pressable>
                 );
               })}
             </View>
           ) : (
             <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
-              <Text className="text-xs text-slate-300">No hometown matches. Try a broader query like a state abbreviation.</Text>
+              <Text className="text-xs text-slate-300">No city matches in {selectedState.name}. Try a broader query.</Text>
             </View>
           )}
         </Animated.View>
@@ -219,8 +331,60 @@ export function BackstoryScreen() {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
           <Text className="text-sm font-semibold text-white">Step 3: Build Profile</Text>
-          <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Archetype</Text>
+          <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Primary Position</Text>
+          <SelectGroup options={POSITIONS} selected={primaryPosition} onSelect={setPrimaryPosition} />
+
+          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Secondary Position</Text>
+          <SelectGroup options={POSITIONS} selected={secondaryPosition} onSelect={setSecondaryPosition} />
+
+          {primaryPosition === secondaryPosition ? (
+            <View className="mt-3 rounded-lg border border-rose-400/50 bg-rose-500/10 px-3 py-2">
+              <Text className="text-xs font-semibold text-rose-200">Primary and secondary positions must be different.</Text>
+            </View>
+          ) : null}
+
+          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Archetype</Text>
           <SelectGroup options={ARCHETYPES} selected={archetype} onSelect={setArchetype} />
+
+          <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2">
+            <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Recommended for {primaryPosition}</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {recommendedArchetypes.map((option) => (
+                <View key={option} className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-1">
+                  <Text className="text-[11px] font-semibold text-emerald-200">{option}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {!isRecommendedArchetype ? (
+            <View className="mt-3 rounded-lg border border-amber-400/50 bg-amber-500/10 px-3 py-2">
+              <Text className="text-xs font-semibold text-amber-200">This archetype is off-meta for {primaryPosition}, but still allowed.</Text>
+            </View>
+          ) : null}
+
+          <View className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
+            <Text className="text-xs font-semibold text-cyan-100">You’re starting in 8th grade. Height and weight can fluctuate as your player develops.</Text>
+          </View>
+
+          <Stepper
+            label="Height - Feet"
+            value={heightFeet}
+            onDec={() => setHeightFeet((value) => clampFeet(value - 1))}
+            onInc={() => setHeightFeet((value) => clampFeet(value + 1))}
+          />
+          <Stepper
+            label="Height - Inches"
+            value={heightInches}
+            onDec={() => setHeightInches((value) => clampInches(value - 1))}
+            onInc={() => setHeightInches((value) => clampInches(value + 1))}
+          />
+          <Stepper
+            label="Weight (lbs)"
+            value={weightLbs}
+            onDec={() => setWeightLbs((value) => clampWeight(value - 1))}
+            onInc={() => setWeightLbs((value) => clampWeight(value + 1))}
+          />
 
           <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Body Frame</Text>
           <SelectGroup options={BODY_FRAMES} selected={bodyFrame} onSelect={setBodyFrame} />
@@ -235,19 +399,13 @@ export function BackstoryScreen() {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
           <Text className="text-sm font-semibold text-white">Step 4: Age You Started Playing</Text>
-          <Text className="mt-2 text-xs text-slate-400">This determines growth curve and early starting profile.</Text>
+          <Text className="mt-2 text-xs text-slate-400">This determines growth curve and early starting profile. Range: 4 to 12.</Text>
           <View className="mt-4 flex-row items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 py-3">
-            <Pressable
-              className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2"
-              onPress={() => setAgeStarted((value) => clampAgeStarted(value - 1))}
-            >
+            <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={() => setAgeStarted((value) => clampAgeStarted(value - 1))}>
               <Text className="text-sm font-semibold text-white">-</Text>
             </Pressable>
             <Text className="text-lg font-bold text-emerald-300">{ageStarted}</Text>
-            <Pressable
-              className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2"
-              onPress={() => setAgeStarted((value) => clampAgeStarted(value + 1))}
-            >
+            <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={() => setAgeStarted((value) => clampAgeStarted(value + 1))}>
               <Text className="text-sm font-semibold text-white">+</Text>
             </Pressable>
           </View>
@@ -261,7 +419,10 @@ export function BackstoryScreen() {
           <Text className="text-sm font-semibold text-white">Step 5: Preview</Text>
           <Text className="mt-2 text-2xl font-bold text-white">{preview.identity.displayName}</Text>
           <Text className="mt-1 text-sm text-slate-300">
-            {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.archetype}
+            {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.primaryPosition}/{preview.identity.secondaryPosition}
+          </Text>
+          <Text className="mt-1 text-sm text-slate-300">
+            {preview.identity.height.feet}'{preview.identity.height.inches}" • {preview.identity.weightLbs} lbs
           </Text>
 
           <View className="mt-4 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
@@ -280,17 +441,7 @@ export function BackstoryScreen() {
             <Text className="mt-1 text-sm font-semibold text-slate-100">{getBackstoryGrowthOutlook(preview.dna.growthCurve)}</Text>
           </View>
 
-          <Pressable
-            className="mt-4 items-center justify-center rounded-xl border border-amber-400/70 bg-amber-400/20 py-3"
-            onPress={() => setGenerationSeed(Date.now())}
-          >
-            <Text className="text-sm font-semibold text-amber-200">Reroll Hidden Traits</Text>
-          </Pressable>
-
-          <Pressable
-            className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"
-            onPress={() => initializeCareer({ ...draftInput, generationSeed })}
-          >
+          <Pressable className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4" onPress={() => initializeCareer(draftInput)}>
             <Text className="text-base font-semibold text-black">Start Career</Text>
           </Pressable>
         </Animated.View>
@@ -310,20 +461,16 @@ export function BackstoryScreen() {
         {renderStepContent()}
 
         <View className="mt-6 flex-row gap-3">
-          <Pressable
-            className={`flex-1 items-center justify-center rounded-xl py-3 ${step === 1 ? "bg-slate-800/50" : "bg-slate-700"}`}
-            disabled={step === 1}
-            onPress={goBack}
-          >
+          <Pressable className={`flex-1 items-center justify-center rounded-xl py-3 ${step === 1 ? "bg-slate-800/50" : "bg-slate-700"}`} disabled={step === 1} onPress={goBack}>
             <Text className="text-sm font-semibold text-slate-100">Back</Text>
           </Pressable>
           {step < 5 ? (
             <Pressable
-              className={`flex-1 items-center justify-center rounded-xl py-3 ${step === 1 && !canAdvanceFromName ? "bg-slate-700/40" : "bg-emerald-500"}`}
+              className={`flex-1 items-center justify-center rounded-xl py-3 ${(step === 1 && !canAdvanceFromName) || (step === 2 && !canAdvanceFromLocation) || (step === 3 && !canAdvanceFromBuild) ? "bg-slate-700/40" : "bg-emerald-500"}`}
               onPress={goNext}
-              disabled={step === 1 && !canAdvanceFromName}
+              disabled={(step === 1 && !canAdvanceFromName) || (step === 2 && !canAdvanceFromLocation) || (step === 3 && !canAdvanceFromBuild)}
             >
-              <Text className={`text-sm font-semibold ${step === 1 && !canAdvanceFromName ? "text-slate-400" : "text-black"}`}>Next</Text>
+              <Text className={`text-sm font-semibold ${(step === 1 && !canAdvanceFromName) || (step === 2 && !canAdvanceFromLocation) || (step === 3 && !canAdvanceFromBuild) ? "text-slate-400" : "text-black"}`}>Next</Text>
             </Pressable>
           ) : null}
         </View>
@@ -331,3 +478,4 @@ export function BackstoryScreen() {
     </SafeAreaView>
   );
 }
+

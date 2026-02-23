@@ -4,11 +4,16 @@ describe("Backstory generator", () => {
   const baseInput = {
     firstName: "Jordan",
     lastName: "Lewis",
-    hometownSlug: "lewisville-tx",
+    stateCode: "TX",
+    citySlug: "houston-tx",
     archetype: "Playmaker" as const,
     ageStarted: 8,
     bodyFrame: "Athletic" as const,
     dominantHand: "Right" as const,
+    primaryPosition: "PG" as const,
+    secondaryPosition: "SG" as const,
+    height: { feet: 6, inches: 2 } as const,
+    weightLbs: 185,
   };
 
   it("is deterministic for a fixed seed", () => {
@@ -33,6 +38,11 @@ describe("Backstory generator", () => {
     expect(late.dna.growthCurve).toBe("LATE_BLOOMER");
   });
 
+  it("clamps age started to max 12", () => {
+    const generated = generateBackstoryFromInput({ ...baseInput, ageStarted: 14 }, { seedOverride: 101 });
+    expect(generated.identity.ageStarted).toBe(12);
+  });
+
   it("never generates starting attributes above caps", () => {
     const generated = generateBackstoryFromInput(
       {
@@ -47,5 +57,34 @@ describe("Backstory generator", () => {
     for (const key of keys) {
       expect(generated.startingAttributes[key]).toBeLessThanOrEqual(generated.dna.caps[key]);
     }
+  });
+
+  it("does not change caps when only city changes within a state", () => {
+    const houston = generateBackstoryFromInput({ ...baseInput, citySlug: "houston-tx" }, { seedOverride: 44 });
+    const dallas = generateBackstoryFromInput({ ...baseInput, citySlug: "dallas-tx" }, { seedOverride: 44 });
+    expect(houston.dna.caps).toEqual(dallas.dna.caps);
+  });
+
+  it("maps potential to public tier label", () => {
+    const generated = generateBackstoryFromInput(baseInput, { seedOverride: 9 });
+    expect(["Bronze", "Silver", "Gold", "Platinum"]).toContain(generated.dna.potentialTier);
+    expect(generated.dna.publicTraits.some((trait) => trait.startsWith("Potential Tier:"))).toBe(true);
+  });
+
+  it("reroll can change visible tier with different seeds", () => {
+    let firstTier = "";
+    let secondTier = "";
+    for (let seed = 1; seed < 500; seed += 1) {
+      const first = generateBackstoryFromInput(baseInput, { seedOverride: seed });
+      const second = generateBackstoryFromInput(baseInput, { seedOverride: seed + 5000 });
+      if (first.dna.potentialTier !== second.dna.potentialTier) {
+        firstTier = first.dna.potentialTier;
+        secondTier = second.dna.potentialTier;
+        break;
+      }
+    }
+    expect(firstTier.length).toBeGreaterThan(0);
+    expect(secondTier.length).toBeGreaterThan(0);
+    expect(firstTier).not.toBe(secondTier);
   });
 });

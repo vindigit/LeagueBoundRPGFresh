@@ -29,20 +29,28 @@ describe("Backstory flow", () => {
     useCareerStore.getState().initializeCareer({
       firstName: "Jordan",
       lastName: "Lewis",
-      hometownSlug: "lewisville-tx",
+      stateCode: "TX",
+      citySlug: "houston-tx",
       archetype: "Slasher",
       ageStarted: 11,
       bodyFrame: "Athletic",
       dominantHand: "Right",
+      primaryPosition: "SF",
+      secondaryPosition: "SG",
+      height: { feet: 6, inches: 4 },
+      weightLbs: 190,
       generationSeed: 20260221,
     });
 
     const state = useCareerStore.getState();
     expect(state.view).toBe("HUB");
     expect(state.newsFeed.length).toBeGreaterThan(0);
-    expect(state.newsFeed[0].headline).toContain("Lewisville");
+    expect(state.newsFeed[0].headline).toContain("Houston");
     expect(state.newsFeed[0].headline).toContain("Lewis");
     expect(state.player.identity).toBeTruthy();
     expect(state.player.dna).toBeTruthy();
+    expect(state.player.identity?.hometown.stateCode).toBe("TX");
+    expect(state.player.position).toBe("SF");
+    expect(state.player.secondaryPosition).toBe("SG");
   });
 });

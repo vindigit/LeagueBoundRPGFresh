@@ -8,11 +8,16 @@ const run = async (): Promise<void> => {
   useCareerStore.getState().initializeCareer({
     firstName: "Narrative",
     lastName: "Tester",
-    hometownSlug: "lewisville-tx",
+    stateCode: "TX",
+    citySlug: "houston-tx",
     archetype: "Playmaker",
     ageStarted: 8,
     bodyFrame: "Athletic",
     dominantHand: "Right",
+    primaryPosition: "PG",
+    secondaryPosition: "SG",
+    height: { feet: 6, inches: 2 },
+    weightLbs: 185,
     generationSeed: 20260221,
   });
   useCareerStore.getState().startNarrative("practice_coach.ink");

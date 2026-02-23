@@ -1,10 +1,13 @@
 import { ARCHETYPE_DEFAULTS } from "../../constants/archetypes";
-import type { BackstoryInput, GrowthCurve, Hometown, PlayerDNA, PlayerIdentity } from "../../types/backstory";
-import type { LegacyPlayerStateInput, PlayerAttributes } from "../../types/player";
+import type { BackstoryInput, ExactHeight, GrowthCurve, HeightPreset, PlayerDNA, PlayerIdentity, WeightPreset } from "../../types/backstory";
+import type { LegacyPlayerStateInput, PlayerAttributes, Position } from "../../types/player";
 import { ARCHETYPE_BASE_CAPS } from "./constants/archetypeCaps";
 import { ARCHETYPE_PRIMARY_ATTRIBUTES } from "./constants/archetypePrimaries";
+import { clampHeight, clampWeight, heightFromPresetMidpoint, toHeightPreset, toWeightPreset, weightFromPresetMidpoint } from "./constants/bodyMapping";
+import { HEIGHT_PRESET_CONFIG, WEIGHT_PRESET_CONFIG } from "./constants/bodyPresets";
 import { GROWTH_BY_CURVE, GROWTH_OUTLOOK_BY_CURVE } from "./constants/growthCurves";
-import { DEFAULT_HOMETOWN, getHometownBySlug } from "./data/hometowns";
+import { getPotentialTier } from "./constants/potentialTier";
+import { findCityByLegacySlug, getDefaultCityForState, getDefaultStateCode, resolveHometown } from "./data/hometowns";
 
 export interface GeneratedBackstory {
   identity: PlayerIdentity;
@@ -25,7 +28,7 @@ const ALL_ATTRIBUTE_KEYS: ReadonlyArray<keyof PlayerAttributes> = [
 ];
 
 const AGE_STARTED_MIN = 4;
-const AGE_STARTED_MAX = 14;
+const AGE_STARTED_MAX = 12;
 
 const AGE_BAND_OFFSETS: Record<PlayerIdentity["ageStartedBand"], number> = {
   EARLY: 2,
@@ -67,6 +70,24 @@ const CURVE_CAP_BONUSES: Record<GrowthCurve, Partial<Record<keyof PlayerAttribut
     stamina: 1,
   },
 };
+
+const POSITION_CAP_BONUSES: Record<Position, Partial<Record<keyof PlayerAttributes, number>>> = {
+  PG: { vision: 2, handle: 2, rebounding: -1 },
+  SG: { shooting: 2, handle: 1 },
+  SF: { athleticism: 1, defense: 1, rebounding: 1 },
+  PF: { finishing: 1, rebounding: 2, defense: 1, handle: -1 },
+  C: { finishing: 1, rebounding: 2, defense: 2, handle: -2 },
+};
+
+const POSITION_START_BONUSES: Record<Position, Partial<Record<keyof PlayerAttributes, number>>> = {
+  PG: { vision: 1, handle: 1 },
+  SG: { shooting: 1 },
+  SF: { athleticism: 1, defense: 1 },
+  PF: { finishing: 1, rebounding: 1 },
+  C: { rebounding: 1, defense: 1 },
+};
+
+const SECONDARY_POSITION_SCALE = 0.5;
 
 const capitalize = (value: string): string => {
   if (value.length === 0) {
@@ -127,6 +148,43 @@ const getPotentialBonus = (potential: number): number => {
   return -5;
 };
 
+const combineBonuses = (
+  ...sources: Array<Partial<Record<keyof PlayerAttributes, number>>>
+): Partial<Record<keyof PlayerAttributes, number>> => {
+  const combined: Partial<Record<keyof PlayerAttributes, number>> = {};
+  for (const source of sources) {
+    for (const key of ALL_ATTRIBUTE_KEYS) {
+      combined[key] = (combined[key] ?? 0) + (source[key] ?? 0);
+    }
+  }
+  return combined;
+};
+
+const scaleBonus = (
+  source: Partial<Record<keyof PlayerAttributes, number>>,
+  factor: number,
+): Partial<Record<keyof PlayerAttributes, number>> => {
+  const scaled: Partial<Record<keyof PlayerAttributes, number>> = {};
+  for (const key of ALL_ATTRIBUTE_KEYS) {
+    const value = source[key];
+    if (value !== undefined) {
+      scaled[key] = Math.round(value * factor);
+    }
+  }
+  return scaled;
+};
+
+export const getDefaultSecondaryPosition = (primaryPosition: Position): Position => {
+  const defaults: Record<Position, Position> = {
+    PG: "SG",
+    SG: "PG",
+    SF: "PF",
+    PF: "C",
+    C: "PF",
+  };
+  return defaults[primaryPosition];
+};
+
 const getCurveLabel = (growthCurve: GrowthCurve): string => {
   if (growthCurve === "EARLY_STARTER") {
     return "Early Starter";
@@ -168,11 +226,7 @@ const rollPotential = (rng: () => number): number => {
   return 55 + Math.floor(rng() * 10);
 };
 
-const resolveHometown = (hometownSlug: string): Hometown => getHometownBySlug(hometownSlug) ?? DEFAULT_HOMETOWN;
-
 const buildDisplayName = (firstName: string, lastName: string): string => `${firstName} ${lastName}`.trim();
-
-const getPrestigeBonus = (hometown: Hometown): number => hometown.prestige - 3;
 
 const getPrimaryBonus = (attribute: keyof PlayerAttributes, archetype: PlayerIdentity["archetype"]): number => {
   const primaries = ARCHETYPE_PRIMARY_ATTRIBUTES[archetype];
@@ -182,24 +236,31 @@ const getPrimaryBonus = (attribute: keyof PlayerAttributes, archetype: PlayerIde
 const buildCapTable = (
   archetype: PlayerIdentity["archetype"],
   potential: number,
-  hometown: Hometown,
   frame: PlayerIdentity["bodyFrame"],
   growthCurve: GrowthCurve,
+  primaryPosition: Position,
+  secondaryPosition: Position,
+  heightPreset: HeightPreset,
+  weightPreset: WeightPreset,
 ): PlayerAttributes => {
   const archetypeBaseCaps = ARCHETYPE_BASE_CAPS[archetype];
   const frameBonus = FRAME_BONUSES[frame];
   const curveBonus = CURVE_CAP_BONUSES[growthCurve];
+  const primaryPositionBonus = POSITION_CAP_BONUSES[primaryPosition];
+  const secondaryPositionBonus = scaleBonus(POSITION_CAP_BONUSES[secondaryPosition], SECONDARY_POSITION_SCALE);
+  const heightBonus = HEIGHT_PRESET_CONFIG[heightPreset].capBonus;
+  const weightBonus = WEIGHT_PRESET_CONFIG[weightPreset].capBonus;
+  const buildBonus = combineBonuses(primaryPositionBonus, secondaryPositionBonus, heightBonus, weightBonus);
   const potentialBonus = getPotentialBonus(potential);
-  const prestigeBonus = getPrestigeBonus(hometown);
 
   const caps = {} as PlayerAttributes;
   for (const key of ALL_ATTRIBUTE_KEYS) {
     const value =
       archetypeBaseCaps[key] +
       potentialBonus +
-      prestigeBonus +
       (frameBonus[key] ?? 0) +
       (curveBonus[key] ?? 0) +
+      (buildBonus[key] ?? 0) +
       getPrimaryBonus(key, archetype);
     caps[key] = asCap(value) as PlayerAttributes[typeof key];
   }
@@ -210,15 +271,24 @@ const buildStartingAttributes = (
   archetype: PlayerIdentity["archetype"],
   ageStartedBand: PlayerIdentity["ageStartedBand"],
   frame: PlayerIdentity["bodyFrame"],
+  primaryPosition: Position,
+  secondaryPosition: Position,
+  heightPreset: HeightPreset,
+  weightPreset: WeightPreset,
   caps: PlayerAttributes,
 ): PlayerAttributes => {
   const base = ARCHETYPE_DEFAULTS[archetype];
   const frameBonus = FRAME_BONUSES[frame];
   const ageOffset = AGE_BAND_OFFSETS[ageStartedBand];
+  const primaryPositionBonus = POSITION_START_BONUSES[primaryPosition];
+  const secondaryPositionBonus = scaleBonus(POSITION_START_BONUSES[secondaryPosition], SECONDARY_POSITION_SCALE);
+  const heightBonus = HEIGHT_PRESET_CONFIG[heightPreset].startBonus;
+  const weightBonus = WEIGHT_PRESET_CONFIG[weightPreset].startBonus;
+  const buildBonus = combineBonuses(primaryPositionBonus, secondaryPositionBonus, heightBonus, weightBonus);
   const attributes = {} as PlayerAttributes;
 
   for (const key of ALL_ATTRIBUTE_KEYS) {
-    const rawValue = base[key] + ageOffset + (frameBonus[key] ?? 0);
+    const rawValue = base[key] + ageOffset + (frameBonus[key] ?? 0) + (buildBonus[key] ?? 0);
     const clamped = asRating(rawValue);
     attributes[key] = Math.min(clamped, caps[key]) as PlayerAttributes[typeof key];
   }
@@ -233,11 +303,17 @@ export const createBackstorySeed = (input: BackstoryInput): number =>
     [
       input.firstName.trim().toLowerCase(),
       input.lastName.trim().toLowerCase(),
-      input.hometownSlug.trim().toLowerCase(),
+      input.stateCode.trim().toLowerCase(),
+      input.citySlug.trim().toLowerCase(),
       input.archetype,
+      input.primaryPosition,
+      input.secondaryPosition,
       input.ageStarted,
       input.bodyFrame,
       input.dominantHand,
+      input.height.feet,
+      input.height.inches,
+      input.weightLbs,
     ].join("|"),
   );
 
@@ -247,14 +323,32 @@ export const generateBackstoryFromInput = (
 ): GeneratedBackstory => {
   const firstName = sanitizeNamePart(rawInput.firstName, "Unnamed");
   const lastName = sanitizeNamePart(rawInput.lastName, "Prospect");
-  const hometown = resolveHometown(rawInput.hometownSlug);
+  const hometown = resolveHometown(rawInput.stateCode, rawInput.citySlug);
   const ageStarted = clamp(Math.round(rawInput.ageStarted), AGE_STARTED_MIN, AGE_STARTED_MAX);
   const ageStartedBand = getAgeStartedBand(ageStarted);
   const growthCurve = getGrowthCurveFromBand(ageStartedBand);
+  const normalizedHeight = clampHeight(rawInput.height);
+  const normalizedWeight = clampWeight(rawInput.weightLbs);
+  const heightPreset = toHeightPreset(normalizedHeight);
+  const weightPreset = toWeightPreset(normalizedWeight);
   const generationSeed = options.seedOverride ?? createBackstorySeed({ ...rawInput, firstName, lastName, ageStarted });
   const rng = createSeededRng(generationSeed);
   const potential = rollPotential(rng);
-  const caps = buildCapTable(rawInput.archetype, potential, hometown, rawInput.bodyFrame, growthCurve);
+  const primaryPosition = rawInput.primaryPosition;
+  const secondaryPosition =
+    rawInput.secondaryPosition === rawInput.primaryPosition
+      ? getDefaultSecondaryPosition(rawInput.primaryPosition)
+      : rawInput.secondaryPosition;
+  const caps = buildCapTable(
+    rawInput.archetype,
+    potential,
+    rawInput.bodyFrame,
+    growthCurve,
+    primaryPosition,
+    secondaryPosition,
+    heightPreset,
+    weightPreset,
+  );
   const identity: PlayerIdentity = {
     firstName,
     lastName,
@@ -265,20 +359,40 @@ export const generateBackstoryFromInput = (
     bodyFrame: rawInput.bodyFrame,
     dominantHand: rawInput.dominantHand,
     archetype: rawInput.archetype,
+    primaryPosition,
+    secondaryPosition,
+    height: normalizedHeight,
+    weightLbs: normalizedWeight,
   };
+  const potentialTier = getPotentialTier(potential);
   const dna: PlayerDNA = {
     potential,
+    potentialTier,
     growthCurve,
     generationSeed,
     growthByLeague: GROWTH_BY_CURVE[growthCurve],
     caps,
-    publicTraits: [getCurveLabel(growthCurve), `${rawInput.bodyFrame} Frame`, `${hometown.city} Hooper`],
+    publicTraits: [
+      `Potential Tier: ${potentialTier}`,
+      getCurveLabel(growthCurve),
+      `${rawInput.bodyFrame} Frame`,
+      `${hometown.city} Hooper`,
+    ],
   };
 
   return {
     identity,
     dna,
-    startingAttributes: buildStartingAttributes(rawInput.archetype, ageStartedBand, rawInput.bodyFrame, caps),
+    startingAttributes: buildStartingAttributes(
+      rawInput.archetype,
+      ageStartedBand,
+      rawInput.bodyFrame,
+      primaryPosition,
+      secondaryPosition,
+      heightPreset,
+      weightPreset,
+      caps,
+    ),
   };
 };
 
@@ -297,19 +411,39 @@ const splitDisplayName = (name: string): { firstName: string; lastName: string }
 export const synthesizeBackstoryInputFromLegacy = (player: LegacyPlayerStateInput): BackstoryInput => {
   const name = splitDisplayName(player.name);
   const seed = hashString(`${player.id}|${player.name}|${player.archetype}`);
-  const hometown = DEFAULT_HOMETOWN;
+  const defaultStateCode = getDefaultStateCode();
+  const legacyHometown =
+    player.identity?.hometown?.slug
+      ? findCityByLegacySlug(player.identity.hometown.slug)
+      : undefined;
+  const stateCode = player.identity?.hometown?.stateCode ?? legacyHometown?.stateCode ?? defaultStateCode;
+  const fallbackCity = getDefaultCityForState(stateCode);
+  const citySlug = legacyHometown?.slug ?? fallbackCity.slug;
   const ageStarted = AGE_STARTED_MIN + (seed % (AGE_STARTED_MAX - AGE_STARTED_MIN + 1));
   const bodyFrame: PlayerIdentity["bodyFrame"] = seed % 3 === 0 ? "Lean" : seed % 3 === 1 ? "Athletic" : "Stocky";
   const dominantHand: PlayerIdentity["dominantHand"] = seed % 2 === 0 ? "Right" : "Left";
+  const primaryPosition = player.position ?? "PG";
+  const secondaryPosition = player.secondaryPosition ?? getDefaultSecondaryPosition(primaryPosition);
+  const heightPresets: HeightPreset[] = ["5_8_5_10", "5_11_6_1", "6_2_6_4", "6_5_6_7", "6_8_6_10", "6_11_7_1"];
+  const weightPresets: WeightPreset[] = ["150_165", "166_180", "181_200", "201_220", "221_245", "246_270"];
+  const legacyHeightPreset = (player.identity as { heightPreset?: HeightPreset } | undefined)?.heightPreset ?? heightPresets[seed % heightPresets.length];
+  const legacyWeightPreset = (player.identity as { weightPreset?: WeightPreset } | undefined)?.weightPreset ?? weightPresets[seed % weightPresets.length];
+  const height: ExactHeight = player.identity?.height ?? heightFromPresetMidpoint(legacyHeightPreset);
+  const weightLbs = player.identity?.weightLbs ?? weightFromPresetMidpoint(legacyWeightPreset);
 
   return {
     firstName: name.firstName,
     lastName: name.lastName,
-    hometownSlug: hometown.slug,
+    stateCode,
+    citySlug,
     archetype: player.archetype,
     ageStarted,
     bodyFrame,
     dominantHand,
+    primaryPosition,
+    secondaryPosition,
+    height,
+    weightLbs,
   };
 };
 

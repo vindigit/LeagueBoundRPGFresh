@@ -15,6 +15,7 @@ jest.mock("../../../store/useCareerStore", () => ({
         bankBalance: 0,
         morale: 50,
         position: "PG" as const,
+        secondaryPosition: "SG" as const,
         archetype: "Playmaker" as const,
         identity: null,
         dna: null,

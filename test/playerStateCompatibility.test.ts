@@ -41,6 +41,7 @@ describe("Player state compatibility", () => {
     expect(normalized.bankBalance).toBe(200);
     expect(normalized.morale).toBe(55);
     expect(normalized.position).toBe("SG");
+    expect(normalized.secondaryPosition).toBe("PG");
   });
 
   it("prefers camelCase values when both legacy and canonical fields are present", () => {
@@ -51,6 +52,7 @@ describe("Player state compatibility", () => {
       bankBalance: 900,
       morale: 66,
       position: "PG",
+      secondaryPosition: "SG",
       BankBalance: 100,
       Morale: 10,
       Position: "C",
@@ -80,6 +82,7 @@ describe("Player state compatibility", () => {
     expect(normalized.bankBalance).toBe(900);
     expect(normalized.morale).toBe(66);
     expect(normalized.position).toBe("PG");
+    expect(normalized.secondaryPosition).toBe("SG");
   });
 
   it("round-trips ink state through the adapter boundary", () => {
@@ -90,6 +93,7 @@ describe("Player state compatibility", () => {
       bankBalance: 250,
       morale: 62,
       position: "PG" as const,
+      secondaryPosition: "SG" as const,
       archetype: "Playmaker" as const,
       attributes: {
         shooting: 70 as const,
@@ -179,8 +183,9 @@ describe("Player state compatibility", () => {
         bankBalance: number;
         morale: number;
         position: string;
-        identity: unknown;
-        dna: { caps: { shooting: number; finishing: number } };
+        secondaryPosition: string;
+        identity: { height?: { feet: number; inches: number }; weightLbs?: number } | null;
+        dna: { potentialTier: string; caps: { shooting: number; finishing: number } };
         attributes: { shooting: number; finishing: number };
       };
       newsFeed: unknown[];
@@ -190,8 +195,12 @@ describe("Player state compatibility", () => {
     expect(migrated.player.bankBalance).toBe(777);
     expect(migrated.player.morale).toBe(64);
     expect(migrated.player.position).toBe("SF");
+    expect(migrated.player.secondaryPosition).toBe("PF");
     expect(migrated.player.identity).toBeTruthy();
+    expect(migrated.player.identity?.height).toBeTruthy();
+    expect(typeof migrated.player.identity?.weightLbs).toBe("number");
     expect(migrated.player.dna).toBeTruthy();
+    expect(["Bronze", "Silver", "Gold", "Platinum"]).toContain(migrated.player.dna.potentialTier);
     expect(migrated.player.dna.caps.shooting).toBeGreaterThanOrEqual(migrated.player.attributes.shooting);
     expect(migrated.player.dna.caps.finishing).toBeGreaterThanOrEqual(migrated.player.attributes.finishing);
     expect(Array.isArray(migrated.newsFeed)).toBe(true);

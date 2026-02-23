@@ -9,11 +9,16 @@ describe("Career Store Persistence", () => {
     useCareerStore.getState().initializeCareer({
       firstName: "Test",
       lastName: "Pro",
-      hometownSlug: "lewisville-tx",
+      stateCode: "TX",
+      citySlug: "houston-tx",
       archetype: "Slasher",
       ageStarted: 8,
       bodyFrame: "Athletic",
       dominantHand: "Right",
+      primaryPosition: "SF",
+      secondaryPosition: "SG",
+      height: { feet: 6, inches: 6 },
+      weightLbs: 210,
       generationSeed: 20260221,
     });
   });

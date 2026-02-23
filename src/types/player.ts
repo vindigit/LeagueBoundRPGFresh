@@ -140,6 +140,7 @@ export interface Player {
   bankBalance: number;
   morale: number;
   position: Position;
+  secondaryPosition: Position;
   archetype: PlayerArchetype;
   identity: PlayerIdentity | null;
   dna: PlayerDNA | null;
@@ -159,6 +160,7 @@ export type LegacyPlayerStateInput = Omit<Player, "bankBalance" | "morale" | "po
   bankBalance?: number;
   morale?: number;
   position?: Position;
+  secondaryPosition?: Position;
   BankBalance?: number;
   Morale?: number;
   Position?: Position;
@@ -173,6 +175,14 @@ export const normalizePlayerStateForInk = (player: LegacyPlayerStateInput): Play
     throw new Error("Player state normalization requires balance, morale, and position values.");
   }
 
+  const secondaryDefaults: Record<Position, Position> = {
+    PG: "SG",
+    SG: "PG",
+    SF: "PF",
+    PF: "C",
+    C: "PF",
+  };
+
   const { BankBalance: _legacyBalance, Morale: _legacyMorale, Position: _legacyPosition, ...rest } = player;
 
   return {
@@ -180,6 +190,7 @@ export const normalizePlayerStateForInk = (player: LegacyPlayerStateInput): Play
     bankBalance,
     morale,
     position,
+    secondaryPosition: player.secondaryPosition ?? secondaryDefaults[position],
     identity: player.identity ?? null,
     dna: player.dna ?? null,
   };

@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
+    "prestart:tunnel": "node scripts/repair-ngrok-bin.js",
+    "start:tunnel": "npm run prestart:tunnel && expo start --clear --tunnel",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",
+    "@expo/ngrok-bin-win32-x64": "^2.3.41",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.2.3",

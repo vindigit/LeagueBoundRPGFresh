@@ -49,6 +49,7 @@ describe("Terminal Match Simulation", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     useMatchStore.getState().initializeMatch("Terminal City", "Console United");
+    useMatchStore.getState().setSimulationMode("full_game");
   });
 
   afterEach(() => {
@@ -130,5 +131,21 @@ describe("Terminal Match Simulation", () => {
     });
 
     console.log("\nSimulation Complete");
+  });
+
+  it("does not schedule key moments in full_game mode", () => {
+    renderHook(() => useMatchLoop());
+    act(() => {
+      useMatchStore.getState().setSimulationMode("full_game");
+      useMatchStore.getState().startMatch();
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(30000);
+    });
+
+    const state = useMatchStore.getState();
+    expect(state.keyMomentPending).toBeUndefined();
+    expect(state.logs.some((log) => log.text.includes("Key Moment"))).toBe(false);
   });
 });

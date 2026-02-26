@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { KeyMomentPending, KeyMomentResolutionInput } from "../../../match/keyMoments/types";
 
 export interface PlayLog {
   id: string;
@@ -47,6 +48,7 @@ export interface MatchState {
   isPlaying: boolean;
   isPaused: boolean;
   gameFinished: boolean;
+  simulationMode: "interactive" | "full_game";
   homeScore: number;
   awayScore: number;
   quarter: 1 | 2 | 3 | 4;
@@ -55,6 +57,9 @@ export interface MatchState {
   simSpeed: number;
   timeRemaining: number;
   possession: "home" | "away";
+  keyMomentPending?: KeyMomentPending;
+  keyMomentResolutionInput?: KeyMomentResolutionInput;
+  keyMomentFeedback?: { id: string; success: boolean; text: string };
   logs: PlayLog[];
   matchBoxScore: MatchBoxScore;
 }
@@ -65,7 +70,13 @@ interface MatchActions {
   startMatch: () => void;
   pauseMatch: () => void;
   endMatch: () => void;
+  setSimulationMode: (mode: MatchState["simulationMode"]) => void;
   setSimSpeed: (speed: number) => void;
+  setKeyMomentPending: (pending: KeyMomentPending | undefined) => void;
+  resolveKeyMoment: (input: KeyMomentResolutionInput) => void;
+  clearKeyMomentResolution: () => void;
+  setKeyMomentFeedback: (feedback: MatchState["keyMomentFeedback"] | undefined) => void;
+  clearKeyMomentFeedback: () => void;
   updateGame: (
     partialState: Partial<Pick<MatchState, "homeScore" | "awayScore" | "quarter" | "isOvertime" | "overtimePeriod" | "timeRemaining" | "possession">>,
   ) => void;
@@ -178,6 +189,7 @@ const initialMatchState: MatchState = {
   isPlaying: false,
   isPaused: false,
   gameFinished: false,
+  simulationMode: "interactive",
   homeScore: 0,
   awayScore: 0,
   quarter: 1,
@@ -186,6 +198,9 @@ const initialMatchState: MatchState = {
   simSpeed: 1,
   timeRemaining: 720,
   possession: "home",
+  keyMomentPending: undefined,
+  keyMomentResolutionInput: undefined,
+  keyMomentFeedback: undefined,
   logs: [],
   matchBoxScore: createInitialBoxScore(),
 };
@@ -224,9 +239,39 @@ export const useMatchStore = create<MatchStore>((set) => ({
       gameFinished: true,
     }));
   },
+  setSimulationMode: (mode) => {
+    set(() => ({ simulationMode: mode }));
+  },
   setSimSpeed: (speed) => {
     const clampedSpeed = Math.min(4, Math.max(0.5, speed));
     set(() => ({ simSpeed: clampedSpeed }));
+  },
+  setKeyMomentPending: (pending) => {
+    set(() => ({
+      keyMomentPending: pending,
+      keyMomentResolutionInput: undefined,
+    }));
+  },
+  resolveKeyMoment: (input) => {
+    set((state) => {
+      if (!state.keyMomentPending || state.keyMomentPending.id !== input.pendingId || state.keyMomentResolutionInput) {
+        return {};
+      }
+      return {
+        keyMomentResolutionInput: input,
+        isPlaying: true,
+        isPaused: false,
+      };
+    });
+  },
+  clearKeyMomentResolution: () => {
+    set(() => ({ keyMomentResolutionInput: undefined }));
+  },
+  setKeyMomentFeedback: (feedback) => {
+    set(() => ({ keyMomentFeedback: feedback }));
+  },
+  clearKeyMomentFeedback: () => {
+    set(() => ({ keyMomentFeedback: undefined }));
   },
   updateGame: (partialState) => {
     set(() => ({ ...partialState }));

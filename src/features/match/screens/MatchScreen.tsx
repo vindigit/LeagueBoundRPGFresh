@@ -5,6 +5,7 @@ import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
 import { useMatchStore } from "../store/useMatchStore";
+import { KeyMomentOverlay } from "../components/KeyMomentOverlay";
 
 const AWAY_NAME = "Rivals High";
 
@@ -86,10 +87,14 @@ export function MatchScreen() {
   const logs = useMatchStore((state) => state.logs);
   const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
   const simSpeed = useMatchStore((state) => state.simSpeed);
+  const keyMomentPending = useMatchStore((state) => state.keyMomentPending);
+  const keyMomentFeedback = useMatchStore((state) => state.keyMomentFeedback);
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const setSimSpeed = useMatchStore((state) => state.setSimSpeed);
+  const resolveKeyMoment = useMatchStore((state) => state.resolveKeyMoment);
+  const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
   const completeMatch = useCareerStore((state) => state.completeMatch);
 
   useEffect(() => {
@@ -111,6 +116,18 @@ export function MatchScreen() {
     }
     completeMatch({ homeScore, awayScore, overtimePeriods: overtimePeriod, boxScore: matchBoxScore });
   }, [awayScore, completeMatch, gameFinished, homeScore, matchBoxScore, overtimePeriod]);
+
+  useEffect(() => {
+    if (!keyMomentFeedback) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      clearKeyMomentFeedback();
+    }, 1200);
+
+    return () => clearTimeout(timeoutId);
+  }, [clearKeyMomentFeedback, keyMomentFeedback]);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
@@ -185,6 +202,15 @@ export function MatchScreen() {
             </View>
           )}
         </View>
+        {keyMomentPending || keyMomentFeedback ? (
+          <KeyMomentOverlay
+            pending={keyMomentPending}
+            feedback={keyMomentFeedback ? { success: keyMomentFeedback.success, text: keyMomentFeedback.text } : undefined}
+            onResolve={(input) => {
+              resolveKeyMoment(input);
+            }}
+          />
+        ) : null}
     </SafeAreaView>
   );
 }

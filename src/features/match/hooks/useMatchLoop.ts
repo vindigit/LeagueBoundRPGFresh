@@ -3,6 +3,11 @@ import { LeagueLevel } from "../../../types/career";
 import type { Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
 import type { Team } from "../../../types/team";
 import { createSeededRng, initializePossession, simulatePossession, type MatchContext, type PossessionResult, type PossessionState } from "../../../matchEngine";
+import { composeKeyMomentLogText } from "../../../match/keyMoments/logComposer";
+import { resolveKeyMoment } from "../../../match/keyMoments/resolveKeyMoment";
+import { createKeyMomentScheduler } from "../../../match/keyMoments/scheduler";
+import type { KeyMomentContext, KeyMomentPending, PeriodKey } from "../../../match/keyMoments/types";
+import { renderPossessionPlayByPlayLine } from "../../../match/playByPlay/renderer";
 import { useCareerStore } from "../../../store/useCareerStore";
 import { useMatchStore } from "../store/useMatchStore";
 
@@ -73,6 +78,9 @@ const getHomeNameForPosition = (position: Position): string => `Home ${position}
 const buildHomeBoxNames = (userDisplayName: string, userPosition: Position): string[] =>
   POSITIONS.map((position) => (position === userPosition ? userDisplayName : getHomeNameForPosition(position)));
 
+const getPeriodKey = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePeriod: number): PeriodKey =>
+  isOvertime ? `OT${Math.max(1, overtimePeriod)}` : (`Q${quarter}` as PeriodKey);
+
 const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: Partial<Record<keyof PlayerAttributes, number>> }> = {
   PG: { archetype: "Playmaker", delta: { vision: 7, handle: 6, defense: -3 } },
   SG: { archetype: "Sharpshooter", delta: { shooting: 8, finishing: -6, vision: -4, defense: -2 } },
@@ -94,7 +102,7 @@ const buildMatchContext = (
 
     const profile = teammateProfileByPosition[position];
     return makePlayer(`h${index + 1}`, getHomeNameForPosition(position), profile.archetype, position, withDelta(userAttributes, profile.delta));
-  });
+  }) as Team["roster"];
 
   const home: Team = {
     name: "Home",
@@ -129,53 +137,29 @@ const buildMatchContext = (
   return { home, away };
 };
 
-const getLogFromEvent = (
-  result: PossessionResult,
-  offense: "home" | "away",
-): { text: string; type: "score" | "miss" | "turnover" | "info" } => {
-  const side = offense.toUpperCase();
-  const zone = result.shotZone ? ` (${result.shotZone})` : "";
-
-  switch (result.eventType) {
-    case "made_3":
-      return { text: `${side} made a 3PT${zone}`, type: "score" };
-    case "made_2":
-      return { text: `${side} made a 2PT${zone}`, type: "score" };
-    case "putback_make":
-      return { text: `${side} converted a putback`, type: "score" };
-    case "steal":
-      return { text: `${side} turnover forced by steal`, type: "turnover" };
-    case "turnover":
-      return { text: `${side} committed a turnover`, type: "turnover" };
-    case "block":
-      return { text: `${side} shot was blocked${zone}`, type: "miss" };
-    case "off_reb":
-      return { text: `${side} grabbed an offensive rebound`, type: "info" };
-    case "def_reb":
-      return { text: `${side} possession ended on defensive rebound`, type: "miss" };
-    case "putback_miss":
-      return { text: `${side} missed putback`, type: "miss" };
-    default:
-      return { text: `${side} missed${zone}`, type: "miss" };
-  }
-};
-
 export const useMatchLoop = (): void => {
   const possessionProgressRef = useRef<number>(0);
   const contextRef = useRef<MatchContext | null>(null);
   const possessionStateRef = useRef<PossessionState | null>(null);
   const rngRef = useRef<() => number>(createSeededRng(Date.now()));
+  const keyMomentSchedulerRef = useRef(createKeyMomentScheduler());
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const isPaused = useMatchStore((state) => state.isPaused);
   const gameFinished = useMatchStore((state) => state.gameFinished);
+  const simulationMode = useMatchStore((state) => state.simulationMode);
   const simSpeed = useMatchStore((state) => state.simSpeed);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
+  const startMatch = useMatchStore((state) => state.startMatch);
   const endMatch = useMatchStore((state) => state.endMatch);
   const initializeBoxScore = useMatchStore((state) => state.initializeBoxScore);
   const recordBoxScoreEvent = useMatchStore((state) => state.recordBoxScoreEvent);
   const updateGame = useMatchStore((state) => state.updateGame);
   const addLog = useMatchStore((state) => state.addLog);
+  const setKeyMomentPending = useMatchStore((state) => state.setKeyMomentPending);
+  const clearKeyMomentResolution = useMatchStore((state) => state.clearKeyMomentResolution);
+  const setKeyMomentFeedback = useMatchStore((state) => state.setKeyMomentFeedback);
+  const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
 
   const playerName = useCareerStore((state) => state.player.name);
   const playerArchetype = useCareerStore((state) => state.player.archetype);
@@ -193,13 +177,17 @@ export const useMatchLoop = (): void => {
       possessionStateRef.current = null;
       possessionProgressRef.current = 0;
       rngRef.current = createSeededRng(Date.now());
+      keyMomentSchedulerRef.current.reset();
+      setKeyMomentPending(undefined);
+      clearKeyMomentResolution();
+      clearKeyMomentFeedback();
 
       const { matchBoxScore } = useMatchStore.getState();
       if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
         initializeBoxScore(homeBoxNames, [...AWAY_ROSTER_NAMES]);
       }
     }
-  }, [gameFinished, homeBoxNames, initializeBoxScore, isPaused, isPlaying]);
+  }, [clearKeyMomentFeedback, clearKeyMomentResolution, gameFinished, homeBoxNames, initializeBoxScore, isPaused, isPlaying, setKeyMomentPending]);
 
   useEffect(() => {
     if (!isPlaying || isPaused || gameFinished) {
@@ -216,8 +204,160 @@ export const useMatchLoop = (): void => {
     }
 
     const intervalId = setInterval(() => {
-      const { timeRemaining, quarter, isOvertime, overtimePeriod, possession, homeScore, awayScore } = useMatchStore.getState();
+      const {
+        timeRemaining,
+        quarter,
+        isOvertime,
+        overtimePeriod,
+        possession,
+        homeScore,
+        awayScore,
+        keyMomentPending,
+        keyMomentResolutionInput,
+      } = useMatchStore.getState();
       const nextTimeRemaining = Math.max(0, timeRemaining - GAME_SECONDS_PER_TICK);
+
+      const applyPossessionResult = (
+        result: PossessionResult,
+        possessionState: PossessionState,
+        forceUserAction = false,
+        keyMomentLogMeta?: { success: boolean; promptText: string },
+      ): void => {
+        possessionStateRef.current = {
+          ...result.nextState,
+          secondsRemaining: nextTimeRemaining,
+        };
+
+        const offenseTeam = possession;
+        const defenseTeam = possession === "home" ? "away" : "home";
+        const shotAttempted =
+          !result.turnoverLikeFailure &&
+          (result.eventType === "made_2" ||
+            result.eventType === "made_3" ||
+            result.eventType === "miss" ||
+            result.eventType === "block" ||
+            result.eventType === "putback_make" ||
+            (result.eventType === "def_reb" && result.putbackAttempted));
+        const shotMade = result.eventType === "made_2" || result.eventType === "made_3" || result.eventType === "putback_make";
+        const points = result.points ?? 0;
+        const turnoverTeam = result.eventType === "turnover" || result.eventType === "steal" ? offenseTeam : undefined;
+        const turnoverPlayerIndex = turnoverTeam ? possessionState.ballHandlerIndex : undefined;
+        const defenderTeam = result.eventType === "steal" || result.eventType === "block" ? defenseTeam : undefined;
+        const stealDefenderIndex = result.eventType === "steal" ? result.defensivePlay.defenderIndex : undefined;
+        const blockDefenderIndex = result.eventType === "block" ? result.defensivePlay.defenderIndex : undefined;
+        const reboundTeam = result.offensiveRebound ? offenseTeam : result.eventType === "def_reb" ? defenseTeam : undefined;
+        const { matchBoxScore } = useMatchStore.getState();
+        if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
+          initializeBoxScore(homeBoxNames, [...AWAY_ROSTER_NAMES]);
+        }
+
+        recordBoxScoreEvent({
+          scoringTeam: shotAttempted ? offenseTeam : undefined,
+          shooterIndex: shotAttempted ? result.shooterIndex : undefined,
+          points,
+          shotAttempted,
+          shotMade,
+          assisterIndex: shotMade ? result.assisterIndex : undefined,
+          turnoverTeam,
+          turnoverPlayerIndex,
+          defenderTeam,
+          stealDefenderIndex,
+          blockDefenderIndex,
+          reboundTeam,
+          rebounderIndex: reboundTeam ? result.rebounderIndex : undefined,
+        });
+
+        updateGame({
+          timeRemaining: nextTimeRemaining,
+          homeScore: result.nextState.score.home,
+          awayScore: result.nextState.score.away,
+          possession: result.nextState.offenseKey,
+        });
+
+        const mappedLog = renderPossessionPlayByPlayLine({
+          result,
+          context: contextRef.current!,
+          offense: possession,
+          defense: possession === "home" ? "away" : "home",
+          ballHandlerIndex: possessionState.ballHandlerIndex,
+        });
+        const wasUserBallHandler = possessionState.ballHandlerIndex === userPlayerIndex;
+        const isUserOffenseAction =
+          possession === "home" &&
+          (result.shooterIndex === userPlayerIndex ||
+            result.assisterIndex === userPlayerIndex ||
+            (result.turnoverLikeFailure && wasUserBallHandler));
+        const isUserDefenseAction =
+          possession === "away" &&
+          (result.eventType === "steal" || result.eventType === "block") &&
+          result.defensivePlay.defenderIndex === userPlayerIndex;
+        const isUserAction = forceUserAction || isUserOffenseAction || isUserDefenseAction;
+        const text = keyMomentLogMeta
+          ? composeKeyMomentLogText(keyMomentLogMeta.success, keyMomentLogMeta.promptText, mappedLog.text)
+          : mappedLog.text;
+
+        addLog({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          quarter,
+          overtimePeriod: isOvertime ? overtimePeriod : undefined,
+          isUserAction,
+          timeRemaining: nextTimeRemaining,
+          text,
+          type: mappedLog.type,
+          team: possession,
+        });
+      };
+
+      if (
+        contextRef.current &&
+        possessionStateRef.current &&
+        keyMomentPending &&
+        keyMomentResolutionInput &&
+        keyMomentResolutionInput.pendingId === keyMomentPending.id
+      ) {
+        const resolution = resolveKeyMoment({
+          pending: keyMomentPending,
+          input: keyMomentResolutionInput,
+          context: contextRef.current,
+          possessionState: {
+            offenseKey: possession,
+            defenseKey: possession === "home" ? "away" : "home",
+            secondsRemaining: nextTimeRemaining,
+            possessionIndex: possessionStateRef.current.possessionIndex,
+            score: { home: homeScore, away: awayScore },
+          },
+        });
+
+        applyPossessionResult(
+          resolution.result,
+          {
+            ...possessionStateRef.current,
+            offenseKey: possession,
+            defenseKey: possession === "home" ? "away" : "home",
+            score: { home: homeScore, away: awayScore },
+            secondsRemaining: nextTimeRemaining,
+          },
+          true,
+          {
+            success: resolution.success,
+            promptText: keyMomentPending.promptText,
+          },
+        );
+        setKeyMomentFeedback({
+          id: keyMomentPending.id,
+          success: resolution.success,
+          text: resolution.resultSummaryText,
+        });
+        setKeyMomentPending(undefined);
+        clearKeyMomentResolution();
+        startMatch();
+        return;
+      }
+
+      if (keyMomentPending && !keyMomentResolutionInput) {
+        pauseMatch();
+        return;
+      }
 
       if (nextTimeRemaining === 0) {
         pauseMatch();
@@ -336,82 +476,45 @@ export const useMatchLoop = (): void => {
         score: { home: homeScore, away: awayScore },
         secondsRemaining: nextTimeRemaining,
       };
-      const wasUserBallHandler = possessionState.ballHandlerIndex === userPlayerIndex;
+      const periodKey = getPeriodKey(quarter, isOvertime, overtimePeriod);
 
-      const result = simulatePossession(contextRef.current, possessionState, LeagueLevel.PRO, rngRef.current);
-      possessionStateRef.current = {
-        ...result.nextState,
-        secondsRemaining: nextTimeRemaining,
-      };
+      if (simulationMode === "interactive" && !keyMomentPending && contextRef.current) {
+        const keyMomentContext: KeyMomentContext = {
+          id: `km-${periodKey}-${possessionState.possessionIndex}`,
+          periodKey,
+          quarter,
+          overtimePeriod: isOvertime ? overtimePeriod : undefined,
+          timeRemaining: nextTimeRemaining,
+          offense: possession,
+          defense: possession === "home" ? "away" : "home",
+          userTeam: "home",
+          userPlayerIndex,
+          possessionIndex: possessionState.possessionIndex,
+          score: { home: homeScore, away: awayScore },
+        };
 
-      const offenseTeam = possession;
-      const defenseTeam = possession === "home" ? "away" : "home";
-      const shotAttempted =
-        !result.turnoverLikeFailure &&
-        (result.eventType === "made_2" ||
-          result.eventType === "made_3" ||
-          result.eventType === "miss" ||
-          result.eventType === "block" ||
-          result.eventType === "putback_make" ||
-          (result.eventType === "def_reb" && result.putbackAttempted));
-      const shotMade = result.eventType === "made_2" || result.eventType === "made_3" || result.eventType === "putback_make";
-      const points = result.points ?? 0;
-      const turnoverTeam = result.eventType === "turnover" || result.eventType === "steal" ? offenseTeam : undefined;
-      const turnoverPlayerIndex = turnoverTeam ? possessionState.ballHandlerIndex : undefined;
-      const defenderTeam = result.eventType === "steal" || result.eventType === "block" ? defenseTeam : undefined;
-      const stealDefenderIndex = result.eventType === "steal" ? result.defensivePlay.defenderIndex : undefined;
-      const blockDefenderIndex = result.eventType === "block" ? result.defensivePlay.defenderIndex : undefined;
-      const reboundTeam = result.offensiveRebound ? offenseTeam : result.eventType === "def_reb" ? defenseTeam : undefined;
-      const { matchBoxScore } = useMatchStore.getState();
-      if (matchBoxScore.homePlayers.length === 0 || matchBoxScore.awayPlayers.length === 0) {
-        initializeBoxScore(homeBoxNames, [...AWAY_ROSTER_NAMES]);
+        const schedulerResult = keyMomentSchedulerRef.current.onPossessionBoundary({
+          context: keyMomentContext,
+          periodTotalSeconds: isOvertime ? OVERTIME_SECONDS : 720,
+        });
+
+        if (schedulerResult.trigger && schedulerResult.pending) {
+          const pending: KeyMomentPending = {
+            ...schedulerResult.pending,
+            context: {
+              ...schedulerResult.pending.context,
+              offense: possession,
+              defense: possession === "home" ? "away" : "home",
+            },
+          };
+          setKeyMomentPending(pending);
+          pauseMatch();
+          return;
+        }
       }
 
-      recordBoxScoreEvent({
-        scoringTeam: shotAttempted ? offenseTeam : undefined,
-        shooterIndex: shotAttempted ? result.shooterIndex : undefined,
-        points,
-        shotAttempted,
-        shotMade,
-        assisterIndex: shotMade ? result.assisterIndex : undefined,
-        turnoverTeam,
-        turnoverPlayerIndex,
-        defenderTeam,
-        stealDefenderIndex,
-        blockDefenderIndex,
-        reboundTeam,
-        rebounderIndex: reboundTeam ? result.rebounderIndex : undefined,
-      });
-
-      updateGame({
-        timeRemaining: nextTimeRemaining,
-        homeScore: result.nextState.score.home,
-        awayScore: result.nextState.score.away,
-        possession: result.nextState.offenseKey,
-      });
-
-      const mappedLog = getLogFromEvent(result, possession);
-      const isUserOffenseAction =
-        possession === "home" &&
-        (result.shooterIndex === userPlayerIndex ||
-          result.assisterIndex === userPlayerIndex ||
-          (result.turnoverLikeFailure && wasUserBallHandler));
-      const isUserDefenseAction =
-        possession === "away" &&
-        (result.eventType === "steal" || result.eventType === "block") &&
-        result.defensivePlay.defenderIndex === userPlayerIndex;
-      const isUserAction = isUserOffenseAction || isUserDefenseAction;
-
-      addLog({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        quarter,
-        overtimePeriod: isOvertime ? overtimePeriod : undefined,
-        isUserAction,
-        timeRemaining: nextTimeRemaining,
-        text: mappedLog.text,
-        type: mappedLog.type,
-        team: possession,
-      });
+      const result = simulatePossession(contextRef.current, possessionState, LeagueLevel.PRO, rngRef.current);
+      applyPossessionResult(result, possessionState);
     }, (REAL_SECONDS_PER_TICK * 1000) / simSpeed);
 
     return () => {
@@ -419,6 +522,8 @@ export const useMatchLoop = (): void => {
     };
   }, [
     addLog,
+    clearKeyMomentFeedback,
+    clearKeyMomentResolution,
     endMatch,
     gameFinished,
     homeBoxNames,
@@ -426,12 +531,16 @@ export const useMatchLoop = (): void => {
     isPaused,
     isPlaying,
     pauseMatch,
+    setKeyMomentPending,
+    setKeyMomentFeedback,
     playerArchetype,
     playerAttributes,
     playerName,
     playerPosition,
     recordBoxScoreEvent,
+    simulationMode,
     simSpeed,
+    startMatch,
     updateGame,
     userPlayerIndex,
   ]);

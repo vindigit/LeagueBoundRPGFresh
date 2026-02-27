@@ -3,6 +3,7 @@ import type { Team } from "./types/team";
 import { LEAGUE_MODIFIERS } from "./constants/leagueScaling";
 import { LeagueLevel } from "./types/career";
 import tuning from "./matchEngineTuning.js";
+import { validateMatchEngineTuning } from "./matchEngineTuningValidation";
 
 export type PossessionAction = "pass" | "shoot" | "dribble";
 export type ShotZone = "three" | "midrange" | "rim";
@@ -84,6 +85,8 @@ export interface MatchContext {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+validateMatchEngineTuning(tuning as Record<string, unknown>);
+
 const average = (values: number[]): number =>
   values.reduce((sum, value) => sum + value, 0) / values.length;
 
@@ -116,19 +119,23 @@ const getTeam = (context: MatchContext, key: "home" | "away"): Team =>
 const getPlayerByIndex = (team: Team, index: number): Player => team.roster[clamp(index, 0, 4) as 0 | 1 | 2 | 3 | 4];
 
 const getElapsedByEvent = (eventType: PossessionEventType, rng: () => number): number => {
+  let elapsedSeconds: number;
   if (eventType === "turnover" || eventType === "steal") {
-    return Math.floor(
+    elapsedSeconds = Math.floor(
       tuning.turnoverEventSecondsMin +
         rng() * (tuning.turnoverEventSecondsMax - tuning.turnoverEventSecondsMin + 1),
     );
+    return Math.max(1, elapsedSeconds);
   }
   if (eventType === "off_reb" || eventType === "putback_make" || eventType === "putback_miss") {
-    return Math.floor(
+    elapsedSeconds = Math.floor(
       tuning.offensiveReboundEventSecondsMin +
         rng() * (tuning.offensiveReboundEventSecondsMax - tuning.offensiveReboundEventSecondsMin + 1),
     );
+    return Math.max(1, elapsedSeconds);
   }
-  return Math.floor(tuning.minEventSeconds + rng() * (tuning.maxEventSeconds - tuning.minEventSeconds + 1));
+  elapsedSeconds = Math.floor(tuning.minEventSeconds + rng() * (tuning.maxEventSeconds - tuning.minEventSeconds + 1));
+  return Math.max(1, elapsedSeconds);
 };
 
 const addPoints = (score: MatchScore, offenseKey: "home" | "away", points: 2 | 3): MatchScore =>

@@ -35,6 +35,7 @@ module.exports = {
     shoot: { three: 0.35, midrange: 0.35, rim: 0.3 },
     dribble: { three: 0.13, midrange: 0.28, rim: 0.59 },
   },
+  lowShootingThreeSuppressionThreshold: 40,
   shotZoneSkillWeight: 0.12,
   shotZoneBbiqWeight: 0.1,
   shotZoneFatigueWeight: 0.08,

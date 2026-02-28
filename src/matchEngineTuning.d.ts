@@ -25,6 +25,7 @@ declare const tuning: {
   assistMin: number;
   assistMax: number;
   shotZoneByAction: Record<"pass" | "shoot" | "dribble", { three: number; midrange: number; rim: number }>;
+  lowShootingThreeSuppressionThreshold: number;
   shotZoneSkillWeight: number;
   shotZoneBbiqWeight: number;
   shotZoneFatigueWeight: number;

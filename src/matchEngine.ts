@@ -321,28 +321,30 @@ const pickShotZone = (
   rng: () => number,
 ): ShotZone => {
   const base = tuning.shotZoneByAction[action];
+  const suppressThree = shooterImpact.shooting < tuning.lowShootingThreeSuppressionThreshold;
   const shootingTilt = (shooterImpact.shooting - 50) * tuning.shotZoneSkillWeight;
   const finishingTilt = (shooterImpact.finishing - 50) * tuning.shotZoneSkillWeight;
   const bbiqTilt = (shooterImpact.bbiq - 50) * tuning.shotZoneBbiqWeight;
   const fatigueTilt = (shooterImpact.fatigueMultiplier - 1) * 100 * tuning.shotZoneFatigueWeight;
+  const entries: Array<{ key: ShotZone; weight: number }> = [
+    {
+      key: "midrange",
+      weight: base.midrange + bbiqTilt * 0.3 - Math.abs(shootingTilt - finishingTilt) * 0.25,
+    },
+    {
+      key: "rim",
+      weight: base.rim + finishingTilt + bbiqTilt * 0.8 - fatigueTilt * 0.2,
+    },
+  ];
 
-  return weightedPick(
-    [
-      {
-        key: "three",
-        weight: base.three + shootingTilt + bbiqTilt + fatigueTilt,
-      },
-      {
-        key: "midrange",
-        weight: base.midrange + bbiqTilt * 0.3 - Math.abs(shootingTilt - finishingTilt) * 0.25,
-      },
-      {
-        key: "rim",
-        weight: base.rim + finishingTilt + bbiqTilt * 0.8 - fatigueTilt * 0.2,
-      },
-    ],
-    rng,
-  );
+  if (!suppressThree) {
+    entries.unshift({
+      key: "three",
+      weight: base.three + shootingTilt + bbiqTilt + fatigueTilt,
+    });
+  }
+
+  return weightedPick(entries, rng);
 };
 
 const getTurnoverProbability = (

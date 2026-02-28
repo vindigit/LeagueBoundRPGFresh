@@ -25,7 +25,7 @@ module.exports = {
   stealBase: 0.25,
   stealDivisor: 250,
   stealMin: 0.08,
-  stealMax: 0.65,
+  stealMax: 0.38,
   assistBase: 0.38,
   assistDivisor: 260,
   assistMin: 0.18,

@@ -113,7 +113,7 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
 
 const asRating = (value: number): PlayerAttributes["shooting"] => clamp(Math.round(value), 0, 99) as PlayerAttributes["shooting"];
 
-const asCap = (value: number): PlayerAttributes["shooting"] => clamp(Math.round(value), 60, 99) as PlayerAttributes["shooting"];
+const asCap = (value: number): PlayerAttributes["shooting"] => clamp(Math.round(value), 40, 99) as PlayerAttributes["shooting"];
 
 const getAgeStartedBand = (ageStarted: number): PlayerIdentity["ageStartedBand"] => {
   if (ageStarted <= 6) {
@@ -407,6 +407,7 @@ export const generateBackstoryFromInput = (
     generationSeed,
     growthByLeague: GROWTH_BY_CURVE[growthCurve],
     caps,
+    growthResidue: {},
     publicTraits: [
       `Potential Tier: ${potentialTier}`,
       getCurveLabel(growthCurve),

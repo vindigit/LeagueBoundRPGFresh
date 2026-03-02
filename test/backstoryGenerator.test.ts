@@ -24,6 +24,8 @@ describe("Backstory generator", () => {
     expect(first.dna.potentialTier).toBe(second.dna.potentialTier);
     expect(first.dna.growthCurve).toBe(second.dna.growthCurve);
     expect(first.dna.caps).toEqual(second.dna.caps);
+    expect(first.dna.growthResidue).toEqual({});
+    expect(second.dna.growthResidue).toEqual({});
     expect(first.dna.publicTraits).toEqual(second.dna.publicTraits);
     expect(first.startingAttributes).toEqual(second.startingAttributes);
   });
@@ -59,6 +61,24 @@ describe("Backstory generator", () => {
     const keys = Object.keys(generated.startingAttributes) as Array<keyof typeof generated.startingAttributes>;
     for (const key of keys) {
       expect(generated.startingAttributes[key]).toBeLessThanOrEqual(generated.dna.caps[key]);
+    }
+  });
+
+  it("caps respect a minimum floor of 40 and maximum of 99", () => {
+    const generated = generateBackstoryFromInput(
+      {
+        ...baseInput,
+        archetype: "Playmaker",
+        ageStarted: 12,
+        bodyFrame: "Lean",
+      },
+      { seedOverride: 20260312 },
+    );
+
+    const capKeys = Object.keys(generated.dna.caps) as Array<keyof typeof generated.dna.caps>;
+    for (const key of capKeys) {
+      expect(generated.dna.caps[key]).toBeGreaterThanOrEqual(40);
+      expect(generated.dna.caps[key]).toBeLessThanOrEqual(99);
     }
   });
 

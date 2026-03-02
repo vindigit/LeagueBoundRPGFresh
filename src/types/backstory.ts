@@ -57,6 +57,7 @@ export interface PlayerDNA {
   generationSeed: number;
   growthByLeague: Record<LeagueLevel, number>;
   caps: PlayerAttributes;
+  growthResidue: Partial<Record<keyof PlayerAttributes, number>>;
   publicTraits: string[];
 }
 

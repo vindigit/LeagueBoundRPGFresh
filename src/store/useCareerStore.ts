@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { ATTRIBUTE_SOURCE_MULTIPLIERS } from "../features/backstory/constants/attributeGrowthSources";
 import { heightFromPresetMidpoint, weightFromPresetMidpoint } from "../features/backstory/constants/bodyMapping";
 import { BACKSTORY_V1_ENABLED } from "../features/backstory/constants/flags";
 import { getPotentialTier } from "../features/backstory/constants/potentialTier";
+import { calculateAttributeGain } from "../features/backstory/progression/calculateAttributeGain";
 import { findCityByLegacySlug, getDefaultCityForState, getDefaultStateCode, resolveHometown } from "../features/backstory/data/hometowns";
 import {
   createBackstorySeed,
@@ -156,30 +156,32 @@ const migratePlayerWithBackstory = (player: Player): Player => {
     const backstoryInput = synthesizeBackstoryInputFromLegacy(migratedPlayer as LegacyPlayerStateInput);
     const seed = createBackstorySeed(backstoryInput);
     const generated = generateBackstoryFromInput(backstoryInput, { seedOverride: seed });
-    migratedPlayer = {
-      ...migratedPlayer,
-      name: generated.identity.displayName,
-      archetype: generated.identity.archetype,
-      identity: generated.identity,
-      dna: {
-        ...generated.dna,
-        caps: enforceCapsAtLeastCurrent(generated.dna.caps, migratedPlayer.attributes),
-      },
-    };
-  } else {
-    migratedPlayer = {
-      ...migratedPlayer,
+      migratedPlayer = {
+        ...migratedPlayer,
+        name: generated.identity.displayName,
+        archetype: generated.identity.archetype,
+        identity: generated.identity,
+        dna: {
+          ...generated.dna,
+          caps: enforceCapsAtLeastCurrent(generated.dna.caps, migratedPlayer.attributes),
+          growthResidue: generated.dna.growthResidue ?? {},
+        },
+      };
+    } else {
+      migratedPlayer = {
+        ...migratedPlayer,
       secondaryPosition:
         migratedPlayer.secondaryPosition ??
         migratedPlayer.identity?.secondaryPosition ??
         getDefaultSecondaryPosition(migratedPlayer.position),
-      dna: {
-        ...migratedPlayer.dna,
-        potentialTier: migratedPlayer.dna.potentialTier ?? getPotentialTier(migratedPlayer.dna.potential),
-        caps: enforceCapsAtLeastCurrent(migratedPlayer.dna.caps, migratedPlayer.attributes),
-      },
-    };
-  }
+        dna: {
+          ...migratedPlayer.dna,
+          potentialTier: migratedPlayer.dna.potentialTier ?? getPotentialTier(migratedPlayer.dna.potential),
+          caps: enforceCapsAtLeastCurrent(migratedPlayer.dna.caps, migratedPlayer.attributes),
+          growthResidue: migratedPlayer.dna.growthResidue ?? {},
+        },
+      };
+    }
   return migratedPlayer;
 };
 
@@ -213,12 +215,32 @@ export const useCareerStore = create<CareerStore>()(
       applyAttributeGain: (attr, amount, source = "SYSTEM") => {
         set((state) => {
           const currentValue = state.player.attributes[attr];
-          const growthByLeague = state.player.dna?.growthByLeague[state.leagueLevel] ?? 1;
-          const sourceMultiplier = ATTRIBUTE_SOURCE_MULTIPLIERS[source];
           const cap = state.player.dna?.caps[attr] ?? 99;
-          const effectiveDelta = amount > 0 ? Math.round(amount * sourceMultiplier * growthByLeague) : amount;
-          const nextValue = clampAttribute(currentValue + effectiveDelta);
-          const cappedValue = Math.min(nextValue, cap) as PlayerAttributes[typeof attr];
+          const growthByLeague = state.player.dna?.growthByLeague ?? {
+            [LeagueLevel.MIDDLE_SCHOOL]: 1,
+            [LeagueLevel.HIGH_SCHOOL]: 1,
+            [LeagueLevel.COLLEGE]: 1,
+            [LeagueLevel.PRO]: 1,
+          };
+          const residue = state.player.dna?.growthResidue?.[attr] ?? 0;
+          const result = calculateAttributeGain({
+            attribute: attr,
+            amount,
+            currentValue,
+            cap,
+            source,
+            leagueLevel: state.leagueLevel,
+            growthByLeague,
+            archetype: state.player.archetype,
+            residue,
+          });
+          const cappedValue = clampAttribute(result.nextValue) as PlayerAttributes[typeof attr];
+          const nextGrowthResidue = state.player.dna
+            ? {
+                ...state.player.dna.growthResidue,
+                [attr]: result.nextResidue,
+              }
+            : undefined;
 
           return {
             player: {
@@ -227,6 +249,12 @@ export const useCareerStore = create<CareerStore>()(
                 ...state.player.attributes,
                 [attr]: cappedValue,
               },
+              dna: state.player.dna
+                ? {
+                    ...state.player.dna,
+                    growthResidue: nextGrowthResidue ?? state.player.dna.growthResidue,
+                  }
+                : null,
             },
           };
         });
@@ -335,7 +363,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {

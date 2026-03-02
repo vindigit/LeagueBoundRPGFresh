@@ -69,7 +69,8 @@ describe("Career growth and cap enforcement", () => {
     }));
 
     useCareerStore.getState().applyAttributeGain("shooting", 10, "TRAINING");
-    expect(useCareerStore.getState().player.attributes.shooting).toBe(24);
+    expect(useCareerStore.getState().player.attributes.shooting).toBe(23);
+    expect(useCareerStore.getState().player.dna?.growthResidue.shooting).toBeCloseTo(0.248);
 
     useCareerStore.setState((current) => ({
       leagueLevel: LeagueLevel.PRO,
@@ -84,6 +85,50 @@ describe("Career growth and cap enforcement", () => {
 
     useCareerStore.getState().applyAttributeGain("shooting", 10, "TRAINING");
     expect(useCareerStore.getState().player.attributes.shooting).toBe(19);
+  });
+
+  it("accumulates fractional residue across positive gains deterministically", () => {
+    useCareerStore.setState((current) => ({
+      leagueLevel: LeagueLevel.MIDDLE_SCHOOL,
+      player: {
+        ...current.player,
+        attributes: {
+          ...current.player.attributes,
+          vision: 10,
+        },
+        dna: current.player.dna
+          ? {
+              ...current.player.dna,
+              growthByLeague: {
+                [LeagueLevel.MIDDLE_SCHOOL]: 1.0,
+                [LeagueLevel.HIGH_SCHOOL]: 1.0,
+                [LeagueLevel.COLLEGE]: 1.0,
+                [LeagueLevel.PRO]: 1.0,
+              },
+              caps: {
+                ...current.player.dna.caps,
+                vision: 99,
+              },
+              growthResidue: {
+                ...current.player.dna.growthResidue,
+                vision: 0,
+              },
+            }
+          : null,
+      },
+    }));
+
+    useCareerStore.getState().applyAttributeGain("vision", 1, "TRAINING");
+    expect(useCareerStore.getState().player.attributes.vision).toBe(11);
+    expect(useCareerStore.getState().player.dna?.growthResidue.vision).toBeCloseTo(0.612);
+
+    useCareerStore.getState().applyAttributeGain("vision", 1, "TRAINING");
+    expect(useCareerStore.getState().player.attributes.vision).toBe(13);
+    expect(useCareerStore.getState().player.dna?.growthResidue.vision).toBeCloseTo(0.224);
+
+    useCareerStore.getState().applyAttributeGain("vision", 1, "TRAINING");
+    expect(useCareerStore.getState().player.attributes.vision).toBe(14);
+    expect(useCareerStore.getState().player.dna?.growthResidue.vision).toBeCloseTo(0.836);
   });
 
   it("does not scale negative deltas", () => {

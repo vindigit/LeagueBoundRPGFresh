@@ -4,8 +4,8 @@ module.exports = function (api) {
 
   return {
     presets: isTest
-      ? ["babel-preset-expo"]
-      : ["babel-preset-expo", "nativewind/babel"],
+      ? [["babel-preset-expo", { unstable_transformImportMeta: true }]]
+      : [["babel-preset-expo", { unstable_transformImportMeta: true }], "nativewind/babel"],
     plugins: [],
   };
 };

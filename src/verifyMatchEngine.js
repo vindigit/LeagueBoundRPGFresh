@@ -335,9 +335,9 @@ const runHomeCourtCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessio
     );
   }
 
-  if (homeWinRate < 52 || homeWinRate > 55) {
+  if (homeWinRate < 51 || homeWinRate > 52.5) {
     console.log(
-      "Tuning reminder: target subtle home edge is ~52-55% home win rate for evenly matched teams (2-5% bump).",
+      "Tuning reminder: target near-neutral home edge is ~51.0-52.5% home win rate for evenly matched teams.",
     );
   }
 };

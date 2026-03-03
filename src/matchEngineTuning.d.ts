@@ -9,6 +9,10 @@ declare const tuning: {
     "Slasher" | "Sharpshooter" | "Playmaker" | "Lockdown Defender" | "Paint Beast" | "Stretch Big",
     { pass: number; shoot: number; dribble: number }
   >;
+  ballHandlerArchetypeMultipliers: Record<
+    "Slasher" | "Sharpshooter" | "Playmaker" | "Lockdown Defender" | "Paint Beast" | "Stretch Big",
+    number
+  >;
   baseActionWeights: { pass: number; shoot: number; dribble: number };
   highPressureAdjustments: { pass: number; shoot: number; dribble: number };
   lowPressureAdjustments: { pass: number; shoot: number; dribble: number };

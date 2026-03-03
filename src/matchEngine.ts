@@ -318,9 +318,11 @@ const pickBallHandlerIndex = (
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, state, leagueLevel);
+    const baseWeight = impact.handle * 0.45 + impact.bbiq * 0.35 + impact.vision * 0.2;
+    const archetypePenalty = tuning.ballHandlerArchetypeMultipliers[player.archetype] ?? 1;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.handle * 0.45 + impact.bbiq * 0.35 + impact.vision * 0.2,
+      weight: baseWeight * archetypePenalty,
     };
   });
   return weightedPick(weighted, rng);

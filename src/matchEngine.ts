@@ -49,6 +49,8 @@ export interface PossessionState {
   defenseKey: "home" | "away";
   ballHandlerIndex: number;
   score: MatchScore;
+  homeStreak: number;
+  awayStreak: number;
 }
 
 export interface SimMetrics {
@@ -237,6 +239,53 @@ const getHomeCourtMultiplier = (side: TeamSide, kind: HomeCourtKind): number => 
 
 const applyHomeCourtToProbability = (probability: number, side: TeamSide, kind: HomeCourtKind): number =>
   clamp(probability * getHomeCourtMultiplier(side, kind), 0, 1);
+
+const getClampedStreak = (streak: number): number => {
+  const maxStreak = Math.max(0, Math.floor(tuning.momentum.maxStreak));
+  return clamp(Math.floor(streak), 0, maxStreak);
+};
+
+export const getNextMomentumStreaks = (
+  state: PossessionState,
+  offenseKey: TeamSide,
+  madeShot: boolean,
+  turnoverLikeFailure: boolean,
+): { homeStreak: number; awayStreak: number } => {
+  if (turnoverLikeFailure) {
+    return {
+      homeStreak: state.homeStreak,
+      awayStreak: state.awayStreak,
+    };
+  }
+
+  if (offenseKey === "home") {
+    return madeShot
+      ? { homeStreak: state.homeStreak + 1, awayStreak: 0 }
+      : { homeStreak: 0, awayStreak: state.awayStreak };
+  }
+
+  return madeShot
+    ? { homeStreak: 0, awayStreak: state.awayStreak + 1 }
+    : { homeStreak: state.homeStreak, awayStreak: 0 };
+};
+
+export const applyMomentumToShotMakeProbability = (
+  probability: number,
+  state: PossessionState,
+  offenseKey: TeamSide,
+): number => {
+  if (!tuning.momentum.enabled) {
+    return clamp(probability, 0, 1);
+  }
+
+  const offenseStreak = offenseKey === "home" ? state.homeStreak : state.awayStreak;
+  const defenseStreak = offenseKey === "home" ? state.awayStreak : state.homeStreak;
+  const offenseCapped = getClampedStreak(offenseStreak);
+  const defenseCapped = getClampedStreak(defenseStreak);
+  const delta = offenseCapped * tuning.momentum.perMakeBoost - defenseCapped * tuning.momentum.perMakePenalty;
+
+  return clamp(probability + delta, 0, 1);
+};
 
 export const chooseAction = (
   ballHandler: Player,
@@ -428,6 +477,8 @@ const getShotMakeProbability = (
   shotZone: ShotZone,
   shooterImpact: ReturnType<typeof getPlayerImpact>,
   defenderImpact: ReturnType<typeof getPlayerImpact>,
+  state: PossessionState,
+  offenseKey: TeamSide,
   rng: () => number,
 ): number => {
   const zoneBase =
@@ -449,11 +500,13 @@ const getShotMakeProbability = (
   const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 0.2;
   const offenseEdge = (offenseValue - defenseValue) / tuning.shotOffenseDivisor;
 
-  return clamp(
+  const baseProbability = clamp(
     zoneBase + tuning.shotMakeBase + offenseEdge - defenseValue / tuning.shotContestDivisor + variance / 180 - fatiguePenalty,
     tuning.shotMakeMin,
     tuning.shotMakeMax,
   );
+
+  return applyMomentumToShotMakeProbability(baseProbability, state, offenseKey);
 };
 
 const getOffensiveReboundProbability = (
@@ -507,6 +560,7 @@ const flipPossession = (
   score: MatchScore,
   elapsedSeconds: number,
   nextBallHandlerIndex: number,
+  streaks: { homeStreak: number; awayStreak: number },
 ): PossessionState => ({
   ...state,
   possessionIndex: state.possessionIndex + 1,
@@ -515,6 +569,8 @@ const flipPossession = (
   defenseKey: state.offenseKey,
   ballHandlerIndex: nextBallHandlerIndex,
   score,
+  homeStreak: streaks.homeStreak,
+  awayStreak: streaks.awayStreak,
 });
 
 export const simulatePossession = (
@@ -551,7 +607,13 @@ export const simulatePossession = (
     const elapsedSeconds = getElapsedByEvent(steal ? "steal" : "turnover", rng);
     const nextBallHandlerIndex = pickBallHandlerIndex(defenseTeam, state, leagueLevel, rng);
 
-    const nextState = flipPossession(state, state.score, elapsedSeconds, nextBallHandlerIndex);
+    const nextState = flipPossession(
+      state,
+      state.score,
+      elapsedSeconds,
+      nextBallHandlerIndex,
+      getNextMomentumStreaks(state, state.offenseKey, false, true),
+    );
 
     pushTrace(trace, "END_POSSESSION");
     return {
@@ -613,7 +675,7 @@ export const simulatePossession = (
 
   if (!blocked) {
     const makeProb = applyHomeCourtToProbability(
-      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, rng),
+      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, state, state.offenseKey, rng),
       state.offenseKey,
       "shot",
     );
@@ -677,7 +739,13 @@ export const simulatePossession = (
   const elapsedSeconds = getElapsedByEvent(eventType, rng);
   const nextOffenseTeam = getTeam(context, state.defenseKey);
   const nextBallHandlerIndex = pickBallHandlerIndex(nextOffenseTeam, state, leagueLevel, rng);
-  const nextState = flipPossession(state, score, elapsedSeconds, nextBallHandlerIndex);
+  const nextState = flipPossession(
+    state,
+    score,
+    elapsedSeconds,
+    nextBallHandlerIndex,
+    getNextMomentumStreaks(state, state.offenseKey, madeShot, false),
+  );
 
   pushTrace(trace, "END_POSSESSION");
 
@@ -741,6 +809,8 @@ export const initializePossession = (
     defenseKey: homeHasBall ? "away" : "home",
     ballHandlerIndex: Math.floor(rng() * 5),
     score: { home: 0, away: 0 },
+    homeStreak: 0,
+    awayStreak: 0,
   };
 };
 

@@ -26,6 +26,14 @@ module.exports = {
     shotMultiplier: 1.005,
     turnoverMultiplier: 0.995,
   },
+  // Momentum is intentionally subtle and deterministic.
+  // Streak 1: +/-0.8%, streak 2: +/-1.6%, streak 3: +/-2.4%, streak 4: +/-3.2%, streak 5+: capped at +/-4.0%.
+  momentum: {
+    enabled: false,
+    maxStreak: 5,
+    perMakeBoost: 0.008,
+    perMakePenalty: 0.008,
+  },
   turnoverBase: 0.09,
   turnoverDivisor: 540,
   turnoverMin: 0.04,

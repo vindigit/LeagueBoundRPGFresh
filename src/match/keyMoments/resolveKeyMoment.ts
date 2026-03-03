@@ -86,6 +86,29 @@ const mapEventByScenario = (
   return { eventType: "made_3", shotZone: "three", turnoverLikeFailure: false, madeShot: true, success: false };
 };
 
+const getNextMomentumStreaks = (
+  possessionState: KeyMomentResolveArgs["possessionState"],
+  madeShot: boolean,
+  turnoverLikeFailure: boolean,
+): { homeStreak: number; awayStreak: number } => {
+  if (turnoverLikeFailure) {
+    return {
+      homeStreak: possessionState.homeStreak,
+      awayStreak: possessionState.awayStreak,
+    };
+  }
+
+  if (possessionState.offenseKey === "home") {
+    return madeShot
+      ? { homeStreak: possessionState.homeStreak + 1, awayStreak: 0 }
+      : { homeStreak: 0, awayStreak: possessionState.awayStreak };
+  }
+
+  return madeShot
+    ? { homeStreak: 0, awayStreak: possessionState.awayStreak + 1 }
+    : { homeStreak: possessionState.homeStreak, awayStreak: 0 };
+};
+
 export const resolveKeyMoment = (args: KeyMomentResolveArgs): KeyMomentResolutionOutput => {
   const quality = pickQuality(args);
   const { possessionState, pending } = args;
@@ -101,6 +124,7 @@ export const resolveKeyMoment = (args: KeyMomentResolveArgs): KeyMomentResolutio
     possessionState.offenseKey === "home"
       ? { home: possessionState.score.home + points, away: possessionState.score.away }
       : { home: possessionState.score.home, away: possessionState.score.away + points };
+  const nextStreaks = getNextMomentumStreaks(possessionState, mapped.madeShot, mapped.turnoverLikeFailure);
 
   const nextState = {
     possessionIndex: possessionState.possessionIndex + 1,
@@ -109,6 +133,8 @@ export const resolveKeyMoment = (args: KeyMomentResolveArgs): KeyMomentResolutio
     defenseKey: possessionState.offenseKey,
     ballHandlerIndex: Math.max(0, Math.min(4, userIndex)),
     score: nextScore,
+    homeStreak: nextStreaks.homeStreak,
+    awayStreak: nextStreaks.awayStreak,
   } as const;
 
   const result: PossessionResult = {

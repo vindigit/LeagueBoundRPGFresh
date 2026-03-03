@@ -342,12 +342,97 @@ const runHomeCourtCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessio
   }
 };
 
+const getHomeWinRate = (runs) => {
+  let homeWins = 0;
+  let awayWins = 0;
+  let ties = 0;
+  for (const run of runs) {
+    if (run.metrics.pointsHome > run.metrics.pointsAway) {
+      homeWins += 1;
+    } else if (run.metrics.pointsAway > run.metrics.pointsHome) {
+      awayWins += 1;
+    } else {
+      ties += 1;
+    }
+  }
+  return {
+    homeWins,
+    awayWins,
+    ties,
+    homeWinRate: ((homeWins + ties * 0.5) / runs.length) * 100,
+  };
+};
+
+const runMomentumCheck = ({ engine, tuning, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 600 }) => {
+  if (!tuning || !tuning.momentum) {
+    throw new Error("Momentum tuning block is missing from matchEngineTuning.js.");
+  }
+
+  const context = createEvenContext();
+  const seeds = Array.from({ length: sampleSize }, (_, index) => 20274000 + index);
+  const originalEnabled = tuning.momentum.enabled;
+
+  try {
+    tuning.momentum.enabled = false;
+    const disabledRuns = seeds.map((seed) =>
+      runSingleSimulation({
+        context: cloneContext(context),
+        seed,
+        leagueLevel,
+        secondsRemaining,
+        maxPossessions,
+        engine,
+      }),
+    );
+    const disabledAggregate = aggregateRuns(disabledRuns);
+    const disabledWins = getHomeWinRate(disabledRuns);
+
+    tuning.momentum.enabled = true;
+    const enabledRuns = seeds.map((seed) =>
+      runSingleSimulation({
+        context: cloneContext(context),
+        seed,
+        leagueLevel,
+        secondsRemaining,
+        maxPossessions,
+        engine,
+      }),
+    );
+    const enabledAggregate = aggregateRuns(enabledRuns);
+    const enabledWins = getHomeWinRate(enabledRuns);
+
+    const homeWinRateShift = enabledWins.homeWinRate - disabledWins.homeWinRate;
+    const fgPctShift = enabledAggregate.fgPct - disabledAggregate.fgPct;
+
+    console.log("\n=== Momentum Validation (Even Teams, A/B) ===");
+    console.log(`Runs per variant: ${sampleSize} | Possession cap: ${maxPossessions}`);
+    console.log(
+      `Momentum OFF -> homeWinRate ${disabledWins.homeWinRate.toFixed(2)}%, fgPct ${disabledAggregate.fgPct.toFixed(2)}%`,
+    );
+    console.log(
+      `Momentum ON  -> homeWinRate ${enabledWins.homeWinRate.toFixed(2)}%, fgPct ${enabledAggregate.fgPct.toFixed(2)}%`,
+    );
+    console.log(`Shifts -> homeWinRate ${homeWinRateShift >= 0 ? "+" : ""}${homeWinRateShift.toFixed(2)} pts, fgPct ${fgPctShift >= 0 ? "+" : ""}${fgPctShift.toFixed(2)} pts`);
+
+    if (Math.abs(homeWinRateShift) > 3) {
+      throw new Error(`Momentum home win rate shift too large: ${homeWinRateShift.toFixed(2)} pts (expected <= 3.00).`);
+    }
+    if (Math.abs(fgPctShift) > 1.5) {
+      throw new Error(`Momentum FG% shift too large: ${fgPctShift.toFixed(2)} pts (expected <= 1.50).`);
+    }
+  } finally {
+    tuning.momentum.enabled = originalEnabled;
+  }
+};
+
 const main = async () => {
   const engine = require("./matchEngine.ts");
+  const tuning = require("./matchEngineTuning.js");
   const { LeagueLevel } = require("./types/career.ts");
   const args = process.argv.slice(2);
   const checkAttributesEnabled = args.includes("--check-attributes");
   const checkHomeCourtEnabled = args.includes("--check-home-court");
+  const checkMomentumEnabled = args.includes("--check-momentum");
 
   const seeds = [20260210, 20260211, 20260212, 20260213, 20260214, 20260215, 20260216, 20260217, 20260218, 20260219];
   const context = createBaseContext();
@@ -473,6 +558,17 @@ const main = async () => {
       secondsRemaining,
       maxPossessions,
       sampleSize: 1000,
+    });
+  }
+
+  if (checkMomentumEnabled) {
+    runMomentumCheck({
+      engine,
+      tuning,
+      leagueLevel: LeagueLevel.PRO,
+      secondsRemaining,
+      maxPossessions,
+      sampleSize: 600,
     });
   }
 };

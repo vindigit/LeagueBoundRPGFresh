@@ -92,5 +92,7 @@ export interface KeyMomentResolveArgs {
     secondsRemaining: number;
     possessionIndex: number;
     score: MatchScore;
+    homeStreak: number;
+    awayStreak: number;
   };
 }

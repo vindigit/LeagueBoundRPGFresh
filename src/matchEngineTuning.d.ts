@@ -17,6 +17,12 @@ declare const tuning: {
     shotMultiplier: number;
     turnoverMultiplier: number;
   };
+  momentum: {
+    enabled: boolean;
+    maxStreak: number;
+    perMakeBoost: number;
+    perMakePenalty: number;
+  };
   turnoverBase: number;
   turnoverDivisor: number;
   turnoverMin: number;

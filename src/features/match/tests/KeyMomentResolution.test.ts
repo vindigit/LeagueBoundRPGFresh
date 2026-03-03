@@ -86,6 +86,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 620,
         possessionIndex: 10,
         score: { home: 10, away: 9 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
     expect(resolved.quality).toBeGreaterThanOrEqual(0.75);
@@ -117,6 +119,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 500,
         possessionIndex: 11,
         score: { home: 12, away: 12 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
 
@@ -137,6 +141,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 620,
         possessionIndex: 10,
         score: { home: 0, away: 0 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
     const mid = resolveKeyMoment({
@@ -149,6 +155,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 620,
         possessionIndex: 10,
         score: { home: 0, away: 0 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
     const low = resolveKeyMoment({
@@ -161,6 +169,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 620,
         possessionIndex: 10,
         score: { home: 0, away: 0 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
     const veryLow = resolveKeyMoment({
@@ -173,6 +183,8 @@ describe("Key Moment resolution", () => {
         secondsRemaining: 620,
         possessionIndex: 10,
         score: { home: 0, away: 0 },
+        homeStreak: 0,
+        awayStreak: 0,
       },
     });
 

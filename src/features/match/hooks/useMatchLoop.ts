@@ -325,6 +325,8 @@ export const useMatchLoop = (): void => {
             secondsRemaining: nextTimeRemaining,
             possessionIndex: possessionStateRef.current.possessionIndex,
             score: { home: homeScore, away: awayScore },
+            homeStreak: possessionStateRef.current.homeStreak,
+            awayStreak: possessionStateRef.current.awayStreak,
           },
         });
 

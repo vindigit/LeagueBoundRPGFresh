@@ -12,6 +12,11 @@ declare const tuning: {
   baseActionWeights: { pass: number; shoot: number; dribble: number };
   highPressureAdjustments: { pass: number; shoot: number; dribble: number };
   lowPressureAdjustments: { pass: number; shoot: number; dribble: number };
+  homeCourt: {
+    enabled: boolean;
+    shotMultiplier: number;
+    turnoverMultiplier: number;
+  };
   turnoverBase: number;
   turnoverDivisor: number;
   turnoverMin: number;

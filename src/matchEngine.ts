@@ -82,6 +82,9 @@ export interface MatchContext {
   away: Team;
 }
 
+type TeamSide = "home" | "away";
+type HomeCourtKind = "shot" | "turnover";
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
@@ -223,6 +226,17 @@ const getPlayerImpact = (
 };
 
 const getScoreDiff = (state: PossessionState): number => state.score.home - state.score.away;
+
+const getHomeCourtMultiplier = (side: TeamSide, kind: HomeCourtKind): number => {
+  if (!tuning.homeCourt.enabled) {
+    return 1;
+  }
+  const baseMultiplier = kind === "shot" ? tuning.homeCourt.shotMultiplier : tuning.homeCourt.turnoverMultiplier;
+  return side === "home" ? baseMultiplier : 1 / baseMultiplier;
+};
+
+const applyHomeCourtToProbability = (probability: number, side: TeamSide, kind: HomeCourtKind): number =>
+  clamp(probability * getHomeCourtMultiplier(side, kind), 0, 1);
 
 export const chooseAction = (
   ballHandler: Player,
@@ -527,7 +541,11 @@ export const simulatePossession = (
   const primaryDefender = getPlayerByIndex(defenseTeam, primaryDefenderIndex);
   const primaryDefenderImpact = getPlayerImpact(primaryDefender, state, leagueLevel);
 
-  const turnoverProb = getTurnoverProbability(ballHandlerImpact, defenseTeam, state, leagueLevel);
+  const turnoverProb = applyHomeCourtToProbability(
+    getTurnoverProbability(ballHandlerImpact, defenseTeam, state, leagueLevel),
+    state.offenseKey,
+    "turnover",
+  );
   if (rng() <= turnoverProb) {
     const steal = rng() <= getStealProbability(primaryDefenderImpact, ballHandlerImpact);
     const elapsedSeconds = getElapsedByEvent(steal ? "steal" : "turnover", rng);
@@ -594,7 +612,11 @@ export const simulatePossession = (
   let score = state.score;
 
   if (!blocked) {
-    const makeProb = getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, rng);
+    const makeProb = applyHomeCourtToProbability(
+      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, rng),
+      state.offenseKey,
+      "shot",
+    );
     madeShot = rng() <= makeProb;
   }
 
@@ -621,7 +643,11 @@ export const simulatePossession = (
       const rimDefenderIndex = pickDefenderIndex(defenseTeam, state, leagueLevel, rng);
       const rimDefenderImpact = getPlayerImpact(getPlayerByIndex(defenseTeam, rimDefenderIndex), state, leagueLevel);
 
-      const putbackProb = getPutbackMakeProbability(rebounderImpact, rimDefenderImpact, rng);
+      const putbackProb = applyHomeCourtToProbability(
+        getPutbackMakeProbability(rebounderImpact, rimDefenderImpact, rng),
+        state.offenseKey,
+        "shot",
+      );
       const putbackMade = rng() <= putbackProb;
 
       shooterIndex = rebounderIndex;

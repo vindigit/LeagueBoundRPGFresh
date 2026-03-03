@@ -57,6 +57,34 @@ const cloneContext = (context) => ({
   },
 });
 
+const createEvenContext = () => {
+  const base = createBaseContext();
+  const awayRoster = base.home.roster.map((player, index) => ({
+    ...player,
+    id: `eq-a${index + 1}`,
+    name: `Even Away ${index + 1}`,
+    attributes: { ...player.attributes },
+    gameStats: { ...player.gameStats },
+  }));
+  return {
+    home: {
+      ...base.home,
+      roster: base.home.roster.map((player, index) => ({
+        ...player,
+        id: `eq-h${index + 1}`,
+        name: `Even Home ${index + 1}`,
+        attributes: { ...player.attributes },
+        gameStats: { ...player.gameStats },
+      })),
+    },
+    away: {
+      ...base.away,
+      name: "Even Away",
+      roster: awayRoster,
+    },
+  };
+};
+
 const applyBoost = (context, teamKey, attrKey, boost) => {
   const target = context[teamKey];
   target.roster = target.roster.map((player) => {
@@ -97,6 +125,8 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
     fgm: 0,
     assists: 0,
     turnovers: 0,
+    turnoversHome: 0,
+    turnoversAway: 0,
     steals: 0,
     blocks: 0,
     threePa: 0,
@@ -121,6 +151,7 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
   };
 
   while (metrics.possessions < maxPossessions && state.secondsRemaining > 0) {
+    const offenseKey = state.offenseKey;
     const preScore = { ...state.score };
     const preSeconds = state.secondsRemaining;
     const result = engine.simulatePossession(context, state, leagueLevel, rng);
@@ -139,6 +170,11 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
     }
     if (result.turnoverLikeFailure) {
       metrics.turnovers += 1;
+      if (offenseKey === "home") {
+        metrics.turnoversHome += 1;
+      } else {
+        metrics.turnoversAway += 1;
+      }
     }
 
     if (result.defensivePlay.steal) {
@@ -246,11 +282,72 @@ const assertDirectional = (label, baseline, compared, direction, tolerance = 0) 
   }
 };
 
+const runHomeCourtCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 1000 }) => {
+  const context = createEvenContext();
+  const seeds = Array.from({ length: sampleSize }, (_, index) => 20270000 + index);
+  const runs = seeds.map((seed) =>
+    runSingleSimulation({
+      context: cloneContext(context),
+      seed,
+      leagueLevel,
+      secondsRemaining,
+      maxPossessions,
+      engine,
+    }),
+  );
+
+  const aggregate = aggregateRuns(runs);
+  let homeWins = 0;
+  let awayWins = 0;
+  let ties = 0;
+  for (const run of runs) {
+    if (run.metrics.pointsHome > run.metrics.pointsAway) {
+      homeWins += 1;
+    } else if (run.metrics.pointsAway > run.metrics.pointsHome) {
+      awayWins += 1;
+    } else {
+      ties += 1;
+    }
+  }
+  const homeWinRate = ((homeWins + ties * 0.5) / runs.length) * 100;
+  const scoreDiff = aggregate.avg.pointsHome - aggregate.avg.pointsAway;
+  const turnoverDiff = aggregate.avg.turnoversHome - aggregate.avg.turnoversAway;
+
+  console.log("\n=== Home-Court Validation (Even Teams) ===");
+  console.log(`Runs: ${runs.length} | Possession cap: ${maxPossessions}`);
+  console.log(`Home win rate: ${homeWinRate.toFixed(2)}% (wins=${homeWins}, losses=${awayWins}, ties=${ties})`);
+  console.log(`Avg score: HOME ${aggregate.avg.pointsHome.toFixed(2)} - AWAY ${aggregate.avg.pointsAway.toFixed(2)} (diff ${scoreDiff.toFixed(2)})`);
+  console.log(
+    `Avg turnovers: HOME ${aggregate.avg.turnoversHome.toFixed(2)} - AWAY ${aggregate.avg.turnoversAway.toFixed(2)} (diff ${turnoverDiff.toFixed(2)})`,
+  );
+
+  if (homeWinRate <= 50) {
+    throw new Error(`Home win rate check failed: ${homeWinRate.toFixed(2)}% should be > 50%.`);
+  }
+  if (aggregate.avg.pointsHome < aggregate.avg.pointsAway) {
+    throw new Error(
+      `Home scoring check failed: HOME ${aggregate.avg.pointsHome.toFixed(2)} < AWAY ${aggregate.avg.pointsAway.toFixed(2)}.`,
+    );
+  }
+  if (aggregate.avg.turnoversHome > aggregate.avg.turnoversAway) {
+    throw new Error(
+      `Home turnovers check failed: HOME ${aggregate.avg.turnoversHome.toFixed(2)} > AWAY ${aggregate.avg.turnoversAway.toFixed(2)}.`,
+    );
+  }
+
+  if (homeWinRate < 52 || homeWinRate > 55) {
+    console.log(
+      "Tuning reminder: target subtle home edge is ~52-55% home win rate for evenly matched teams (2-5% bump).",
+    );
+  }
+};
+
 const main = async () => {
   const engine = require("./matchEngine.ts");
   const { LeagueLevel } = require("./types/career.ts");
   const args = process.argv.slice(2);
   const checkAttributesEnabled = args.includes("--check-attributes");
+  const checkHomeCourtEnabled = args.includes("--check-home-court");
 
   const seeds = [20260210, 20260211, 20260212, 20260213, 20260214, 20260215, 20260216, 20260217, 20260218, 20260219];
   const context = createBaseContext();
@@ -367,6 +464,16 @@ const main = async () => {
         `- ${check.attr}: baseline=${baselineMetric.toFixed(2)}, boosted=${boostedMetric.toFixed(2)} (${check.direction})`,
       );
     }
+  }
+
+  if (checkHomeCourtEnabled) {
+    runHomeCourtCheck({
+      engine,
+      leagueLevel: LeagueLevel.PRO,
+      secondsRemaining,
+      maxPossessions,
+      sampleSize: 1000,
+    });
   }
 };
 

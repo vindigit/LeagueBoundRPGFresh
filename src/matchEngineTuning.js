@@ -18,6 +18,14 @@ module.exports = {
   baseActionWeights: { pass: 34, shoot: 38, dribble: 28 },
   highPressureAdjustments: { pass: 8, shoot: 10, dribble: -6 },
   lowPressureAdjustments: { pass: 0, shoot: 0, dribble: 0 },
+  // Home-court edge is intentionally subtle. Target roughly +2-5% home win rate for evenly matched teams.
+  // shotMultiplier affects shot and putback make probabilities (safe tuning range: 1.02-1.04).
+  // turnoverMultiplier affects turnover probability (home reduced, away inverse increased; safe range: 0.96-0.99).
+  homeCourt: {
+    enabled: true,
+    shotMultiplier: 1.02,
+    turnoverMultiplier: 0.98,
+  },
   turnoverBase: 0.09,
   turnoverDivisor: 540,
   turnoverMin: 0.04,

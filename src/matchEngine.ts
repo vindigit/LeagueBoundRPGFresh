@@ -48,6 +48,8 @@ export interface PossessionState {
   offenseKey: "home" | "away";
   defenseKey: "home" | "away";
   ballHandlerIndex: number;
+  homeTouches: [number, number, number, number, number];
+  awayTouches: [number, number, number, number, number];
   score: MatchScore;
   homeStreak: number;
   awayStreak: number;
@@ -123,6 +125,31 @@ const getTeam = (context: MatchContext, key: "home" | "away"): Team =>
 
 const getPlayerByIndex = (team: Team, index: number): Player => team.roster[clamp(index, 0, 4) as 0 | 1 | 2 | 3 | 4];
 
+const toCompositeAttributes = (player: Player): {
+  shooting: number;
+  finishing: number;
+  vision: number;
+  handle: number;
+  athleticism: number;
+  defense: number;
+  rebounding: number;
+  bbiq: number;
+  stamina: number;
+} => {
+  const attrs = player.attributes;
+  return {
+    shooting: average([attrs.shortRange, attrs.midrange, attrs.threePoint]),
+    finishing: attrs.shortRange * 0.35 + attrs.dunking * 0.4 + attrs.strength * 0.25,
+    vision: attrs.passing * 0.65 + attrs.vision * 0.35,
+    handle: attrs.handle,
+    athleticism: attrs.speed * 0.55 + attrs.strength * 0.35 + attrs.dunking * 0.1,
+    defense: attrs.perimeterDefense * 0.45 + attrs.interiorDefense * 0.35 + attrs.stealing * 0.1 + attrs.blocking * 0.1,
+    rebounding: attrs.offRebounding * 0.45 + attrs.defRebounding * 0.55,
+    bbiq: attrs.vision * 0.6 + attrs.handle * 0.2 + attrs.passing * 0.2,
+    stamina: attrs.stamina,
+  };
+};
+
 const getElapsedByEvent = (eventType: PossessionEventType, rng: () => number): number => {
   let elapsedSeconds: number;
   if (eventType === "turnover" || eventType === "steal") {
@@ -160,26 +187,13 @@ export const createSeededRng = (seed: number): (() => number) => {
 };
 
 export const getPlayerOvr = (player: Player): number =>
-  average([
-    player.attributes.shooting,
-    player.attributes.finishing,
-    player.attributes.vision,
-    player.attributes.handle,
-    player.attributes.athleticism,
-    player.attributes.defense,
-    player.attributes.rebounding,
-    player.attributes.bbiq,
-    player.attributes.stamina,
-  ]);
+  average(Object.values(toCompositeAttributes(player)));
 
 export const calculateTeamOvr = (team: Team): number =>
   Math.round(average(team.roster.map(getPlayerOvr)));
 
-const getFatigueMultiplier = (stamina: number, possessionIndex: number): number => {
-  const staminaResistance = (stamina - tuning.fatigueStaminaOffset) / 100;
-  const decay = possessionIndex * tuning.fatiguePossessionScale * (1 - staminaResistance);
-  return clamp(1 - decay, tuning.fatigueMinMultiplier, tuning.fatigueMaxMultiplier);
-};
+const getFatigueMultiplier = (stamina: number, touchCount: number): number =>
+  clamp(1 - touchCount * tuning.fatigueTouchScale * (1 - stamina / 100), tuning.fatigueMinMultiplier, tuning.fatigueMaxMultiplier);
 
 const getDecisionVariance = (bbiq: number, rng: () => number): number => {
   const spread = tuning.decisionVarianceBase + ((99 - bbiq) / 99) * tuning.decisionVarianceBbiqScale;
@@ -188,7 +202,9 @@ const getDecisionVariance = (bbiq: number, rng: () => number): number => {
 
 const getPlayerImpact = (
   player: Player,
-  state: PossessionState,
+  teamKey: TeamSide,
+  playerIndex: number,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
 ): {
   shooting: number;
@@ -202,16 +218,17 @@ const getPlayerImpact = (
   stamina: number;
   fatigueMultiplier: number;
 } => {
-  const shooting = getScaledAttribute(player.attributes.shooting, leagueLevel);
-  const finishing = getScaledAttribute(player.attributes.finishing, leagueLevel);
-  const vision = getScaledAttribute(player.attributes.vision, leagueLevel);
-  const handle = getScaledAttribute(player.attributes.handle, leagueLevel);
-  const athleticism = getScaledAttribute(player.attributes.athleticism, leagueLevel);
-  const defense = getScaledAttribute(player.attributes.defense, leagueLevel);
-  const rebounding = getScaledAttribute(player.attributes.rebounding, leagueLevel);
-  const bbiq = getScaledAttribute(player.attributes.bbiq, leagueLevel);
-  const stamina = getScaledAttribute(player.attributes.stamina, leagueLevel);
-  const fatigueMultiplier = getFatigueMultiplier(stamina, state.possessionIndex);
+  const composite = toCompositeAttributes(player);
+  const shooting = getScaledAttribute(composite.shooting, leagueLevel);
+  const finishing = getScaledAttribute(composite.finishing, leagueLevel);
+  const vision = getScaledAttribute(composite.vision, leagueLevel);
+  const handle = getScaledAttribute(composite.handle, leagueLevel);
+  const athleticism = getScaledAttribute(composite.athleticism, leagueLevel);
+  const defense = getScaledAttribute(composite.defense, leagueLevel);
+  const rebounding = getScaledAttribute(composite.rebounding, leagueLevel);
+  const bbiq = getScaledAttribute(composite.bbiq, leagueLevel);
+  const stamina = getScaledAttribute(composite.stamina, leagueLevel);
+  const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex]);
 
   return {
     shooting: shooting * fatigueMultiplier,
@@ -312,12 +329,13 @@ export const chooseAction = (
 
 const pickBallHandlerIndex = (
   offenseTeam: Team,
-  state: PossessionState,
+  teamKey: TeamSide,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   rng: () => number,
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
-    const impact = getPlayerImpact(player, state, leagueLevel);
+    const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
     const baseWeight = impact.handle * 0.45 + impact.bbiq * 0.35 + impact.vision * 0.2;
     const archetypePenalty = tuning.ballHandlerArchetypeMultipliers[player.archetype] ?? 1;
     return {
@@ -330,12 +348,13 @@ const pickBallHandlerIndex = (
 
 const pickDefenderIndex = (
   defenseTeam: Team,
-  state: PossessionState,
+  teamKey: TeamSide,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   rng: () => number,
 ): number => {
   const weighted = defenseTeam.roster.map((player, index) => {
-    const impact = getPlayerImpact(player, state, leagueLevel);
+    const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
       weight: impact.defense * 0.6 + impact.athleticism * 0.4,
@@ -346,8 +365,9 @@ const pickDefenderIndex = (
 
 const pickAssistReceiverIndex = (
   offenseTeam: Team,
+  teamKey: TeamSide,
   ballHandlerIndex: number,
-  state: PossessionState,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   rng: () => number,
 ): number => {
@@ -355,7 +375,7 @@ const pickAssistReceiverIndex = (
     .map((player, index) => ({ player, index }))
     .filter((entry) => entry.index !== ballHandlerIndex)
     .map(({ player, index }) => {
-      const impact = getPlayerImpact(player, state, leagueLevel);
+      const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
       return {
         key: index as 0 | 1 | 2 | 3 | 4,
         weight: impact.shooting * 0.5 + impact.finishing * 0.5,
@@ -366,12 +386,13 @@ const pickAssistReceiverIndex = (
 
 const pickRebounderIndex = (
   team: Team,
-  state: PossessionState,
+  teamKey: TeamSide,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   rng: () => number,
 ): number => {
   const weighted = team.roster.map((player, index) => {
-    const impact = getPlayerImpact(player, state, leagueLevel);
+    const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
       weight: impact.rebounding * 0.7 + impact.athleticism * 0.3,
@@ -415,15 +436,14 @@ const pickShotZone = (
 const getTurnoverProbability = (
   ballHandlerImpact: ReturnType<typeof getPlayerImpact>,
   defenseTeam: Team,
-  state: PossessionState,
+  defenseKey: TeamSide,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
 ): number => {
-  const defenderPressure = average(
-    defenseTeam.roster.map((player) => {
-      const impact = getPlayerImpact(player, state, leagueLevel);
-      return impact.defense * 0.65 + impact.athleticism * 0.35;
-    }),
-  );
+  const defenderPressure = average(defenseTeam.roster.map((player, index) => {
+    const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
+    return impact.defense * 0.65 + impact.athleticism * 0.35;
+  }));
   const ballSecurity = ballHandlerImpact.handle * 0.7 + ballHandlerImpact.bbiq * 0.3;
 
   return clamp(
@@ -514,20 +534,22 @@ const getShotMakeProbability = (
 const getOffensiveReboundProbability = (
   offenseTeam: Team,
   defenseTeam: Team,
-  state: PossessionState,
+  offenseKey: TeamSide,
+  defenseKey: TeamSide,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   shotZone: ShotZone,
 ): number => {
   const offenseReb = average(
-    offenseTeam.roster.map((player) => {
-      const impact = getPlayerImpact(player, state, leagueLevel);
+    offenseTeam.roster.map((player, index) => {
+      const impact = getPlayerImpact(player, offenseKey, index, touchCounts, leagueLevel);
       return impact.rebounding * 0.7 + impact.athleticism * 0.3;
     }),
   );
 
   const defenseReb = average(
-    defenseTeam.roster.map((player) => {
-      const impact = getPlayerImpact(player, state, leagueLevel);
+    defenseTeam.roster.map((player, index) => {
+      const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
       return impact.rebounding * 0.75 + impact.bbiq * 0.25;
     }),
   );
@@ -570,6 +592,8 @@ const flipPossession = (
   offenseKey: state.offenseKey === "home" ? "away" : "home",
   defenseKey: state.offenseKey,
   ballHandlerIndex: nextBallHandlerIndex,
+  homeTouches: [0, 0, 0, 0, 0],
+  awayTouches: [0, 0, 0, 0, 0],
   score,
   homeStreak: streaks.homeStreak,
   awayStreak: streaks.awayStreak,
@@ -586,28 +610,43 @@ export const simulatePossession = (
 
   const offenseTeam = getTeam(context, state.offenseKey);
   const defenseTeam = getTeam(context, state.defenseKey);
+  const touchCounts = {
+    home: [...state.homeTouches] as [number, number, number, number, number],
+    away: [...state.awayTouches] as [number, number, number, number, number],
+  };
+  const incrementTouch = (teamKey: TeamSide, index: number): void => {
+    touchCounts[teamKey][index as 0 | 1 | 2 | 3 | 4] += 1;
+  };
 
-  const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state, leagueLevel, rng);
+  const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng);
+  incrementTouch(state.offenseKey, ballHandlerIndex);
   const ballHandler = getPlayerByIndex(offenseTeam, ballHandlerIndex);
-  const ballHandlerImpact = getPlayerImpact(ballHandler, state, leagueLevel);
+  const ballHandlerImpact = getPlayerImpact(ballHandler, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel);
 
   pushTrace(trace, "DECIDE_ACTION");
   const action = chooseAction(ballHandler, state, rng);
 
   pushTrace(trace, "RESOLVE_TURNOVER_PRESSURE");
-  const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state, leagueLevel, rng);
+  const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+  incrementTouch(state.defenseKey, primaryDefenderIndex);
   const primaryDefender = getPlayerByIndex(defenseTeam, primaryDefenderIndex);
-  const primaryDefenderImpact = getPlayerImpact(primaryDefender, state, leagueLevel);
+  const primaryDefenderImpact = getPlayerImpact(
+    primaryDefender,
+    state.defenseKey,
+    primaryDefenderIndex,
+    touchCounts,
+    leagueLevel,
+  );
 
   const turnoverProb = applyHomeCourtToProbability(
-    getTurnoverProbability(ballHandlerImpact, defenseTeam, state, leagueLevel),
+    getTurnoverProbability(ballHandlerImpact, defenseTeam, state.defenseKey, touchCounts, leagueLevel),
     state.offenseKey,
     "turnover",
   );
   if (rng() <= turnoverProb) {
     const steal = rng() <= getStealProbability(primaryDefenderImpact, ballHandlerImpact);
     const elapsedSeconds = getElapsedByEvent(steal ? "steal" : "turnover", rng);
-    const nextBallHandlerIndex = pickBallHandlerIndex(defenseTeam, state, leagueLevel, rng);
+    const nextBallHandlerIndex = pickBallHandlerIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
 
     const nextState = flipPossession(
       state,
@@ -645,9 +684,16 @@ export const simulatePossession = (
   let assisted = false;
 
   if (action === "pass") {
-    const receiverIndex = pickAssistReceiverIndex(offenseTeam, ballHandlerIndex, state, leagueLevel, rng);
+    const receiverIndex = pickAssistReceiverIndex(offenseTeam, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel, rng);
+    incrementTouch(state.offenseKey, receiverIndex);
     shooterIndex = receiverIndex;
-    const receiverImpact = getPlayerImpact(getPlayerByIndex(offenseTeam, receiverIndex), state, leagueLevel);
+    const receiverImpact = getPlayerImpact(
+      getPlayerByIndex(offenseTeam, receiverIndex),
+      state.offenseKey,
+      receiverIndex,
+      touchCounts,
+      leagueLevel,
+    );
     const assistProb = getAssistProbability(ballHandlerImpact, receiverImpact);
     assisted = rng() <= assistProb;
     if (assisted) {
@@ -656,13 +702,21 @@ export const simulatePossession = (
   }
 
   const shooter = getPlayerByIndex(offenseTeam, shooterIndex);
-  const shooterImpact = getPlayerImpact(shooter, state, leagueLevel);
+  incrementTouch(state.offenseKey, shooterIndex);
+  const shooterImpact = getPlayerImpact(shooter, state.offenseKey, shooterIndex, touchCounts, leagueLevel);
   const shotZone = pickShotZone(action, shooterImpact, rng);
 
   pushTrace(trace, "RESOLVE_SHOT_CONTEST");
-  const shotDefenderIndex = pickDefenderIndex(defenseTeam, state, leagueLevel, rng);
+  const shotDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+  incrementTouch(state.defenseKey, shotDefenderIndex);
   const shotDefender = getPlayerByIndex(defenseTeam, shotDefenderIndex);
-  const shotDefenderImpact = getPlayerImpact(shotDefender, state, leagueLevel);
+  const shotDefenderImpact = getPlayerImpact(
+    shotDefender,
+    state.defenseKey,
+    shotDefenderIndex,
+    touchCounts,
+    leagueLevel,
+  );
 
   const blockProb = getBlockProbability(shotDefenderImpact, shooterImpact, shotZone);
   const blocked = rng() <= blockProb;
@@ -694,18 +748,40 @@ export const simulatePossession = (
     eventType = blocked ? "block" : "miss";
 
     pushTrace(trace, "RESOLVE_REBOUND");
-    const orebProb = getOffensiveReboundProbability(offenseTeam, defenseTeam, state, leagueLevel, shotZone);
+    const orebProb = getOffensiveReboundProbability(
+      offenseTeam,
+      defenseTeam,
+      state.offenseKey,
+      state.defenseKey,
+      touchCounts,
+      leagueLevel,
+      shotZone,
+    );
     offensiveRebound = rng() <= orebProb;
 
     if (offensiveRebound) {
       eventType = "off_reb";
-      rebounderIndex = pickRebounderIndex(offenseTeam, state, leagueLevel, rng);
+      rebounderIndex = pickRebounderIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng);
+      incrementTouch(state.offenseKey, rebounderIndex);
       pushTrace(trace, "PUTBACK_ATTEMPT");
       putbackAttempted = true;
 
-      const rebounderImpact = getPlayerImpact(getPlayerByIndex(offenseTeam, rebounderIndex), state, leagueLevel);
-      const rimDefenderIndex = pickDefenderIndex(defenseTeam, state, leagueLevel, rng);
-      const rimDefenderImpact = getPlayerImpact(getPlayerByIndex(defenseTeam, rimDefenderIndex), state, leagueLevel);
+      const rebounderImpact = getPlayerImpact(
+        getPlayerByIndex(offenseTeam, rebounderIndex),
+        state.offenseKey,
+        rebounderIndex,
+        touchCounts,
+        leagueLevel,
+      );
+      const rimDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+      incrementTouch(state.defenseKey, rimDefenderIndex);
+      const rimDefenderImpact = getPlayerImpact(
+        getPlayerByIndex(defenseTeam, rimDefenderIndex),
+        state.defenseKey,
+        rimDefenderIndex,
+        touchCounts,
+        leagueLevel,
+      );
 
       const putbackProb = applyHomeCourtToProbability(
         getPutbackMakeProbability(rebounderImpact, rimDefenderImpact, rng),
@@ -733,14 +809,20 @@ export const simulatePossession = (
     if (!offensiveRebound || eventType === "putback_miss") {
       eventType = eventType === "putback_miss" ? "def_reb" : eventType;
       if (eventType === "def_reb") {
-        rebounderIndex = pickRebounderIndex(defenseTeam, state, leagueLevel, rng);
+        rebounderIndex = pickRebounderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+        incrementTouch(state.defenseKey, rebounderIndex);
       }
     }
   }
 
+  if (!madeShot || action !== "pass" || assisterIndex === undefined) {
+    assisted = false;
+    assisterIndex = undefined;
+  }
+
   const elapsedSeconds = getElapsedByEvent(eventType, rng);
   const nextOffenseTeam = getTeam(context, state.defenseKey);
-  const nextBallHandlerIndex = pickBallHandlerIndex(nextOffenseTeam, state, leagueLevel, rng);
+  const nextBallHandlerIndex = pickBallHandlerIndex(nextOffenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
   const nextState = flipPossession(
     state,
     score,
@@ -785,15 +867,15 @@ export const initializePossession = (
       average(
         team.roster.map((player) =>
           average([
-            getScaledAttribute(player.attributes.shooting, leagueLevel),
-            getScaledAttribute(player.attributes.finishing, leagueLevel),
-            getScaledAttribute(player.attributes.vision, leagueLevel),
-            getScaledAttribute(player.attributes.handle, leagueLevel),
-            getScaledAttribute(player.attributes.athleticism, leagueLevel),
-            getScaledAttribute(player.attributes.defense, leagueLevel),
-            getScaledAttribute(player.attributes.rebounding, leagueLevel),
-            getScaledAttribute(player.attributes.bbiq, leagueLevel),
-            getScaledAttribute(player.attributes.stamina, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).shooting, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).finishing, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).vision, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).handle, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).athleticism, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).defense, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).rebounding, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).bbiq, leagueLevel),
+            getScaledAttribute(toCompositeAttributes(player).stamina, leagueLevel),
           ]),
         ),
       ),
@@ -810,6 +892,8 @@ export const initializePossession = (
     offenseKey: homeHasBall ? "home" : "away",
     defenseKey: homeHasBall ? "away" : "home",
     ballHandlerIndex: Math.floor(rng() * 5),
+    homeTouches: [0, 0, 0, 0, 0],
+    awayTouches: [0, 0, 0, 0, 0],
     score: { home: 0, away: 0 },
     homeStreak: 0,
     awayStreak: 0,
@@ -841,7 +925,7 @@ export const runPossessionBatch = (
     if (result.madeShot) {
       metrics.fgm += 1;
     }
-    if (result.assisted) {
+    if (result.assisted && result.madeShot) {
       metrics.assists += 1;
     }
     if (result.turnoverLikeFailure) {

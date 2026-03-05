@@ -59,8 +59,7 @@ declare const tuning: {
   putbackDivisor: number;
   putbackMin: number;
   putbackMax: number;
-  fatiguePossessionScale: number;
-  fatigueStaminaOffset: number;
+  fatigueTouchScale: number;
   fatigueMinMultiplier: number;
   fatigueMaxMultiplier: number;
   decisionVarianceBase: number;

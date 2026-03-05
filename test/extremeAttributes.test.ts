@@ -7,7 +7,7 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { OldPlayerAttributes, Player } from "../src/types/player";
+import type { PlayerAttributes, Player } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
 const VALID_ACTIONS = new Set(["pass", "shoot", "dribble"]);
@@ -28,20 +28,27 @@ const VALID_EVENT_TYPES = new Set([
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
-const baseAttributes: OldPlayerAttributes = {
-  shooting: 60,
-  finishing: 60,
-  vision: 60,
+const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
+  shortRange: 60,
+  dunking: 60,
+  midrange: 60,
+  threePoint: 60,
   handle: 60,
-  athleticism: 60,
-  defense: 60,
-  rebounding: 60,
-  bbiq: 60,
+  passing: 60,
+  vision: 60,
+  perimeterDefense: 60,
+  interiorDefense: 60,
+  stealing: 60,
+  blocking: 60,
+  offRebounding: 60,
+  defRebounding: 60,
+  speed: 60,
+  strength: 60,
   stamina: 60,
-};
+  ...overrides,
+});
 
-const makePlayer = (id: string, attrOverrides: Partial<OldPlayerAttributes> = {}): Player => ({
+const makePlayer = (id: string, attrOverrides: Partial<PlayerAttributes> = {}): Player => ({
   id,
   name: id,
   age: 19,
@@ -52,10 +59,7 @@ const makePlayer = (id: string, attrOverrides: Partial<OldPlayerAttributes> = {}
   archetype: "Playmaker",
   identity: null,
   dna: null,
-  attributes: {
-    ...baseAttributes,
-    ...attrOverrides,
-  } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+  attributes: makeAttributes(attrOverrides),
   gameStats: {
     points: 0,
     assists: 0,
@@ -67,7 +71,7 @@ const makePlayer = (id: string, attrOverrides: Partial<OldPlayerAttributes> = {}
   },
 });
 
-const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<OldPlayerAttributes> = {}): Team => ({
+const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<PlayerAttributes> = {}): Team => ({
   name: `${prefix}-team`,
   teamOvr: 0,
   roster: [
@@ -80,8 +84,8 @@ const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<OldPlayerA
 });
 
 const makeContext = (
-  homeOverrides: Partial<OldPlayerAttributes> = {},
-  awayOverrides: Partial<OldPlayerAttributes> = {},
+  homeOverrides: Partial<PlayerAttributes> = {},
+  awayOverrides: Partial<PlayerAttributes> = {},
 ): MatchContext => ({
   home: makeTeam("h", homeOverrides),
   away: makeTeam("a", awayOverrides),
@@ -135,9 +139,7 @@ const assertFiniteNonNegativeResult = (result: PossessionResult, prevState: Poss
   expect(result.nextState.score.away).toBeGreaterThanOrEqual(0);
   expect(result.nextState.possessionIndex).toBeGreaterThanOrEqual(1);
 
-  // Clock should always move forward or hit floor; never increase.
   expect(result.nextState.secondsRemaining).toBeLessThanOrEqual(prevState.secondsRemaining);
-  // Possession progression should be exact +1 each step.
   expect(result.nextState.possessionIndex).toBe(prevState.possessionIndex + 1);
 };
 
@@ -152,8 +154,8 @@ describe("matchEngine extreme attribute invariants", () => {
     }
   });
 
-  it("bbiq=99 with shooting=0 yields valid deterministic outputs without NaN drift", () => {
-    const context = makeContext({ bbiq: 99, shooting: 0 }, {});
+  it("vision=99 with threePoint=0 yields valid deterministic outputs without NaN drift", () => {
+    const context = makeContext({ vision: 99, threePoint: 0, midrange: 0, shortRange: 0 }, {});
     const steps = runPossessions(context, 20260302, 40);
 
     expect(steps.length).toBeGreaterThan(0);
@@ -162,16 +164,20 @@ describe("matchEngine extreme attribute invariants", () => {
     }
   });
 
-  it("defense=99 with all other attributes=0 on defense team remains robust", () => {
-    const defenseExtreme: Partial<OldPlayerAttributes> = {
-      shooting: 0,
-      finishing: 0,
-      vision: 0,
+  it("defense-heavy team with weak offense remains robust", () => {
+    const defenseExtreme: Partial<PlayerAttributes> = {
+      shortRange: 0,
+      dunking: 0,
+      midrange: 0,
+      threePoint: 0,
+      passing: 0,
       handle: 0,
-      athleticism: 0,
-      defense: 99,
-      rebounding: 0,
-      bbiq: 0,
+      speed: 0,
+      perimeterDefense: 99,
+      interiorDefense: 99,
+      defRebounding: 0,
+      offRebounding: 0,
+      vision: 0,
       stamina: 0,
     };
     const context = makeContext({}, defenseExtreme);

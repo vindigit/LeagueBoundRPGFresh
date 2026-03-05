@@ -7,7 +7,7 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { OldPlayerAttributes, Player } from "../src/types/player";
+import type { PlayerAttributes, Player } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
 const VALID_ACTIONS = new Set(["pass", "shoot", "dribble"]);
@@ -28,8 +28,7 @@ const VALID_ZONES = new Set(["three", "midrange", "rim"]);
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
-const makePlayer = (id: string, attrs: OldPlayerAttributes): Player => ({
+const makePlayer = (id: string, attrs: PlayerAttributes): Player => ({
   id,
   name: id,
   age: 19,
@@ -40,7 +39,7 @@ const makePlayer = (id: string, attrs: OldPlayerAttributes): Player => ({
   archetype: "Playmaker",
   identity: null,
   dna: null,
-  attributes: attrs as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+  attributes: attrs,
   gameStats: {
     points: 0,
     assists: 0,
@@ -52,7 +51,7 @@ const makePlayer = (id: string, attrs: OldPlayerAttributes): Player => ({
   },
 });
 
-const makeTeam = (prefix: string, attrs: OldPlayerAttributes): Team => ({
+const makeTeam = (prefix: string, attrs: PlayerAttributes): Team => ({
   name: `${prefix}-team`,
   teamOvr: 0,
   roster: [
@@ -105,15 +104,22 @@ const assertCoreInvariants = (result: PossessionResult, previousState: Possessio
 
 describe("low shooting three-point suppression", () => {
   it("suppresses three-zone outcomes when impacted shooting is below threshold", () => {
-    const lowShootingAttrs: OldPlayerAttributes = {
-      shooting: 30,
-      finishing: 60,
+    const lowShootingAttrs: PlayerAttributes = {
+      shortRange: 30,
+      dunking: 60,
+      midrange: 30,
+      threePoint: 30,
+      passing: 60,
       vision: 60,
       handle: 80,
-      athleticism: 60,
-      defense: 60,
-      rebounding: 60,
-      bbiq: 60,
+      speed: 60,
+      strength: 60,
+      perimeterDefense: 60,
+      interiorDefense: 60,
+      stealing: 60,
+      blocking: 60,
+      offRebounding: 60,
+      defRebounding: 60,
       stamina: 0,
     };
     const context: MatchContext = {
@@ -136,15 +142,22 @@ describe("low shooting three-point suppression", () => {
   });
 
   it("still allows three-zone outcomes when impacted shooting is at/above threshold", () => {
-    const highShootingAttrs: OldPlayerAttributes = {
-      shooting: 70,
-      finishing: 60,
+    const highShootingAttrs: PlayerAttributes = {
+      shortRange: 70,
+      dunking: 60,
+      midrange: 70,
+      threePoint: 70,
+      passing: 60,
       vision: 60,
       handle: 80,
-      athleticism: 60,
-      defense: 60,
-      rebounding: 60,
-      bbiq: 60,
+      speed: 60,
+      strength: 60,
+      perimeterDefense: 60,
+      interiorDefense: 60,
+      stealing: 60,
+      blocking: 60,
+      offRebounding: 60,
+      defRebounding: 60,
       stamina: 99,
     };
     const context: MatchContext = {

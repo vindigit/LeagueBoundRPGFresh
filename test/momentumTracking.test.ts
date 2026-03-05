@@ -4,26 +4,34 @@ import {
   createSeededRng,
   getNextMomentumStreaks,
   initializePossession,
+  simulatePossession,
   type MatchContext,
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { OldPlayerAttributes, Player } from "../src/types/player";
+import type { PlayerAttributes, Player } from "../src/types/player";
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
-const baseAttributes: OldPlayerAttributes = {
-  shooting: 70,
-  finishing: 66,
-  vision: 82,
+const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
+  shortRange: 70,
+  dunking: 66,
+  midrange: 72,
+  threePoint: 74,
   handle: 84,
-  athleticism: 71,
-  defense: 58,
-  rebounding: 44,
-  bbiq: 78,
+  passing: 82,
+  vision: 78,
+  perimeterDefense: 58,
+  interiorDefense: 50,
+  stealing: 60,
+  blocking: 42,
+  offRebounding: 44,
+  defRebounding: 44,
+  speed: 71,
+  strength: 62,
   stamina: 80,
-};
+  ...overrides,
+});
 
-const createPlayer = (id: string): Player => ({
+const createPlayer = (id: string, attributes: PlayerAttributes = makeAttributes()): Player => ({
   id,
   name: id,
   age: 19,
@@ -34,9 +42,7 @@ const createPlayer = (id: string): Player => ({
   archetype: "Playmaker" as const,
   identity: null,
   dna: null,
-  attributes: {
-    ...baseAttributes,
-  } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+  attributes,
   gameStats: {
     points: 0,
     assists: 0,
@@ -48,16 +54,28 @@ const createPlayer = (id: string): Player => ({
   },
 });
 
-const createContext = (): MatchContext => ({
+const createContext = (homeAttrs = makeAttributes(), awayAttrs = makeAttributes()): MatchContext => ({
   home: {
     name: "Home",
     teamOvr: 0,
-    roster: [createPlayer("h1"), createPlayer("h2"), createPlayer("h3"), createPlayer("h4"), createPlayer("h5")] as const,
+    roster: [
+      createPlayer("h1", homeAttrs),
+      createPlayer("h2", homeAttrs),
+      createPlayer("h3", homeAttrs),
+      createPlayer("h4", homeAttrs),
+      createPlayer("h5", homeAttrs),
+    ] as const,
   },
   away: {
     name: "Away",
     teamOvr: 0,
-    roster: [createPlayer("a1"), createPlayer("a2"), createPlayer("a3"), createPlayer("a4"), createPlayer("a5")] as const,
+    roster: [
+      createPlayer("a1", awayAttrs),
+      createPlayer("a2", awayAttrs),
+      createPlayer("a3", awayAttrs),
+      createPlayer("a4", awayAttrs),
+      createPlayer("a5", awayAttrs),
+    ] as const,
   },
 });
 
@@ -67,6 +85,8 @@ const makeState = (overrides: Partial<PossessionState> = {}): PossessionState =>
   offenseKey: "home",
   defenseKey: "away",
   ballHandlerIndex: 0,
+  homeTouches: [0, 0, 0, 0, 0],
+  awayTouches: [0, 0, 0, 0, 0],
   score: { home: 0, away: 0 },
   homeStreak: 0,
   awayStreak: 0,
@@ -140,5 +160,46 @@ describe("momentum tracking", () => {
       tuning.momentum.perMakeBoost = original.perMakeBoost;
       tuning.momentum.perMakePenalty = original.perMakePenalty;
     }
+  });
+
+  it("resets touch counters on possession flip", () => {
+    const context = createContext();
+    const rng = createSeededRng(777);
+    const initial = initializePossession(context, LeagueLevel.PRO, rng, 240);
+
+    const first = simulatePossession(context, initial, LeagueLevel.PRO, rng);
+    const second = simulatePossession(context, first.nextState, LeagueLevel.PRO, rng);
+
+    expect(first.nextState.homeTouches).toEqual([0, 0, 0, 0, 0]);
+    expect(first.nextState.awayTouches).toEqual([0, 0, 0, 0, 0]);
+    expect(second.nextState.homeTouches).toEqual([0, 0, 0, 0, 0]);
+    expect(second.nextState.awayTouches).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("low stamina degrades scoring more than high stamina under repeated possessions", () => {
+    const lowContext = createContext(makeAttributes({ stamina: 10 }), makeAttributes({ stamina: 10 }));
+    const highContext = createContext(makeAttributes({ stamina: 95 }), makeAttributes({ stamina: 95 }));
+
+    const run = (context: MatchContext): number => {
+      const rng = createSeededRng(321);
+      let state = initializePossession(context, LeagueLevel.PRO, rng, 2400);
+      let made = 0;
+      let attempts = 0;
+      for (let i = 0; i < 120 && state.secondsRemaining > 0; i += 1) {
+        const result = simulatePossession(context, state, LeagueLevel.PRO, rng);
+        if (!result.turnoverLikeFailure) {
+          attempts += 1;
+          if (result.madeShot) {
+            made += 1;
+          }
+        }
+        state = result.nextState;
+      }
+      return attempts > 0 ? made / attempts : 0;
+    };
+
+    const lowPct = run(lowContext);
+    const highPct = run(highContext);
+    expect(highPct).toBeGreaterThan(lowPct);
   });
 });

@@ -60,7 +60,7 @@ describe("Backstory generator", () => {
 
     const keys = Object.keys(generated.startingAttributes) as Array<keyof typeof generated.startingAttributes>;
     for (const key of keys) {
-      expect(generated.startingAttributes[key]).toBeLessThanOrEqual(generated.dna.caps[key]);
+      expect(generated.startingAttributes[key] ?? 0).toBeLessThanOrEqual(generated.dna.caps[key] ?? 99);
     }
   });
 

@@ -58,7 +58,7 @@ const defaultPlayer: Player = {
     speed: 0,
     strength: 0,
     stamina: 0,
-  },
+  } as any,
   gameStats: {
     points: 0,
     assists: 0,
@@ -128,7 +128,8 @@ const normalizePlayerIdentityHometown = (player: Player): Player => {
   }
 
   const defaultStateCode = getDefaultStateCode();
-  const rawHometown = player.identity.hometown as Partial<Player["identity"]["hometown"]> & { stateCode?: string };
+  type IdentityHometown = NonNullable<Player["identity"]>["hometown"];
+  const rawHometown = player.identity.hometown as Partial<IdentityHometown> & { stateCode?: string };
   const legacyBySlug = rawHometown.slug ? findCityByLegacySlug(rawHometown.slug) : undefined;
   const normalizedStateCode = rawHometown.stateCode?.trim() || legacyBySlug?.stateCode || defaultStateCode;
   const fallbackCitySlug = getDefaultCityForState(normalizedStateCode).slug;

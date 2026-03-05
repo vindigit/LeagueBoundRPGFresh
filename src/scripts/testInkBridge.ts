@@ -5,7 +5,7 @@ const run = async (): Promise<void> => {
   const { loadPracticeCoachInkManager } = await import("../narrative/inkManager");
   const { useCareerStore } = await import("../store/useCareerStore");
 
-  const runChoiceVerification = (choiceIndex: number, attributeKey: "bbiq" | "athleticism", label: string): void => {
+  const runChoiceVerification = (choiceIndex: number, attributeKey: "vision" | "speed", label: string): void => {
     useCareerStore.getState().initializeCareer({
       firstName: "Ink",
       lastName: "Tester",
@@ -43,8 +43,8 @@ const run = async (): Promise<void> => {
   };
 
   console.log("=== Ink Bridge Verification ===");
-  runChoiceVerification(0, "bbiq", "Study Film path");
-  runChoiceVerification(1, "athleticism", "Conditioning path");
+  runChoiceVerification(0, "vision", "Study Film path");
+  runChoiceVerification(1, "speed", "Conditioning path");
   console.log("\nInk bridge verification passed.");
 };
 

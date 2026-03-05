@@ -6,13 +6,14 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { Player, PlayerArchetype, PlayerAttributes } from "../src/types/player";
+import type { OldPlayerAttributes, Player, PlayerArchetype } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
 const makePlayer = (
   id: string,
   archetype: PlayerArchetype,
-  attributes: PlayerAttributes,
+  attributes: OldPlayerAttributes,
   position: Player["position"] = "PG",
 ): Player => ({
   id,
@@ -25,7 +26,7 @@ const makePlayer = (
   archetype,
   identity: null,
   dna: null,
-  attributes,
+  attributes: attributes as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,
@@ -38,7 +39,7 @@ const makePlayer = (
 });
 
 const makeTeam = (prefix: string): Team => {
-  const highHandler: PlayerAttributes = {
+  const highHandler: OldPlayerAttributes = {
     shooting: 65,
     finishing: 64,
     vision: 78,
@@ -49,7 +50,7 @@ const makeTeam = (prefix: string): Team => {
     bbiq: 82,
     stamina: 80,
   };
-  const lowHandler: PlayerAttributes = {
+  const lowHandler: OldPlayerAttributes = {
     shooting: 62,
     finishing: 60,
     vision: 28,

@@ -48,14 +48,14 @@ const PROFILE_CONFIGS: ProfileConfig[] = [
 const CONTROL_PROFILE = PROFILE_CONFIGS.find((profile) => profile.key === "BALANCED_CONTROL")!;
 
 const CYCLE_EVENTS: Array<{ attr: keyof PlayerAttributes; amount: number; source: AttributeGainSource }> = [
-  { attr: "shooting", amount: 2, source: "TRAINING" },
-  { attr: "finishing", amount: 2, source: "MATCH_REWARD" },
+  { attr: "threePoint", amount: 2, source: "TRAINING" },
+  { attr: "dunking", amount: 2, source: "MATCH_REWARD" },
   { attr: "vision", amount: 2, source: "TRAINING" },
   { attr: "handle", amount: 2, source: "MATCH_REWARD" },
-  { attr: "athleticism", amount: 2, source: "TRAINING" },
-  { attr: "defense", amount: 2, source: "MATCH_REWARD" },
-  { attr: "rebounding", amount: 2, source: "TRAINING" },
-  { attr: "bbiq", amount: 2, source: "NARRATIVE" },
+  { attr: "speed", amount: 2, source: "TRAINING" },
+  { attr: "perimeterDefense", amount: 2, source: "MATCH_REWARD" },
+  { attr: "defRebounding", amount: 2, source: "TRAINING" },
+  { attr: "passing", amount: 2, source: "NARRATIVE" },
   { attr: "stamina", amount: 2, source: "SYSTEM" },
 ];
 
@@ -196,14 +196,14 @@ const toLeagueValue = (cycleCount: number): number => {
 
 const getEconomyRaw = (initial: PlayerAttributes, current: PlayerAttributes, cycleCount: number): number => {
   const totalPositiveDelta =
-    Math.max(0, current.shooting - initial.shooting) +
-    Math.max(0, current.finishing - initial.finishing) +
+    Math.max(0, current.threePoint - initial.threePoint) +
+    Math.max(0, current.dunking - initial.dunking) +
     Math.max(0, current.vision - initial.vision) +
     Math.max(0, current.handle - initial.handle) +
-    Math.max(0, current.athleticism - initial.athleticism) +
-    Math.max(0, current.defense - initial.defense) +
-    Math.max(0, current.rebounding - initial.rebounding) +
-    Math.max(0, current.bbiq - initial.bbiq) +
+    Math.max(0, current.speed - initial.speed) +
+    Math.max(0, current.perimeterDefense - initial.perimeterDefense) +
+    Math.max(0, current.defRebounding - initial.defRebounding) +
+    Math.max(0, current.passing - initial.passing) +
     Math.max(0, current.stamina - initial.stamina);
 
   return 1 + totalPositiveDelta / (9 * toLeagueValue(cycleCount));

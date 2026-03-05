@@ -2,6 +2,20 @@ import { act, renderHook } from "@testing-library/react-native";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useMatchStore } from "../store/useMatchStore";
 import type { CareerActions, CareerState } from "../../../types/career";
+import type { OldPlayerAttributes } from "../../../types/player";
+
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const baseAttributes: OldPlayerAttributes = {
+  shooting: 80,
+  finishing: 70,
+  vision: 65,
+  handle: 72,
+  athleticism: 75,
+  defense: 68,
+  rebounding: 50,
+  bbiq: 74,
+  stamina: 80,
+};
 
 jest.mock("../../../store/useCareerStore", () => ({
   useCareerStore: (selector: (state: CareerState & CareerActions) => unknown) =>
@@ -18,16 +32,8 @@ jest.mock("../../../store/useCareerStore", () => ({
         identity: null,
         dna: null,
         attributes: {
-          shooting: 80,
-          finishing: 70,
-          vision: 65,
-          handle: 72,
-          athleticism: 75,
-          defense: 68,
-          rebounding: 50,
-          bbiq: 74,
-          stamina: 80,
-        },
+          ...baseAttributes,
+        } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
         gameStats: {
           points: 0,
           assists: 0,
@@ -38,7 +44,7 @@ jest.mock("../../../store/useCareerStore", () => ({
           fgm: 0,
         },
       },
-    } as CareerState & CareerActions),
+    } as unknown as CareerState & CareerActions),
 }));
 
 describe("Key Moment single-blurb behavior", () => {

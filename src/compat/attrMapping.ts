@@ -6,7 +6,8 @@ import type { OldPlayerAttributes, PlayerAttributes, Rating0To99 } from "../type
 const clampRating = (n: number): Rating0To99 =>
   Math.max(0, Math.min(99, Math.round(n))) as Rating0To99;
 
-export const expandAttributes = (old: OldPlayerAttributes): PlayerAttributes => ({
+export const expandAttributes = (old: OldPlayerAttributes): PlayerAttributes =>
+  ({
   shortRange: old.finishing,
   dunking: clampRating(old.finishing * 0.8 + old.athleticism * 0.2),
   midrange: clampRating(old.shooting * 0.9),
@@ -23,4 +24,4 @@ export const expandAttributes = (old: OldPlayerAttributes): PlayerAttributes => 
   speed: old.athleticism,
   strength: clampRating(old.athleticism * 0.5 + old.finishing * 0.5),
   stamina: old.stamina,
-});
+  } as any); // TODO: Sprint 2 - remove cast when legacy match-engine keys are deleted

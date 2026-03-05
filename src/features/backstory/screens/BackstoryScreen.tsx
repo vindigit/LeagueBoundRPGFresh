@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
 import { createBackstorySeed, getBackstoryGrowthOutlook, generateBackstoryFromInput, getDefaultSecondaryPosition } from "../generator";
 import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
@@ -236,7 +236,7 @@ export function BackstoryScreen() {
     setStep((value) => Math.max(1, value - 1));
   };
 
-  const renderStepContent = (): JSX.Element | null => {
+  const renderStepContent = (): ReactElement | null => {
     if (step === 1) {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
@@ -374,7 +374,7 @@ export function BackstoryScreen() {
           ) : null}
 
           <View className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
-            <Text className="text-xs font-semibold text-cyan-100">Youâ€™re starting in 8th grade. Height and weight can fluctuate as your player develops.</Text>
+            <Text className="text-xs font-semibold text-cyan-100">You’re starting in 8th grade. Height and weight can fluctuate as your player develops.</Text>
           </View>
 
           <Stepper
@@ -434,7 +434,7 @@ export function BackstoryScreen() {
             {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.primaryPosition}/{preview.identity.secondaryPosition}
           </Text>
           <Text className="mt-1 text-sm text-slate-300">
-            {preview.identity.height.feet}'{preview.identity.height.inches}" â€¢ {preview.identity.weightLbs} lbs
+            {preview.identity.height.feet}'{preview.identity.height.inches}" • {preview.identity.weightLbs} lbs
           </Text>
 
           <View className="mt-4 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
@@ -493,4 +493,5 @@ export function BackstoryScreen() {
     </SafeAreaView>
   );
 }
+
 

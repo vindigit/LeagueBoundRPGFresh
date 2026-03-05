@@ -1,6 +1,19 @@
 import { renderPossessionPlayByPlayLine } from "../../../match/playByPlay/renderer";
 import type { MatchContext, PossessionResult } from "../../../matchEngine";
-import type { Player } from "../../../types/player";
+import type { OldPlayerAttributes, Player } from "../../../types/player";
+
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const baseAttributes: OldPlayerAttributes = {
+  shooting: 70,
+  finishing: 70,
+  vision: 70,
+  handle: 70,
+  athleticism: 70,
+  defense: 70,
+  rebounding: 70,
+  bbiq: 70,
+  stamina: 70,
+};
 
 const makePlayer = (id: string, name: string): Player => ({
   id,
@@ -13,17 +26,7 @@ const makePlayer = (id: string, name: string): Player => ({
   archetype: "Playmaker",
   identity: null,
   dna: null,
-  attributes: {
-    shooting: 70,
-    finishing: 70,
-    vision: 70,
-    handle: 70,
-    athleticism: 70,
-    defense: 70,
-    rebounding: 70,
-    bbiq: 70,
-    stamina: 70,
-  },
+  attributes: { ...baseAttributes } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,
@@ -73,6 +76,8 @@ const baseResult: PossessionResult = {
     defenseKey: "home",
     ballHandlerIndex: 0,
     score: { home: 3, away: 0 },
+    homeStreak: 0,
+    awayStreak: 0,
   },
   eventType: "made_3",
   shotZone: "three",

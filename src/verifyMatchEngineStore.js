@@ -1,3 +1,4 @@
+// TODO: Sprint 2 — this script uses the old 9-attr shape. Update when match engine is rewritten.
 "use strict";
 
 const makePlayer = (id, name, archetype, position, attrs) => ({
@@ -87,3 +88,4 @@ run().catch((error) => {
   console.error("Store verification failed:", error);
   process.exitCode = 1;
 });
+

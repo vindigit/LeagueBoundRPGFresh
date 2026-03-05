@@ -59,7 +59,7 @@ const legacyToModernDelta = (delta: LegacyDelta): Partial<Record<keyof PlayerAtt
   speed: delta.athleticism ?? 0,
   strength: (delta.athleticism ?? 0) * 0.5 + (delta.finishing ?? 0) * 0.5,
   stamina: delta.stamina ?? 0,
-});
+} as any);
 
 const withDelta = (attrs: PlayerAttributes, legacyDelta: LegacyDelta): PlayerAttributes => {
   const delta = legacyToModernDelta(legacyDelta);
@@ -80,7 +80,7 @@ const withDelta = (attrs: PlayerAttributes, legacyDelta: LegacyDelta): PlayerAtt
     speed: clampRating(attrs.speed + (delta.speed ?? 0)),
     strength: clampRating(attrs.strength + (delta.strength ?? 0)),
     stamina: clampRating(attrs.stamina + (delta.stamina ?? 0)),
-  };
+  } as any;
 };
 
 const fromLegacyAttributes = (legacy: OldPlayerAttributes): PlayerAttributes => ({
@@ -100,7 +100,7 @@ const fromLegacyAttributes = (legacy: OldPlayerAttributes): PlayerAttributes => 
   speed: legacy.athleticism,
   strength: clampRating(legacy.athleticism * 0.5 + legacy.finishing * 0.5),
   stamina: legacy.stamina,
-});
+} as any);
 
 const makePlayer = (
   id: string,

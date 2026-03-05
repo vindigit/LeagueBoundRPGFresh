@@ -7,7 +7,7 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { Player, PlayerAttributes } from "../src/types/player";
+import type { OldPlayerAttributes, Player } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
 const VALID_ACTIONS = new Set(["pass", "shoot", "dribble"]);
@@ -28,7 +28,8 @@ const VALID_EVENT_TYPES = new Set([
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const baseAttributes: PlayerAttributes = {
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const baseAttributes: OldPlayerAttributes = {
   shooting: 60,
   finishing: 60,
   vision: 60,
@@ -40,7 +41,7 @@ const baseAttributes: PlayerAttributes = {
   stamina: 60,
 };
 
-const makePlayer = (id: string, attrOverrides: Partial<PlayerAttributes> = {}): Player => ({
+const makePlayer = (id: string, attrOverrides: Partial<OldPlayerAttributes> = {}): Player => ({
   id,
   name: id,
   age: 19,
@@ -54,7 +55,7 @@ const makePlayer = (id: string, attrOverrides: Partial<PlayerAttributes> = {}): 
   attributes: {
     ...baseAttributes,
     ...attrOverrides,
-  },
+  } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,
@@ -66,7 +67,7 @@ const makePlayer = (id: string, attrOverrides: Partial<PlayerAttributes> = {}): 
   },
 });
 
-const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<PlayerAttributes> = {}): Team => ({
+const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<OldPlayerAttributes> = {}): Team => ({
   name: `${prefix}-team`,
   teamOvr: 0,
   roster: [
@@ -79,8 +80,8 @@ const makeTeam = (prefix: string, attrOverridesForAllPlayers: Partial<PlayerAttr
 });
 
 const makeContext = (
-  homeOverrides: Partial<PlayerAttributes> = {},
-  awayOverrides: Partial<PlayerAttributes> = {},
+  homeOverrides: Partial<OldPlayerAttributes> = {},
+  awayOverrides: Partial<OldPlayerAttributes> = {},
 ): MatchContext => ({
   home: makeTeam("h", homeOverrides),
   away: makeTeam("a", awayOverrides),
@@ -162,7 +163,7 @@ describe("matchEngine extreme attribute invariants", () => {
   });
 
   it("defense=99 with all other attributes=0 on defense team remains robust", () => {
-    const defenseExtreme: Partial<PlayerAttributes> = {
+    const defenseExtreme: Partial<OldPlayerAttributes> = {
       shooting: 0,
       finishing: 0,
       vision: 0,

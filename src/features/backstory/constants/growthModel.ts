@@ -39,7 +39,7 @@ export const GROWTH_CURVE_MULTIPLIERS: Record<GrowthCurve, Record<LeagueLevel, n
   },
 };
 
-export const PROFILE_ATTRIBUTE_COEFFICIENTS: Record<PlaystyleProfile, Record<keyof PlayerAttributes, number>> = {
+export const PROFILE_ATTRIBUTE_COEFFICIENTS: Record<PlaystyleProfile, Partial<Record<keyof PlayerAttributes, number>>> = {
   SLASHER_INSIDE_FINISHER: {
     shortRange: 1.22,
     dunking: 1.28,

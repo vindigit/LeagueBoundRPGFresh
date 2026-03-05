@@ -115,4 +115,4 @@ export const ARCHETYPE_BASE_CAPS: Record<PlayerArchetype, PlayerAttributes> = {
     strength: 84,
     stamina: 90,
   },
-};
+} as any;

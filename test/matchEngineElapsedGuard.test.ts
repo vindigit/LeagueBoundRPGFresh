@@ -1,6 +1,21 @@
 import { LeagueLevel } from "../src/types/career";
+import type { MatchContext } from "../src/matchEngine";
+import type { OldPlayerAttributes, Player } from "../src/types/player";
 
-const createPlayer = (id: string) => ({
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const baseAttributes: OldPlayerAttributes = {
+  shooting: 70,
+  finishing: 66,
+  vision: 82,
+  handle: 84,
+  athleticism: 71,
+  defense: 58,
+  rebounding: 44,
+  bbiq: 78,
+  stamina: 80,
+};
+
+const createPlayer = (id: string): Player => ({
   id,
   name: id,
   age: 19,
@@ -9,17 +24,11 @@ const createPlayer = (id: string) => ({
   position: "PG" as const,
   secondaryPosition: "SG" as const,
   archetype: "Playmaker" as const,
+  identity: null,
+  dna: null,
   attributes: {
-    shooting: 70,
-    finishing: 66,
-    vision: 82,
-    handle: 84,
-    athleticism: 71,
-    defense: 58,
-    rebounding: 44,
-    bbiq: 78,
-    stamina: 80,
-  },
+    ...baseAttributes,
+  } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,
@@ -31,16 +40,16 @@ const createPlayer = (id: string) => ({
   },
 });
 
-const createContext = () => ({
+const createContext = (): MatchContext => ({
   home: {
     name: "Home",
     teamOvr: 0,
-    roster: [createPlayer("h1"), createPlayer("h2"), createPlayer("h3"), createPlayer("h4"), createPlayer("h5")] as const,
+    roster: [createPlayer("h1"), createPlayer("h2"), createPlayer("h3"), createPlayer("h4"), createPlayer("h5")],
   },
   away: {
     name: "Away",
     teamOvr: 0,
-    roster: [createPlayer("a1"), createPlayer("a2"), createPlayer("a3"), createPlayer("a4"), createPlayer("a5")] as const,
+    roster: [createPlayer("a1"), createPlayer("a2"), createPlayer("a3"), createPlayer("a4"), createPlayer("a5")],
   },
 });
 

@@ -7,7 +7,7 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { Player, PlayerAttributes } from "../src/types/player";
+import type { OldPlayerAttributes, Player } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
 const VALID_ACTIONS = new Set(["pass", "shoot", "dribble"]);
@@ -28,7 +28,8 @@ const VALID_ZONES = new Set(["three", "midrange", "rim"]);
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const makePlayer = (id: string, attrs: PlayerAttributes): Player => ({
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const makePlayer = (id: string, attrs: OldPlayerAttributes): Player => ({
   id,
   name: id,
   age: 19,
@@ -39,7 +40,7 @@ const makePlayer = (id: string, attrs: PlayerAttributes): Player => ({
   archetype: "Playmaker",
   identity: null,
   dna: null,
-  attributes: attrs,
+  attributes: attrs as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,
@@ -51,7 +52,7 @@ const makePlayer = (id: string, attrs: PlayerAttributes): Player => ({
   },
 });
 
-const makeTeam = (prefix: string, attrs: PlayerAttributes): Team => ({
+const makeTeam = (prefix: string, attrs: OldPlayerAttributes): Team => ({
   name: `${prefix}-team`,
   teamOvr: 0,
   roster: [
@@ -104,7 +105,7 @@ const assertCoreInvariants = (result: PossessionResult, previousState: Possessio
 
 describe("low shooting three-point suppression", () => {
   it("suppresses three-zone outcomes when impacted shooting is below threshold", () => {
-    const lowShootingAttrs: PlayerAttributes = {
+    const lowShootingAttrs: OldPlayerAttributes = {
       shooting: 30,
       finishing: 60,
       vision: 60,
@@ -135,7 +136,7 @@ describe("low shooting three-point suppression", () => {
   });
 
   it("still allows three-zone outcomes when impacted shooting is at/above threshold", () => {
-    const highShootingAttrs: PlayerAttributes = {
+    const highShootingAttrs: OldPlayerAttributes = {
       shooting: 70,
       finishing: 60,
       vision: 60,

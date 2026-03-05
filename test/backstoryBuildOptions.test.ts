@@ -29,9 +29,9 @@ describe("Backstory build options", () => {
       { seedOverride: 202 },
     );
 
-    expect(biggerBuild.dna.caps.rebounding).toBeGreaterThanOrEqual(baseline.dna.caps.rebounding);
+    expect(biggerBuild.dna.caps.defRebounding).toBeGreaterThanOrEqual(baseline.dna.caps.defRebounding);
     expect(biggerBuild.dna.caps.handle).toBeLessThanOrEqual(baseline.dna.caps.handle);
-    expect(biggerBuild.startingAttributes.finishing).toBeGreaterThanOrEqual(baseline.startingAttributes.finishing);
+    expect(biggerBuild.startingAttributes.strength).toBeGreaterThanOrEqual(baseline.startingAttributes.strength);
   });
 
   it("ensures duplicate secondary position gets normalized", () => {

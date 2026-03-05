@@ -1,24 +1,27 @@
 import { computeDerivedRatings, computeOverall } from "../src/builder/derivedRatings";
 import type { PlayerAttributes } from "../src/types/player";
 
-const makeAttributes = (value: number): PlayerAttributes => ({
-  shortRange: value,
-  dunking: value,
-  midrange: value,
-  threePoint: value,
-  handle: value,
-  passing: value,
-  vision: value,
-  perimeterDefense: value,
-  interiorDefense: value,
-  stealing: value,
-  blocking: value,
-  offRebounding: value,
-  defRebounding: value,
-  speed: value,
-  strength: value,
-  stamina: value,
-});
+const makeAttributes = (value: number): PlayerAttributes => {
+  const rating = value as PlayerAttributes["shortRange"];
+  return {
+    shortRange: rating,
+    dunking: rating,
+    midrange: rating,
+    threePoint: rating,
+    handle: rating,
+    passing: rating,
+    vision: rating,
+    perimeterDefense: rating,
+    interiorDefense: rating,
+    stealing: rating,
+    blocking: rating,
+    offRebounding: rating,
+    defRebounding: rating,
+    speed: rating,
+    strength: rating,
+    stamina: rating,
+  } as any;
+};
 
 describe("computeDerivedRatings", () => {
   it("returns all category ratings + ovr, each in 0-99", () => {
@@ -59,7 +62,7 @@ describe("computeDerivedRatings", () => {
       speed: 88,
       strength: 50,
       stamina: 84,
-    };
+    } as any;
 
     const pg = computeDerivedRatings(attrs, "PG");
     const c = computeDerivedRatings(attrs, "C");

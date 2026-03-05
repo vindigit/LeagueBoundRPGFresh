@@ -3,28 +3,35 @@ import { getTopAttributes } from "../components/playerCardUtils";
 import type { PlayerAttributes } from "../types/player";
 
 const sampleAttributes: PlayerAttributes = {
-  shooting: 81,
-  finishing: 77,
-  vision: 81,
+  shortRange: 81,
+  dunking: 77,
+  midrange: 79,
+  threePoint: 81,
   handle: 73,
-  athleticism: 90,
-  defense: 66,
-  rebounding: 62,
-  bbiq: 90,
+  passing: 72,
+  vision: 82,
+  perimeterDefense: 66,
+  interiorDefense: 65,
+  stealing: 90,
+  blocking: 64,
+  offRebounding: 62,
+  defRebounding: 61,
+  speed: 90,
+  strength: 74,
   stamina: 79,
-};
+} as any;
 
 const topAttributes = getTopAttributes(sampleAttributes);
 
-assert.equal(topAttributes.length, 3, "Expected exactly three top attributes.");
+assert.equal(topAttributes.length, 6, "Expected exactly six top attributes.");
 assert.deepEqual(
   topAttributes.map((attribute) => attribute.key),
-  ["athleticism", "bbiq", "shooting"],
+  ["stealing", "speed", "vision", "shortRange", "threePoint", "midrange"],
   "Expected stable ordering for equal ratings.",
 );
 assert.deepEqual(
   topAttributes.map((attribute) => attribute.value),
-  [90, 90, 81],
+  [90, 90, 82, 81, 81, 79],
   "Expected descending attribute values.",
 );
 

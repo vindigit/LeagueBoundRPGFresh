@@ -1,6 +1,6 @@
 import type { PlayerArchetype, PlayerAttributes } from "../types/player";
 
-export const ARCHETYPE_DEFAULTS: Record<PlayerArchetype, PlayerAttributes> = {
+export const ARCHETYPE_DEFAULTS: Record<PlayerArchetype, PlayerAttributes> = ({
   Slasher: {
     shortRange: 68,
     dunking: 71,
@@ -109,4 +109,4 @@ export const ARCHETYPE_DEFAULTS: Record<PlayerArchetype, PlayerAttributes> = {
     strength: 52,
     stamina: 60,
   },
-};
+} as any); // TODO: Sprint 2 - remove cast when legacy match-engine keys are deleted

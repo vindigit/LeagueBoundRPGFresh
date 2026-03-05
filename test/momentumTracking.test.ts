@@ -8,8 +8,22 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
+import type { OldPlayerAttributes, Player } from "../src/types/player";
 
-const createPlayer = (id: string) => ({
+// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const baseAttributes: OldPlayerAttributes = {
+  shooting: 70,
+  finishing: 66,
+  vision: 82,
+  handle: 84,
+  athleticism: 71,
+  defense: 58,
+  rebounding: 44,
+  bbiq: 78,
+  stamina: 80,
+};
+
+const createPlayer = (id: string): Player => ({
   id,
   name: id,
   age: 19,
@@ -18,17 +32,11 @@ const createPlayer = (id: string) => ({
   position: "PG" as const,
   secondaryPosition: "SG" as const,
   archetype: "Playmaker" as const,
+  identity: null,
+  dna: null,
   attributes: {
-    shooting: 70,
-    finishing: 66,
-    vision: 82,
-    handle: 84,
-    athleticism: 71,
-    defense: 58,
-    rebounding: 44,
-    bbiq: 78,
-    stamina: 80,
-  },
+    ...baseAttributes,
+  } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
   gameStats: {
     points: 0,
     assists: 0,

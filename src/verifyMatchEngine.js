@@ -1,3 +1,4 @@
+// TODO: Sprint 2 — this script uses the old 9-attr shape. Update when match engine is rewritten.
 "use strict";
 
 const { register } = require("tsx/cjs/api");
@@ -577,3 +578,4 @@ main().catch((error) => {
   console.error("Match engine verification failed:", error);
   process.exitCode = 1;
 });
+

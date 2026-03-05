@@ -2,7 +2,7 @@ import type { PlayerAttributes } from "../types/player";
 
 type AttributeKey = keyof PlayerAttributes;
 
-const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
+const ATTRIBUTE_LABELS: Partial<Record<AttributeKey, string>> = {
   shortRange: "Short Range",
   dunking: "Dunking",
   midrange: "Mid-Range",
@@ -38,7 +38,7 @@ export const getAllAttributesSorted = (attributes: PlayerAttributes): TopAttribu
     })
     .map(({ key, value }) => ({
       key,
-      label: ATTRIBUTE_LABELS[key],
+      label: ATTRIBUTE_LABELS[key] ?? key,
       value,
     }));
 };

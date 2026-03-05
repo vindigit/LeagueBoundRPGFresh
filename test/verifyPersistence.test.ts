@@ -31,15 +31,15 @@ describe("Career Store Persistence", () => {
   });
 
   it("updates an attribute and clamps it to valid range", () => {
-    const before = useCareerStore.getState().player.attributes.athleticism;
-    useCareerStore.getState().updateAttribute("athleticism", 5);
-    const after = useCareerStore.getState().player.attributes.athleticism;
+    const before = useCareerStore.getState().player.attributes.speed;
+    useCareerStore.getState().updateAttribute("speed", 5);
+    const after = useCareerStore.getState().player.attributes.speed;
     expect(after).toBe(Math.min(99, before + 5));
   });
 
   it("does not exceed 99 when clamping attribute", () => {
-    useCareerStore.getState().updateAttribute("athleticism", 1000);
-    expect(useCareerStore.getState().player.attributes.athleticism).toBe(99);
+    useCareerStore.getState().updateAttribute("speed", 1000);
+    expect(useCareerStore.getState().player.attributes.speed).toBe(99);
   });
 
   it("updates bank balance correctly", () => {

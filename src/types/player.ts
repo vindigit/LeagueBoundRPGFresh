@@ -131,19 +131,6 @@ export interface PlayerAttributes {
   stamina: Rating0To99;
 }
 
-/** @deprecated Temporary - used only by src/compat/attrMapping.ts. Remove after Sprint 2. */
-export interface OldPlayerAttributes {
-  shooting: Rating0To99;
-  finishing: Rating0To99;
-  vision: Rating0To99;
-  handle: Rating0To99;
-  athleticism: Rating0To99;
-  defense: Rating0To99;
-  rebounding: Rating0To99;
-  bbiq: Rating0To99;
-  stamina: Rating0To99;
-}
-
 export interface PlayerGameStats {
   points: number;
   assists: number;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { LeagueLevel } from "../../../types/career";
-import type { OldPlayerAttributes, Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
+import type { Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
 import type { Team } from "../../../types/team";
 import { createSeededRng, initializePossession, simulatePossession, type MatchContext, type PossessionResult, type PossessionState } from "../../../matchEngine";
 import { composeKeyMomentLogText } from "../../../match/keyMoments/logComposer";
@@ -37,32 +37,12 @@ const defaultGameStats: PlayerGameStats = {
   fgm: 0,
 };
 
-type LegacyDelta = Partial<Record<keyof OldPlayerAttributes, number>>;
+type AttributeDelta = Partial<Record<keyof PlayerAttributes, number>>;
 
 const clampRating = (value: number): PlayerAttributes["shortRange"] =>
   Math.max(0, Math.min(99, Math.round(value))) as PlayerAttributes["shortRange"];
 
-const legacyToModernDelta = (delta: LegacyDelta): Partial<Record<keyof PlayerAttributes, number>> => ({
-  shortRange: delta.finishing ?? 0,
-  dunking: (delta.finishing ?? 0) * 0.8 + (delta.athleticism ?? 0) * 0.2,
-  midrange: (delta.shooting ?? 0) * 0.9,
-  threePoint: delta.shooting ?? 0,
-  handle: delta.handle ?? 0,
-  passing: (delta.vision ?? 0) * 0.6 + (delta.handle ?? 0) * 0.4,
-  vision: delta.bbiq ?? 0,
-  perimeterDefense: delta.defense ?? 0,
-  interiorDefense: (delta.defense ?? 0) * 0.7 + (delta.rebounding ?? 0) * 0.3,
-  stealing: (delta.defense ?? 0) * 0.6 + (delta.athleticism ?? 0) * 0.4,
-  blocking: (delta.defense ?? 0) * 0.5 + (delta.athleticism ?? 0) * 0.5,
-  offRebounding: (delta.rebounding ?? 0) * 0.8,
-  defRebounding: delta.rebounding ?? 0,
-  speed: delta.athleticism ?? 0,
-  strength: (delta.athleticism ?? 0) * 0.5 + (delta.finishing ?? 0) * 0.5,
-  stamina: delta.stamina ?? 0,
-} as any);
-
-const withDelta = (attrs: PlayerAttributes, legacyDelta: LegacyDelta): PlayerAttributes => {
-  const delta = legacyToModernDelta(legacyDelta);
+const withDelta = (attrs: PlayerAttributes, delta: AttributeDelta): PlayerAttributes => {
   return {
     shortRange: clampRating(attrs.shortRange + (delta.shortRange ?? 0)),
     dunking: clampRating(attrs.dunking + (delta.dunking ?? 0)),
@@ -80,27 +60,8 @@ const withDelta = (attrs: PlayerAttributes, legacyDelta: LegacyDelta): PlayerAtt
     speed: clampRating(attrs.speed + (delta.speed ?? 0)),
     strength: clampRating(attrs.strength + (delta.strength ?? 0)),
     stamina: clampRating(attrs.stamina + (delta.stamina ?? 0)),
-  } as any;
+  };
 };
-
-const fromLegacyAttributes = (legacy: OldPlayerAttributes): PlayerAttributes => ({
-  shortRange: legacy.finishing,
-  dunking: clampRating(legacy.finishing * 0.8 + legacy.athleticism * 0.2),
-  midrange: clampRating(legacy.shooting * 0.9),
-  threePoint: legacy.shooting,
-  handle: legacy.handle,
-  passing: clampRating(legacy.vision * 0.6 + legacy.handle * 0.4),
-  vision: legacy.bbiq,
-  perimeterDefense: legacy.defense,
-  interiorDefense: clampRating(legacy.defense * 0.7 + legacy.rebounding * 0.3),
-  stealing: clampRating(legacy.defense * 0.6 + legacy.athleticism * 0.4),
-  blocking: clampRating(legacy.defense * 0.5 + legacy.athleticism * 0.5),
-  offRebounding: clampRating(legacy.rebounding * 0.8),
-  defRebounding: legacy.rebounding,
-  speed: legacy.athleticism,
-  strength: clampRating(legacy.athleticism * 0.5 + legacy.finishing * 0.5),
-  stamina: legacy.stamina,
-} as any);
 
 const makePlayer = (
   id: string,
@@ -131,12 +92,12 @@ const buildHomeBoxNames = (userDisplayName: string, userPosition: Position): str
 const getPeriodKey = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePeriod: number): PeriodKey =>
   isOvertime ? `OT${Math.max(1, overtimePeriod)}` : (`Q${quarter}` as PeriodKey);
 
-const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: LegacyDelta }> = {
-  PG: { archetype: "Playmaker", delta: { vision: 7, handle: 6, defense: -3 } },
-  SG: { archetype: "Sharpshooter", delta: { shooting: 8, finishing: -6, vision: -4, defense: -2 } },
-  SF: { archetype: "Slasher", delta: { finishing: 7, athleticism: 6, shooting: -5, vision: -2 } },
-  PF: { archetype: "Stretch Big", delta: { rebounding: 8, defense: 7, shooting: 4, handle: -12 } },
-  C: { archetype: "Paint Beast", delta: { finishing: 11, rebounding: 13, defense: 10, shooting: -14, handle: -18 } },
+const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: AttributeDelta }> = {
+  PG: { archetype: "Playmaker", delta: { passing: 7, handle: 6, perimeterDefense: -3 } },
+  SG: { archetype: "Sharpshooter", delta: { threePoint: 8, shortRange: -6, passing: -4, perimeterDefense: -2 } },
+  SF: { archetype: "Slasher", delta: { shortRange: 7, speed: 6, threePoint: -5, passing: -2 } },
+  PF: { archetype: "Stretch Big", delta: { defRebounding: 8, interiorDefense: 7, threePoint: 4, handle: -12 } },
+  C: { archetype: "Paint Beast", delta: { shortRange: 11, defRebounding: 13, interiorDefense: 10, threePoint: -14, handle: -18 } },
 };
 
 const buildMatchContext = (
@@ -160,27 +121,34 @@ const buildMatchContext = (
     roster: homeRoster,
   };
 
-  const awayBase = fromLegacyAttributes({
-    shooting: 69,
-    finishing: 70,
-    vision: 66,
+  const awayBase: PlayerAttributes = {
+    shortRange: 70,
+    dunking: 67,
+    midrange: 68,
+    threePoint: 69,
     handle: 67,
-    athleticism: 71,
-    defense: 70,
-    rebounding: 69,
-    bbiq: 68,
+    passing: 66,
+    vision: 68,
+    perimeterDefense: 70,
+    interiorDefense: 70,
+    stealing: 66,
+    blocking: 64,
+    offRebounding: 67,
+    defRebounding: 69,
+    speed: 71,
+    strength: 70,
     stamina: 72,
-  });
+  };
 
   const away: Team = {
     name: "Away",
     teamOvr: 0,
     roster: [
-      makePlayer("a1", "Away PG", "Playmaker", "PG", withDelta(awayBase, { vision: 7, handle: 6, defense: -3 })),
-      makePlayer("a2", "Away SG", "Sharpshooter", "SG", withDelta(awayBase, { shooting: 9, finishing: -4 })),
-      makePlayer("a3", "Away SF", "Lockdown Defender", "SF", withDelta(awayBase, { defense: 10, athleticism: 4, shooting: -4 })),
-      makePlayer("a4", "Away PF", "Stretch Big", "PF", withDelta(awayBase, { rebounding: 8, shooting: 5, handle: -12 })),
-      makePlayer("a5", "Away C", "Paint Beast", "C", withDelta(awayBase, { finishing: 9, rebounding: 12, defense: 8, shooting: -12, handle: -16 })),
+      makePlayer("a1", "Away PG", "Playmaker", "PG", withDelta(awayBase, { passing: 7, handle: 6, perimeterDefense: -3 })),
+      makePlayer("a2", "Away SG", "Sharpshooter", "SG", withDelta(awayBase, { threePoint: 9, shortRange: -4 })),
+      makePlayer("a3", "Away SF", "Lockdown Defender", "SF", withDelta(awayBase, { perimeterDefense: 10, speed: 4, threePoint: -4 })),
+      makePlayer("a4", "Away PF", "Stretch Big", "PF", withDelta(awayBase, { defRebounding: 8, threePoint: 5, handle: -12 })),
+      makePlayer("a5", "Away C", "Paint Beast", "C", withDelta(awayBase, { shortRange: 9, defRebounding: 12, interiorDefense: 8, threePoint: -12, handle: -16 })),
     ],
   };
 

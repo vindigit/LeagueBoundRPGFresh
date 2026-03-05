@@ -6,14 +6,33 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { OldPlayerAttributes, Player, PlayerArchetype } from "../src/types/player";
+import type { PlayerAttributes, Player, PlayerArchetype } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
+const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
+  shortRange: 65,
+  dunking: 64,
+  midrange: 65,
+  threePoint: 65,
+  handle: 65,
+  passing: 65,
+  vision: 65,
+  perimeterDefense: 65,
+  interiorDefense: 65,
+  stealing: 65,
+  blocking: 65,
+  offRebounding: 65,
+  defRebounding: 65,
+  speed: 65,
+  strength: 65,
+  stamina: 80,
+  ...overrides,
+});
+
 const makePlayer = (
   id: string,
   archetype: PlayerArchetype,
-  attributes: OldPlayerAttributes,
+  attributes: PlayerAttributes,
   position: Player["position"] = "PG",
 ): Player => ({
   id,
@@ -26,7 +45,7 @@ const makePlayer = (
   archetype,
   identity: null,
   dna: null,
-  attributes: attributes as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+  attributes,
   gameStats: {
     points: 0,
     assists: 0,
@@ -39,28 +58,22 @@ const makePlayer = (
 });
 
 const makeTeam = (prefix: string): Team => {
-  const highHandler: OldPlayerAttributes = {
-    shooting: 65,
-    finishing: 64,
-    vision: 78,
+  const highHandler = makeAttributes({
+    passing: 78,
     handle: 85,
-    athleticism: 70,
-    defense: 72,
-    rebounding: 58,
-    bbiq: 82,
-    stamina: 80,
-  };
-  const lowHandler: OldPlayerAttributes = {
-    shooting: 62,
-    finishing: 60,
-    vision: 28,
+    speed: 70,
+    perimeterDefense: 72,
+    defRebounding: 58,
+    vision: 82,
+  });
+  const lowHandler = makeAttributes({
+    passing: 28,
     handle: 28,
-    athleticism: 67,
-    defense: 66,
-    rebounding: 63,
-    bbiq: 28,
-    stamina: 80,
-  };
+    speed: 67,
+    perimeterDefense: 66,
+    defRebounding: 63,
+    vision: 28,
+  });
 
   return {
     name: `${prefix}-team`,
@@ -103,5 +116,19 @@ describe("ball handler archetype suppression", () => {
 
     expect(playmakerSelections).toBeGreaterThan(lockdownSelections);
     expect(lockdownRate).toBeLessThan(0.25);
+  });
+
+  it("is deterministic for identical seeds and diverges for different seeds", () => {
+    const context: MatchContext = {
+      home: makeTeam("h"),
+      away: makeTeam("a"),
+    };
+
+    const first = runSelections(context, 42, 200);
+    const second = runSelections(context, 42, 200);
+    const third = runSelections(context, 43, 200);
+
+    expect(second).toEqual(first);
+    expect(third).not.toEqual(first);
   });
 });

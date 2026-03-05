@@ -104,7 +104,7 @@ const updateMetrics = (metrics: SimMetrics, result: PossessionResult): SimMetric
   possessions: metrics.possessions + 1,
   fga: metrics.fga + (result.turnoverLikeFailure ? 0 : 1),
   fgm: metrics.fgm + (result.madeShot ? 1 : 0),
-  assists: metrics.assists + (result.assisted ? 1 : 0),
+  assists: metrics.assists + (result.assisted && result.madeShot ? 1 : 0),
   turnoverLikeFailures: metrics.turnoverLikeFailures + (result.turnoverLikeFailure ? 1 : 0),
 });
 
@@ -221,10 +221,7 @@ export const createMatchEngineAdapter = (
     const result = simulatePossession(context, previousState, leagueLevel, rng);
     metrics = updateMetrics(metrics, result);
     const keyMoment = buildKeyMoment(previousState, result);
-    state = {
-      ...result.nextState,
-      ballHandlerIndex: Math.floor(rng() * 5),
-    };
+    state = result.nextState;
 
     return {
       state,

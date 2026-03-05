@@ -1,4 +1,4 @@
-// TODO: Sprint 2 — this script uses the old 9-attr shape. Update when match engine is rewritten.
+// TODO: Sprint 2 ï¿½ this script uses the old 9-attr shape. Update when match engine is rewritten.
 "use strict";
 
 const { register } = require("tsx/cjs/api");
@@ -6,6 +6,52 @@ register();
 
 const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const clampInt = (value) => clamp(Math.round(value), 0, 99);
+
+const LEGACY_ATTR_TO_MODERN = {
+  shooting: ["threePoint", "midrange", "shortRange"],
+  finishing: ["shortRange", "dunking", "strength"],
+  vision: ["passing", "vision"],
+  handle: ["handle"],
+  athleticism: ["speed", "strength", "dunking"],
+  defense: ["perimeterDefense", "interiorDefense", "stealing", "blocking"],
+  rebounding: ["offRebounding", "defRebounding"],
+  bbiq: ["vision", "passing", "handle"],
+  stamina: ["stamina"],
+};
+
+const normalizeLegacyAttributes = (attrs) => {
+  if ("shortRange" in attrs) {
+    return attrs;
+  }
+  const shooting = attrs.shooting ?? 50;
+  const finishing = attrs.finishing ?? 50;
+  const vision = attrs.vision ?? 50;
+  const handle = attrs.handle ?? 50;
+  const athleticism = attrs.athleticism ?? 50;
+  const defense = attrs.defense ?? 50;
+  const rebounding = attrs.rebounding ?? 50;
+  const bbiq = attrs.bbiq ?? 50;
+  const stamina = attrs.stamina ?? 50;
+  return {
+    shortRange: clampInt(finishing),
+    dunking: clampInt(finishing * 0.8 + athleticism * 0.2),
+    midrange: clampInt(shooting * 0.9),
+    threePoint: clampInt(shooting),
+    handle: clampInt(handle),
+    passing: clampInt(vision * 0.6 + handle * 0.4),
+    vision: clampInt(bbiq),
+    perimeterDefense: clampInt(defense),
+    interiorDefense: clampInt(defense * 0.7 + rebounding * 0.3),
+    stealing: clampInt(defense * 0.6 + athleticism * 0.4),
+    blocking: clampInt(defense * 0.5 + athleticism * 0.5),
+    offRebounding: clampInt(rebounding * 0.8),
+    defRebounding: clampInt(rebounding),
+    speed: clampInt(athleticism),
+    strength: clampInt(athleticism * 0.5 + finishing * 0.5),
+    stamina: clampInt(stamina),
+  };
+};
 
 const createPlayer = (id, name, archetype, position, attrs) => ({
   id,
@@ -15,7 +61,7 @@ const createPlayer = (id, name, archetype, position, attrs) => ({
   morale: 50,
   position,
   archetype,
-  attributes: attrs,
+  attributes: normalizeLegacyAttributes(attrs),
   gameStats: { points: 0, assists: 0, rebounds: 0, steals: 0, blocks: 0, fga: 0, fgm: 0 },
 });
 
@@ -87,15 +133,17 @@ const createEvenContext = () => {
 };
 
 const applyBoost = (context, teamKey, attrKey, boost) => {
+  const mappedKeys = LEGACY_ATTR_TO_MODERN[attrKey] ?? [attrKey];
   const target = context[teamKey];
   target.roster = target.roster.map((player) => {
-    const current = player.attributes[attrKey];
+    const nextAttributes = { ...player.attributes };
+    for (const key of mappedKeys) {
+      const current = nextAttributes[key];
+      nextAttributes[key] = clamp(current + boost, 0, 99);
+    }
     return {
       ...player,
-      attributes: {
-        ...player.attributes,
-        [attrKey]: clamp(current + boost, 0, 99),
-      },
+      attributes: nextAttributes,
     };
   });
 };

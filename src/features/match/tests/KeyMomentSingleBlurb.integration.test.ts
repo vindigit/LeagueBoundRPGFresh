@@ -2,18 +2,24 @@ import { act, renderHook } from "@testing-library/react-native";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useMatchStore } from "../store/useMatchStore";
 import type { CareerActions, CareerState } from "../../../types/career";
-import type { OldPlayerAttributes } from "../../../types/player";
+import type { PlayerAttributes } from "../../../types/player";
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
-const baseAttributes: OldPlayerAttributes = {
-  shooting: 80,
-  finishing: 70,
-  vision: 65,
+const baseAttributes: PlayerAttributes = {
+  shortRange: 70,
+  dunking: 75,
+  midrange: 76,
+  threePoint: 80,
   handle: 72,
-  athleticism: 75,
-  defense: 68,
-  rebounding: 50,
-  bbiq: 74,
+  passing: 65,
+  vision: 74,
+  perimeterDefense: 68,
+  interiorDefense: 58,
+  stealing: 66,
+  blocking: 48,
+  offRebounding: 48,
+  defRebounding: 50,
+  speed: 75,
+  strength: 68,
   stamina: 80,
 };
 
@@ -31,9 +37,7 @@ jest.mock("../../../store/useCareerStore", () => ({
         archetype: "Playmaker" as const,
         identity: null,
         dna: null,
-        attributes: {
-          ...baseAttributes,
-        } as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+        attributes: { ...baseAttributes },
         gameStats: {
           points: 0,
           assists: 0,

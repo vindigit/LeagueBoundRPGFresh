@@ -42,14 +42,21 @@ const defaultPlayer: Player = {
   identity: null,
   dna: null,
   attributes: {
-    shooting: 0,
-    finishing: 0,
-    vision: 0,
+    shortRange: 0,
+    dunking: 0,
+    midrange: 0,
+    threePoint: 0,
     handle: 0,
-    athleticism: 0,
-    defense: 0,
-    rebounding: 0,
-    bbiq: 0,
+    passing: 0,
+    vision: 0,
+    perimeterDefense: 0,
+    interiorDefense: 0,
+    stealing: 0,
+    blocking: 0,
+    offRebounding: 0,
+    defRebounding: 0,
+    speed: 0,
+    strength: 0,
     stamina: 0,
   },
   gameStats: {
@@ -78,6 +85,8 @@ const initialCareerState: CareerState = {
   currentNarrativeFile: "",
   lastMatchResult: null,
   newsFeed: [],
+  ovrBudget: 60,
+  exile: null,
 };
 
 const emptyBoxScore = (): MatchBoxScore => ({
@@ -376,6 +385,8 @@ export const useCareerStore = create<CareerStore>()(
             ...typedState,
             view: getInitialCareerView(),
             newsFeed: [],
+            ovrBudget: typedState.ovrBudget ?? 60,
+            exile: typedState.exile ?? null,
           };
         }
 
@@ -389,6 +400,8 @@ export const useCareerStore = create<CareerStore>()(
           player: migratedPlayer,
           view: shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB",
           newsFeed,
+          ovrBudget: typedState.ovrBudget ?? 60,
+          exile: typedState.exile ?? null,
           lastMatchResult: typedState.lastMatchResult
             ? {
                 ...typedState.lastMatchResult,
@@ -415,6 +428,8 @@ export const useCareerStore = create<CareerStore>()(
             }
           : null,
         newsFeed: state.newsFeed,
+        ovrBudget: state.ovrBudget,
+        exile: state.exile,
       }),
     },
   ),

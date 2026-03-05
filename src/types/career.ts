@@ -16,6 +16,8 @@ export enum CareerStatus {
   AMATEUR_LOCKED = "AMATEUR_LOCKED",
 }
 
+export type ExileStatus = "G_LEAGUE" | "OVERSEAS" | "RETIRED";
+
 export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
 
 export interface LastMatchResult {
@@ -42,6 +44,8 @@ export interface CareerState {
   currentNarrativeFile: string;
   lastMatchResult: LastMatchResult | null;
   newsFeed: CareerNewsItem[];
+  ovrBudget: number;
+  exile: ExileStatus | null;
 }
 
 export interface CareerActions {

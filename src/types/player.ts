@@ -1,5 +1,6 @@
 import type { PlayerDNA, PlayerIdentity } from "./backstory";
 export type Position = "PG" | "SG" | "SF" | "PF" | "C";
+export type WingspanPreset = "5_10_6_0" | "6_1_6_3" | "6_4_6_6" | "6_7_6_9" | "6_10_7_0" | "7_1_7_3";
 
 export type PlayerArchetype =
   | "Slasher"
@@ -112,6 +113,26 @@ export type Rating0To99 =
   | 99;
 
 export interface PlayerAttributes {
+  shortRange: Rating0To99;
+  dunking: Rating0To99;
+  midrange: Rating0To99;
+  threePoint: Rating0To99;
+  handle: Rating0To99;
+  passing: Rating0To99;
+  vision: Rating0To99;
+  perimeterDefense: Rating0To99;
+  interiorDefense: Rating0To99;
+  stealing: Rating0To99;
+  blocking: Rating0To99;
+  offRebounding: Rating0To99;
+  defRebounding: Rating0To99;
+  speed: Rating0To99;
+  strength: Rating0To99;
+  stamina: Rating0To99;
+}
+
+/** @deprecated Temporary - used only by src/compat/attrMapping.ts. Remove after Sprint 2. */
+export interface OldPlayerAttributes {
   shooting: Rating0To99;
   finishing: Rating0To99;
   vision: Rating0To99;
@@ -140,7 +161,7 @@ export interface Player {
   bankBalance: number;
   morale: number;
   position: Position;
-  secondaryPosition: Position;
+  secondaryPosition?: Position;
   archetype: PlayerArchetype;
   identity: PlayerIdentity | null;
   dna: PlayerDNA | null;

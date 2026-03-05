@@ -4,14 +4,21 @@ import { useCareerStore } from "../store/useCareerStore";
 import type { PlayerAttributes } from "../types/player";
 
 const ATTRIBUTE_KEYS: ReadonlyArray<keyof PlayerAttributes> = [
-  "shooting",
-  "finishing",
-  "vision",
+  "shortRange",
+  "dunking",
+  "midrange",
+  "threePoint",
   "handle",
-  "athleticism",
-  "defense",
-  "rebounding",
-  "bbiq",
+  "passing",
+  "vision",
+  "perimeterDefense",
+  "interiorDefense",
+  "stealing",
+  "blocking",
+  "offRebounding",
+  "defRebounding",
+  "speed",
+  "strength",
   "stamina",
 ];
 

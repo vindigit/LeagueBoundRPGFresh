@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { LeagueLevel } from "../../../types/career";
-import type { Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
+import type { OldPlayerAttributes, Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
 import type { Team } from "../../../types/team";
 import { createSeededRng, initializePossession, simulatePossession, type MatchContext, type PossessionResult, type PossessionState } from "../../../matchEngine";
 import { composeKeyMomentLogText } from "../../../match/keyMoments/logComposer";
@@ -37,19 +37,69 @@ const defaultGameStats: PlayerGameStats = {
   fgm: 0,
 };
 
-const clampRating = (value: number): PlayerAttributes["shooting"] =>
-  Math.max(0, Math.min(99, Math.round(value))) as PlayerAttributes["shooting"];
+type LegacyDelta = Partial<Record<keyof OldPlayerAttributes, number>>;
 
-const withDelta = (attrs: PlayerAttributes, delta: Partial<Record<keyof PlayerAttributes, number>>): PlayerAttributes => ({
-  shooting: clampRating(attrs.shooting + (delta.shooting ?? 0)),
-  finishing: clampRating(attrs.finishing + (delta.finishing ?? 0)),
-  vision: clampRating(attrs.vision + (delta.vision ?? 0)),
-  handle: clampRating(attrs.handle + (delta.handle ?? 0)),
-  athleticism: clampRating(attrs.athleticism + (delta.athleticism ?? 0)),
-  defense: clampRating(attrs.defense + (delta.defense ?? 0)),
-  rebounding: clampRating(attrs.rebounding + (delta.rebounding ?? 0)),
-  bbiq: clampRating(attrs.bbiq + (delta.bbiq ?? 0)),
-  stamina: clampRating(attrs.stamina + (delta.stamina ?? 0)),
+const clampRating = (value: number): PlayerAttributes["shortRange"] =>
+  Math.max(0, Math.min(99, Math.round(value))) as PlayerAttributes["shortRange"];
+
+const legacyToModernDelta = (delta: LegacyDelta): Partial<Record<keyof PlayerAttributes, number>> => ({
+  shortRange: delta.finishing ?? 0,
+  dunking: (delta.finishing ?? 0) * 0.8 + (delta.athleticism ?? 0) * 0.2,
+  midrange: (delta.shooting ?? 0) * 0.9,
+  threePoint: delta.shooting ?? 0,
+  handle: delta.handle ?? 0,
+  passing: (delta.vision ?? 0) * 0.6 + (delta.handle ?? 0) * 0.4,
+  vision: delta.bbiq ?? 0,
+  perimeterDefense: delta.defense ?? 0,
+  interiorDefense: (delta.defense ?? 0) * 0.7 + (delta.rebounding ?? 0) * 0.3,
+  stealing: (delta.defense ?? 0) * 0.6 + (delta.athleticism ?? 0) * 0.4,
+  blocking: (delta.defense ?? 0) * 0.5 + (delta.athleticism ?? 0) * 0.5,
+  offRebounding: (delta.rebounding ?? 0) * 0.8,
+  defRebounding: delta.rebounding ?? 0,
+  speed: delta.athleticism ?? 0,
+  strength: (delta.athleticism ?? 0) * 0.5 + (delta.finishing ?? 0) * 0.5,
+  stamina: delta.stamina ?? 0,
+});
+
+const withDelta = (attrs: PlayerAttributes, legacyDelta: LegacyDelta): PlayerAttributes => {
+  const delta = legacyToModernDelta(legacyDelta);
+  return {
+    shortRange: clampRating(attrs.shortRange + (delta.shortRange ?? 0)),
+    dunking: clampRating(attrs.dunking + (delta.dunking ?? 0)),
+    midrange: clampRating(attrs.midrange + (delta.midrange ?? 0)),
+    threePoint: clampRating(attrs.threePoint + (delta.threePoint ?? 0)),
+    handle: clampRating(attrs.handle + (delta.handle ?? 0)),
+    passing: clampRating(attrs.passing + (delta.passing ?? 0)),
+    vision: clampRating(attrs.vision + (delta.vision ?? 0)),
+    perimeterDefense: clampRating(attrs.perimeterDefense + (delta.perimeterDefense ?? 0)),
+    interiorDefense: clampRating(attrs.interiorDefense + (delta.interiorDefense ?? 0)),
+    stealing: clampRating(attrs.stealing + (delta.stealing ?? 0)),
+    blocking: clampRating(attrs.blocking + (delta.blocking ?? 0)),
+    offRebounding: clampRating(attrs.offRebounding + (delta.offRebounding ?? 0)),
+    defRebounding: clampRating(attrs.defRebounding + (delta.defRebounding ?? 0)),
+    speed: clampRating(attrs.speed + (delta.speed ?? 0)),
+    strength: clampRating(attrs.strength + (delta.strength ?? 0)),
+    stamina: clampRating(attrs.stamina + (delta.stamina ?? 0)),
+  };
+};
+
+const fromLegacyAttributes = (legacy: OldPlayerAttributes): PlayerAttributes => ({
+  shortRange: legacy.finishing,
+  dunking: clampRating(legacy.finishing * 0.8 + legacy.athleticism * 0.2),
+  midrange: clampRating(legacy.shooting * 0.9),
+  threePoint: legacy.shooting,
+  handle: legacy.handle,
+  passing: clampRating(legacy.vision * 0.6 + legacy.handle * 0.4),
+  vision: legacy.bbiq,
+  perimeterDefense: legacy.defense,
+  interiorDefense: clampRating(legacy.defense * 0.7 + legacy.rebounding * 0.3),
+  stealing: clampRating(legacy.defense * 0.6 + legacy.athleticism * 0.4),
+  blocking: clampRating(legacy.defense * 0.5 + legacy.athleticism * 0.5),
+  offRebounding: clampRating(legacy.rebounding * 0.8),
+  defRebounding: legacy.rebounding,
+  speed: legacy.athleticism,
+  strength: clampRating(legacy.athleticism * 0.5 + legacy.finishing * 0.5),
+  stamina: legacy.stamina,
 });
 
 const makePlayer = (
@@ -81,7 +131,7 @@ const buildHomeBoxNames = (userDisplayName: string, userPosition: Position): str
 const getPeriodKey = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePeriod: number): PeriodKey =>
   isOvertime ? `OT${Math.max(1, overtimePeriod)}` : (`Q${quarter}` as PeriodKey);
 
-const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: Partial<Record<keyof PlayerAttributes, number>> }> = {
+const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; delta: LegacyDelta }> = {
   PG: { archetype: "Playmaker", delta: { vision: 7, handle: 6, defense: -3 } },
   SG: { archetype: "Sharpshooter", delta: { shooting: 8, finishing: -6, vision: -4, defense: -2 } },
   SF: { archetype: "Slasher", delta: { finishing: 7, athleticism: 6, shooting: -5, vision: -2 } },
@@ -110,7 +160,7 @@ const buildMatchContext = (
     roster: homeRoster,
   };
 
-  const awayBase: PlayerAttributes = {
+  const awayBase = fromLegacyAttributes({
     shooting: 69,
     finishing: 70,
     vision: 66,
@@ -120,7 +170,7 @@ const buildMatchContext = (
     rebounding: 69,
     bbiq: 68,
     stamina: 72,
-  };
+  });
 
   const away: Team = {
     name: "Away",

@@ -16,14 +16,21 @@ export interface GeneratedBackstory {
 }
 
 const ALL_ATTRIBUTE_KEYS: ReadonlyArray<keyof PlayerAttributes> = [
-  "shooting",
-  "finishing",
-  "vision",
+  "shortRange",
+  "dunking",
+  "midrange",
+  "threePoint",
   "handle",
-  "athleticism",
-  "defense",
-  "rebounding",
-  "bbiq",
+  "passing",
+  "vision",
+  "perimeterDefense",
+  "interiorDefense",
+  "stealing",
+  "blocking",
+  "offRebounding",
+  "defRebounding",
+  "speed",
+  "strength",
   "stamina",
 ];
 
@@ -38,53 +45,59 @@ const AGE_BAND_OFFSETS: Record<PlayerIdentity["ageStartedBand"], number> = {
 
 const FRAME_BONUSES: Record<PlayerIdentity["bodyFrame"], Partial<Record<keyof PlayerAttributes, number>>> = {
   Lean: {
-    athleticism: 1,
+    speed: 1,
     handle: 1,
-    rebounding: -2,
-    finishing: -1,
+    passing: 1,
+    offRebounding: -1,
+    interiorDefense: -1,
+    strength: -1,
   },
   Athletic: {
-    athleticism: 2,
-    finishing: 1,
-    defense: 1,
+    speed: 2,
+    dunking: 1,
+    shortRange: 1,
+    perimeterDefense: 1,
   },
   Stocky: {
-    rebounding: 2,
-    defense: 1,
-    finishing: 1,
+    offRebounding: 1,
+    defRebounding: 1,
+    interiorDefense: 1,
+    strength: 2,
     handle: -1,
-    shooting: -1,
+    speed: -1,
+    threePoint: -1,
   },
 };
 
 const CURVE_CAP_BONUSES: Record<GrowthCurve, Partial<Record<keyof PlayerAttributes, number>>> = {
   EARLY_STARTER: {
-    bbiq: 1,
+    passing: 1,
     vision: 1,
-    shooting: 1,
+    threePoint: 1,
   },
   STEADY: {},
   LATE_BLOOMER: {
-    finishing: 1,
-    athleticism: 1,
+    shortRange: 1,
+    dunking: 1,
+    speed: 1,
     stamina: 1,
   },
 };
 
 const POSITION_CAP_BONUSES: Record<Position, Partial<Record<keyof PlayerAttributes, number>>> = {
-  PG: { vision: 2, handle: 2, rebounding: -1 },
-  SG: { shooting: 2, handle: 1 },
-  SF: { athleticism: 1, defense: 1, rebounding: 1 },
-  PF: { finishing: 1, rebounding: 2, defense: 1, handle: -1 },
-  C: { finishing: 1, rebounding: 2, defense: 2, handle: -2 },
+  PG: { passing: 2, vision: 2, handle: 2, perimeterDefense: 1, defRebounding: -1, blocking: -1 },
+  SG: { threePoint: 2, midrange: 1, handle: 1, passing: 1, perimeterDefense: 1 },
+  SF: { shortRange: 1, midrange: 1, speed: 1, perimeterDefense: 1, defRebounding: 1 },
+  PF: { shortRange: 1, dunking: 1, interiorDefense: 2, offRebounding: 2, defRebounding: 2, strength: 1, handle: -1 },
+  C: { shortRange: 1, dunking: 1, interiorDefense: 2, blocking: 2, offRebounding: 2, defRebounding: 2, strength: 2, handle: -2, threePoint: -1 },
 };
 
 const POSITION_START_BONUSES: Record<Position, Partial<Record<keyof PlayerAttributes, number>>> = {
-  PG: { vision: 1, handle: 1 },
-  SG: { shooting: 1 },
-  SF: { athleticism: 1, defense: 1 },
-  PF: { finishing: 1, rebounding: 1 },
-  C: { rebounding: 1, defense: 1 },
+  PG: { passing: 1, vision: 1, handle: 1 },
+  SG: { threePoint: 1, midrange: 1 },
+  SF: { shortRange: 1, speed: 1, perimeterDefense: 1 },
+  PF: { dunking: 1, interiorDefense: 1, defRebounding: 1 },
+  C: { interiorDefense: 1, blocking: 1, defRebounding: 1, strength: 1 },
 };
 
 const SECONDARY_POSITION_SCALE = 0.5;
@@ -111,9 +124,11 @@ const sanitizeNamePart = (value: string, fallback: string): string => {
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const asRating = (value: number): PlayerAttributes["shooting"] => clamp(Math.round(value), 0, 99) as PlayerAttributes["shooting"];
+const asRating = (value: number): PlayerAttributes["shortRange"] =>
+  clamp(Math.round(value), 0, 99) as PlayerAttributes["shortRange"];
 
-const asCap = (value: number): PlayerAttributes["shooting"] => clamp(Math.round(value), 40, 99) as PlayerAttributes["shooting"];
+const asCap = (value: number): PlayerAttributes["shortRange"] =>
+  clamp(Math.round(value), 40, 99) as PlayerAttributes["shortRange"];
 
 const getAgeStartedBand = (ageStarted: number): PlayerIdentity["ageStartedBand"] => {
   if (ageStarted <= 6) {

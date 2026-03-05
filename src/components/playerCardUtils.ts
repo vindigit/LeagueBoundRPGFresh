@@ -3,14 +3,21 @@ import type { PlayerAttributes } from "../types/player";
 type AttributeKey = keyof PlayerAttributes;
 
 const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
-  shooting: "Shooting",
-  finishing: "Finishing",
-  vision: "Vision",
+  shortRange: "Short Range",
+  dunking: "Dunking",
+  midrange: "Mid-Range",
+  threePoint: "Three-Point",
   handle: "Handle",
-  athleticism: "Athleticism",
-  defense: "Defense",
-  rebounding: "Rebounding",
-  bbiq: "Basketball IQ",
+  passing: "Passing",
+  vision: "Vision",
+  perimeterDefense: "Perimeter D",
+  interiorDefense: "Interior D",
+  stealing: "Stealing",
+  blocking: "Blocking",
+  offRebounding: "Off. Rebounding",
+  defRebounding: "Def. Rebounding",
+  speed: "Speed",
+  strength: "Strength",
   stamina: "Stamina",
 };
 

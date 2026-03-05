@@ -1,22 +1,28 @@
 ﻿import { createMatchEngineAdapter } from "../src/matchEngineAdapter";
 import { useCareerStore } from "../src/store/useCareerStore";
 import { normalizePlayerStateForInk } from "../src/types/player";
-import type { OldPlayerAttributes } from "../src/types/player";
+import type { PlayerAttributes } from "../src/types/player";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
-const makeLegacyAttributes = (overrides: Partial<OldPlayerAttributes> = {}): OldPlayerAttributes => ({
-  shooting: 70,
-  finishing: 66,
-  vision: 82,
+const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
+  shortRange: 66,
+  dunking: 60,
+  midrange: 60,
+  threePoint: 70,
   handle: 84,
-  athleticism: 71,
-  defense: 58,
-  rebounding: 44,
-  bbiq: 78,
+  passing: 82,
+  vision: 78,
+  perimeterDefense: 58,
+  interiorDefense: 58,
+  stealing: 60,
+  blocking: 60,
+  offRebounding: 44,
+  defRebounding: 44,
+  speed: 71,
+  strength: 60,
   stamina: 80,
   ...overrides,
 });
@@ -31,17 +37,17 @@ describe("Player state compatibility", () => {
       Morale: 55,
       Position: "SG",
       archetype: "Sharpshooter",
-      attributes: makeLegacyAttributes({
-        shooting: 80,
-        finishing: 65,
-        vision: 60,
+      attributes: makeAttributes({
+        threePoint: 80,
+        shortRange: 65,
+        passing: 60,
         handle: 70,
-        athleticism: 72,
-        defense: 58,
-        rebounding: 49,
-        bbiq: 68,
+        speed: 72,
+        perimeterDefense: 58,
+        defRebounding: 49,
+        vision: 68,
         stamina: 75,
-      }) as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+      }),
       gameStats: {
         points: 0,
         assists: 0,
@@ -72,17 +78,17 @@ describe("Player state compatibility", () => {
       Morale: 10,
       Position: "C",
       archetype: "Playmaker",
-      attributes: makeLegacyAttributes({
-        shooting: 70,
-        finishing: 70,
-        vision: 80,
+      attributes: makeAttributes({
+        threePoint: 70,
+        shortRange: 70,
+        passing: 80,
         handle: 82,
-        athleticism: 74,
-        defense: 64,
-        rebounding: 50,
-        bbiq: 72,
+        speed: 74,
+        perimeterDefense: 64,
+        defRebounding: 50,
+        vision: 72,
         stamina: 78,
-      }) as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+      }),
       gameStats: {
         points: 0,
         assists: 0,
@@ -112,7 +118,7 @@ describe("Player state compatibility", () => {
       archetype: "Playmaker" as const,
       identity: null,
       dna: null,
-      attributes: makeLegacyAttributes() as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+      attributes: makeAttributes(),
       gameStats: {
         points: 0,
         assists: 0,
@@ -164,17 +170,17 @@ describe("Player state compatibility", () => {
         Morale: 64,
         Position: "SF",
         archetype: "Slasher",
-        attributes: makeLegacyAttributes({
-          shooting: 60,
-          finishing: 75,
-          vision: 55,
+        attributes: makeAttributes({
+          threePoint: 60,
+          shortRange: 75,
+          passing: 55,
           handle: 66,
-          athleticism: 80,
-          defense: 57,
-          rebounding: 61,
-          bbiq: 63,
+          speed: 80,
+          perimeterDefense: 57,
+          defRebounding: 61,
+          vision: 63,
           stamina: 79,
-        }) as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+        }),
         gameStats: {
           points: 0,
           assists: 0,
@@ -196,7 +202,7 @@ describe("Player state compatibility", () => {
           potentialTier: string;
           caps: { threePoint: number; shortRange: number };
         };
-        attributes: { shooting: number; finishing: number };
+        attributes: Record<string, number>;
       };
       newsFeed: unknown[];
       view: string;
@@ -217,5 +223,4 @@ describe("Player state compatibility", () => {
     expect(migrated.view).not.toBe("BACKSTORY");
   });
 });
-
 

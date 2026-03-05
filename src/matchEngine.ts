@@ -161,14 +161,21 @@ export const createSeededRng = (seed: number): (() => number) => {
 
 export const getPlayerOvr = (player: Player): number =>
   average([
-    player.attributes.shooting,
-    player.attributes.finishing,
-    player.attributes.vision,
+    player.attributes.shortRange,
+    player.attributes.dunking,
+    player.attributes.midrange,
+    player.attributes.threePoint,
     player.attributes.handle,
-    player.attributes.athleticism,
-    player.attributes.defense,
-    player.attributes.rebounding,
-    player.attributes.bbiq,
+    player.attributes.passing,
+    player.attributes.vision,
+    player.attributes.perimeterDefense,
+    player.attributes.interiorDefense,
+    player.attributes.stealing,
+    player.attributes.blocking,
+    player.attributes.offRebounding,
+    player.attributes.defRebounding,
+    player.attributes.speed,
+    player.attributes.strength,
     player.attributes.stamina,
   ]);
 
@@ -191,37 +198,40 @@ const getPlayerImpact = (
   state: PossessionState,
   leagueLevel: LeagueLevel,
 ): {
-  shooting: number;
-  finishing: number;
-  vision: number;
+  threePoint: number;
+  shortRange: number;
+  passing: number;
   handle: number;
-  athleticism: number;
-  defense: number;
-  rebounding: number;
-  bbiq: number;
+  speed: number;
+  perimeterDefense: number;
+  defRebounding: number;
+  offRebounding: number;
+  vision: number;
   stamina: number;
   fatigueMultiplier: number;
 } => {
-  const shooting = getScaledAttribute(player.attributes.shooting, leagueLevel);
-  const finishing = getScaledAttribute(player.attributes.finishing, leagueLevel);
-  const vision = getScaledAttribute(player.attributes.vision, leagueLevel);
+  const threePoint = getScaledAttribute(player.attributes.threePoint, leagueLevel);
+  const shortRange = getScaledAttribute(player.attributes.shortRange, leagueLevel);
+  const passing = getScaledAttribute(player.attributes.passing, leagueLevel);
   const handle = getScaledAttribute(player.attributes.handle, leagueLevel);
-  const athleticism = getScaledAttribute(player.attributes.athleticism, leagueLevel);
-  const defense = getScaledAttribute(player.attributes.defense, leagueLevel);
-  const rebounding = getScaledAttribute(player.attributes.rebounding, leagueLevel);
-  const bbiq = getScaledAttribute(player.attributes.bbiq, leagueLevel);
+  const speed = getScaledAttribute(player.attributes.speed, leagueLevel);
+  const perimeterDefense = getScaledAttribute(player.attributes.perimeterDefense, leagueLevel);
+  const defRebounding = getScaledAttribute(player.attributes.defRebounding, leagueLevel);
+  const offRebounding = getScaledAttribute(player.attributes.offRebounding, leagueLevel);
+  const vision = getScaledAttribute(player.attributes.vision, leagueLevel);
   const stamina = getScaledAttribute(player.attributes.stamina, leagueLevel);
   const fatigueMultiplier = getFatigueMultiplier(stamina, state.possessionIndex);
 
   return {
-    shooting: shooting * fatigueMultiplier,
-    finishing: finishing * fatigueMultiplier,
-    vision: vision * fatigueMultiplier,
+    threePoint: threePoint * fatigueMultiplier,
+    shortRange: shortRange * fatigueMultiplier,
+    passing: passing * fatigueMultiplier,
     handle: handle * fatigueMultiplier,
-    athleticism: athleticism * fatigueMultiplier,
-    defense: defense * fatigueMultiplier,
-    rebounding: rebounding * fatigueMultiplier,
-    bbiq: bbiq * fatigueMultiplier,
+    speed: speed * fatigueMultiplier,
+    perimeterDefense: perimeterDefense * fatigueMultiplier,
+    defRebounding: defRebounding * fatigueMultiplier,
+    offRebounding: offRebounding * fatigueMultiplier,
+    vision: vision * fatigueMultiplier,
     stamina,
     fatigueMultiplier,
   };
@@ -318,11 +328,9 @@ const pickBallHandlerIndex = (
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, state, leagueLevel);
-    const baseWeight = impact.handle * 0.45 + impact.bbiq * 0.35 + impact.vision * 0.2;
-    const archetypePenalty = tuning.ballHandlerArchetypeMultipliers[player.archetype] ?? 1;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: baseWeight * archetypePenalty,
+      weight: impact.handle + impact.vision + impact.passing,
     };
   });
   return weightedPick(weighted, rng);
@@ -338,7 +346,7 @@ const pickDefenderIndex = (
     const impact = getPlayerImpact(player, state, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.defense * 0.6 + impact.athleticism * 0.4,
+      weight: impact.perimeterDefense * 0.6 + impact.speed * 0.4,
     };
   });
   return weightedPick(weighted, rng);
@@ -358,7 +366,7 @@ const pickAssistReceiverIndex = (
       const impact = getPlayerImpact(player, state, leagueLevel);
       return {
         key: index as 0 | 1 | 2 | 3 | 4,
-        weight: impact.shooting * 0.5 + impact.finishing * 0.5,
+        weight: impact.threePoint * 0.5 + impact.shortRange * 0.5,
       };
     });
   return weightedPick(weighted, rng);
@@ -374,7 +382,7 @@ const pickRebounderIndex = (
     const impact = getPlayerImpact(player, state, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.rebounding * 0.7 + impact.athleticism * 0.3,
+      weight: impact.defRebounding * 0.7 + impact.speed * 0.3,
     };
   });
   return weightedPick(weighted, rng);
@@ -386,10 +394,10 @@ const pickShotZone = (
   rng: () => number,
 ): ShotZone => {
   const base = tuning.shotZoneByAction[action];
-  const suppressThree = shooterImpact.shooting < tuning.lowShootingThreeSuppressionThreshold;
-  const shootingTilt = (shooterImpact.shooting - 50) * tuning.shotZoneSkillWeight;
-  const finishingTilt = (shooterImpact.finishing - 50) * tuning.shotZoneSkillWeight;
-  const bbiqTilt = (shooterImpact.bbiq - 50) * tuning.shotZoneBbiqWeight;
+  const suppressThree = shooterImpact.threePoint < tuning.lowShootingThreeSuppressionThreshold;
+  const shootingTilt = (shooterImpact.threePoint - 50) * tuning.shotZoneSkillWeight;
+  const finishingTilt = (shooterImpact.shortRange - 50) * tuning.shotZoneSkillWeight;
+  const bbiqTilt = (shooterImpact.vision - 50) * tuning.shotZoneBbiqWeight;
   const fatigueTilt = (shooterImpact.fatigueMultiplier - 1) * 100 * tuning.shotZoneFatigueWeight;
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
@@ -421,10 +429,10 @@ const getTurnoverProbability = (
   const defenderPressure = average(
     defenseTeam.roster.map((player) => {
       const impact = getPlayerImpact(player, state, leagueLevel);
-      return impact.defense * 0.65 + impact.athleticism * 0.35;
+      return impact.perimeterDefense * 0.65 + impact.speed * 0.35;
     }),
   );
-  const ballSecurity = ballHandlerImpact.handle * 0.7 + ballHandlerImpact.bbiq * 0.3;
+  const ballSecurity = ballHandlerImpact.handle * 0.7 + ballHandlerImpact.vision * 0.3;
 
   return clamp(
     tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor,
@@ -439,7 +447,7 @@ const getStealProbability = (
 ): number =>
   clamp(
     tuning.stealBase +
-      (defenderImpact.defense * 0.65 + defenderImpact.athleticism * 0.35 - ballHandlerImpact.handle) /
+      (defenderImpact.perimeterDefense * 0.65 + defenderImpact.speed * 0.35 - ballHandlerImpact.handle) /
         tuning.stealDivisor,
     tuning.stealMin,
     tuning.stealMax,
@@ -451,7 +459,7 @@ const getAssistProbability = (
 ): number =>
   clamp(
     tuning.assistBase +
-      (passerImpact.vision * 0.7 + passerImpact.bbiq * 0.3 - shooterImpact.bbiq * 0.15) / tuning.assistDivisor,
+      (passerImpact.passing * 0.7 + passerImpact.vision * 0.3 - shooterImpact.vision * 0.15) / tuning.assistDivisor,
     tuning.assistMin,
     tuning.assistMax,
   );
@@ -465,8 +473,8 @@ const getBlockProbability = (
     return clamp(tuning.blockBase * 0.35, tuning.blockMin, tuning.blockMax);
   }
 
-  const defenderBlockValue = defenderImpact.defense * 0.55 + defenderImpact.athleticism * 0.45;
-  const shooterReleaseValue = shooterImpact.finishing * (shotZone === "rim" ? 0.7 : 0.45) + shooterImpact.shooting * 0.35;
+  const defenderBlockValue = defenderImpact.perimeterDefense * 0.55 + defenderImpact.speed * 0.45;
+  const shooterReleaseValue = shooterImpact.shortRange * (shotZone === "rim" ? 0.7 : 0.45) + shooterImpact.threePoint * 0.35;
 
   return clamp(
     tuning.blockBase + (defenderBlockValue - shooterReleaseValue) / tuning.blockDivisor,
@@ -492,13 +500,13 @@ const getShotMakeProbability = (
 
   const offenseValue =
     shotZone === "three"
-      ? shooterImpact.shooting * 0.85 + shooterImpact.bbiq * 0.15
+      ? shooterImpact.threePoint * 0.85 + shooterImpact.vision * 0.15
       : shotZone === "midrange"
-        ? shooterImpact.shooting * 0.6 + shooterImpact.finishing * 0.2 + shooterImpact.bbiq * 0.2
-        : shooterImpact.finishing * 0.65 + shooterImpact.athleticism * 0.25 + shooterImpact.bbiq * 0.1;
+        ? shooterImpact.threePoint * 0.6 + shooterImpact.shortRange * 0.2 + shooterImpact.vision * 0.2
+        : shooterImpact.shortRange * 0.65 + shooterImpact.speed * 0.25 + shooterImpact.vision * 0.1;
 
-  const defenseValue = defenderImpact.defense * 0.7 + defenderImpact.athleticism * 0.3;
-  const variance = getDecisionVariance(shooterImpact.bbiq, rng);
+  const defenseValue = defenderImpact.perimeterDefense * 0.7 + defenderImpact.speed * 0.3;
+  const variance = getDecisionVariance(shooterImpact.vision, rng);
   const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 0.2;
   const offenseEdge = (offenseValue - defenseValue) / tuning.shotOffenseDivisor;
 
@@ -521,14 +529,14 @@ const getOffensiveReboundProbability = (
   const offenseReb = average(
     offenseTeam.roster.map((player) => {
       const impact = getPlayerImpact(player, state, leagueLevel);
-      return impact.rebounding * 0.7 + impact.athleticism * 0.3;
+      return impact.offRebounding * 0.7 + impact.speed * 0.3;
     }),
   );
 
   const defenseReb = average(
     defenseTeam.roster.map((player) => {
       const impact = getPlayerImpact(player, state, leagueLevel);
-      return impact.rebounding * 0.75 + impact.bbiq * 0.25;
+      return impact.defRebounding * 0.75 + impact.vision * 0.25;
     }),
   );
 
@@ -546,9 +554,9 @@ const getPutbackMakeProbability = (
   defenderImpact: ReturnType<typeof getPlayerImpact>,
   rng: () => number,
 ): number => {
-  const offenseValue = shooterImpact.finishing * 0.65 + shooterImpact.athleticism * 0.35;
-  const defenseValue = defenderImpact.defense * 0.65 + defenderImpact.rebounding * 0.35;
-  const variance = getDecisionVariance(shooterImpact.bbiq, rng);
+  const offenseValue = shooterImpact.shortRange * 0.65 + shooterImpact.speed * 0.35;
+  const defenseValue = defenderImpact.perimeterDefense * 0.65 + defenderImpact.defRebounding * 0.35;
+  const variance = getDecisionVariance(shooterImpact.vision, rng);
 
   return clamp(
     tuning.putbackBase + (offenseValue - defenseValue) / tuning.putbackDivisor + variance / 120,
@@ -785,14 +793,21 @@ export const initializePossession = (
       average(
         team.roster.map((player) =>
           average([
-            getScaledAttribute(player.attributes.shooting, leagueLevel),
-            getScaledAttribute(player.attributes.finishing, leagueLevel),
-            getScaledAttribute(player.attributes.vision, leagueLevel),
+            getScaledAttribute(player.attributes.shortRange, leagueLevel),
+            getScaledAttribute(player.attributes.dunking, leagueLevel),
+            getScaledAttribute(player.attributes.midrange, leagueLevel),
+            getScaledAttribute(player.attributes.threePoint, leagueLevel),
             getScaledAttribute(player.attributes.handle, leagueLevel),
-            getScaledAttribute(player.attributes.athleticism, leagueLevel),
-            getScaledAttribute(player.attributes.defense, leagueLevel),
-            getScaledAttribute(player.attributes.rebounding, leagueLevel),
-            getScaledAttribute(player.attributes.bbiq, leagueLevel),
+            getScaledAttribute(player.attributes.passing, leagueLevel),
+            getScaledAttribute(player.attributes.vision, leagueLevel),
+            getScaledAttribute(player.attributes.perimeterDefense, leagueLevel),
+            getScaledAttribute(player.attributes.interiorDefense, leagueLevel),
+            getScaledAttribute(player.attributes.stealing, leagueLevel),
+            getScaledAttribute(player.attributes.blocking, leagueLevel),
+            getScaledAttribute(player.attributes.offRebounding, leagueLevel),
+            getScaledAttribute(player.attributes.defRebounding, leagueLevel),
+            getScaledAttribute(player.attributes.speed, leagueLevel),
+            getScaledAttribute(player.attributes.strength, leagueLevel),
             getScaledAttribute(player.attributes.stamina, leagueLevel),
           ]),
         ),

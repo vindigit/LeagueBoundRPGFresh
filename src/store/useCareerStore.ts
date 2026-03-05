@@ -58,7 +58,7 @@ const defaultPlayer: Player = {
     speed: 0,
     strength: 0,
     stamina: 0,
-  } as any,
+  },
   gameStats: {
     points: 0,
     assists: 0,

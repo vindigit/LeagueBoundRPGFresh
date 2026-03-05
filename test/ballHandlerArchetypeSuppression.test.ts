@@ -6,14 +6,13 @@ import {
   type PossessionState,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
-import type { OldPlayerAttributes, Player, PlayerArchetype } from "../src/types/player";
+import type { Player, PlayerAttributes, PlayerArchetype } from "../src/types/player";
 import type { Team } from "../src/types/team";
 
-// TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
 const makePlayer = (
   id: string,
   archetype: PlayerArchetype,
-  attributes: OldPlayerAttributes,
+  attributes: PlayerAttributes,
   position: Player["position"] = "PG",
 ): Player => ({
   id,
@@ -26,7 +25,7 @@ const makePlayer = (
   archetype,
   identity: null,
   dna: null,
-  attributes: attributes as any, // TODO: Sprint 2 — match engine still reads old 9-attr keys
+  attributes,
   gameStats: {
     points: 0,
     assists: 0,
@@ -39,26 +38,40 @@ const makePlayer = (
 });
 
 const makeTeam = (prefix: string): Team => {
-  const highHandler: OldPlayerAttributes = {
-    shooting: 65,
-    finishing: 64,
-    vision: 78,
+  const highHandler: PlayerAttributes = {
+    shortRange: 64,
+    dunking: 60,
+    midrange: 60,
+    threePoint: 65,
     handle: 85,
-    athleticism: 70,
-    defense: 72,
-    rebounding: 58,
-    bbiq: 82,
+    passing: 78,
+    vision: 82,
+    perimeterDefense: 72,
+    interiorDefense: 60,
+    stealing: 60,
+    blocking: 60,
+    offRebounding: 58,
+    defRebounding: 58,
+    speed: 70,
+    strength: 60,
     stamina: 80,
   };
-  const lowHandler: OldPlayerAttributes = {
-    shooting: 62,
-    finishing: 60,
-    vision: 28,
+  const lowHandler: PlayerAttributes = {
+    shortRange: 60,
+    dunking: 60,
+    midrange: 60,
+    threePoint: 62,
     handle: 28,
-    athleticism: 67,
-    defense: 66,
-    rebounding: 63,
-    bbiq: 28,
+    passing: 28,
+    vision: 28,
+    perimeterDefense: 66,
+    interiorDefense: 60,
+    stealing: 60,
+    blocking: 60,
+    offRebounding: 63,
+    defRebounding: 63,
+    speed: 67,
+    strength: 60,
     stamina: 80,
   };
 
@@ -89,8 +102,22 @@ const runSelections = (context: MatchContext, seed: number, possessions: number)
   return counts;
 };
 
-describe("ball handler archetype suppression", () => {
-  it("suppresses Lockdown Defender primary handler frequency versus equivalent Playmaker", () => {
+describe("ball handler attribute-driven selection", () => {
+  it("selects players with high handle+vision+passing far more often than low-attribute players", () => {
+    const context: MatchContext = {
+      home: makeTeam("h"),
+      away: makeTeam("a"),
+    };
+
+    const counts = runSelections(context, 20260303, 900);
+    const highHandlerSelections = counts[0] + counts[1];
+    const lowHandlerSelections = counts[2] + counts[3] + counts[4];
+
+    // High handle+vision+passing players should dominate selection
+    expect(highHandlerSelections).toBeGreaterThan(lowHandlerSelections * 2);
+  });
+
+  it("does not suppress Lockdown Defender versus Playmaker when attributes are equal", () => {
     const context: MatchContext = {
       home: makeTeam("h"),
       away: makeTeam("a"),
@@ -99,9 +126,11 @@ describe("ball handler archetype suppression", () => {
     const counts = runSelections(context, 20260303, 900);
     const lockdownSelections = counts[0];
     const playmakerSelections = counts[1];
-    const lockdownRate = lockdownSelections / counts.reduce((sum, value) => sum + value, 0);
+    const total = counts.reduce((sum, value) => sum + value, 0);
 
-    expect(playmakerSelections).toBeGreaterThan(lockdownSelections);
-    expect(lockdownRate).toBeLessThan(0.25);
+    // Both players have identical handle+vision+passing, so rates should be similar (within 10% of each other)
+    const lockdownRate = lockdownSelections / total;
+    const playmakerRate = playmakerSelections / total;
+    expect(Math.abs(lockdownRate - playmakerRate)).toBeLessThan(0.1);
   });
 });

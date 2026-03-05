@@ -1,5 +1,4 @@
-// Temporary bridge: maps old 9-attr players to new 16-attr shape
-// DELETE THIS FILE after Sprint 2
+// TODO: Remove this file after all old save-game data has been migrated to the 16-attr shape (post-Sprint 2).
 
 import type { OldPlayerAttributes, PlayerAttributes, Rating0To99 } from "../types/player";
 
@@ -24,4 +23,4 @@ export const expandAttributes = (old: OldPlayerAttributes): PlayerAttributes =>
   speed: old.athleticism,
   strength: clampRating(old.athleticism * 0.5 + old.finishing * 0.5),
   stamina: old.stamina,
-  } as any); // TODO: Sprint 2 - remove cast when legacy match-engine keys are deleted
+  } as PlayerAttributes);

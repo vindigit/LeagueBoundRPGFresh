@@ -1,6 +1,7 @@
 import {
   createSeededRng,
   initializePossession,
+  pickBallHandlerIndex,
   simulatePossession,
   type MatchContext,
   type PossessionState,
@@ -103,19 +104,19 @@ const runSelections = (context: MatchContext, seed: number, possessions: number)
 };
 
 describe("ball handler archetype suppression", () => {
-  it("suppresses Lockdown Defender primary handler frequency versus equivalent Playmaker", () => {
+  it("prefers players with higher handle, vision, and passing independent of archetype", () => {
     const context: MatchContext = {
       home: makeTeam("h"),
       away: makeTeam("a"),
     };
 
     const counts = runSelections(context, 20260303, 900);
-    const lockdownSelections = counts[0];
-    const playmakerSelections = counts[1];
-    const lockdownRate = lockdownSelections / counts.reduce((sum, value) => sum + value, 0);
+    const primarySelections = counts[0] + counts[1];
+    const supportSelections = counts[2] + counts[3] + counts[4];
 
-    expect(playmakerSelections).toBeGreaterThan(lockdownSelections);
-    expect(lockdownRate).toBeLessThan(0.25);
+    expect(counts[0]).toBeGreaterThan(counts[2]);
+    expect(counts[1]).toBeGreaterThan(counts[3]);
+    expect(primarySelections).toBeGreaterThan(supportSelections);
   });
 
   it("is deterministic for identical seeds and diverges for different seeds", () => {
@@ -130,5 +131,25 @@ describe("ball handler archetype suppression", () => {
 
     expect(second).toEqual(first);
     expect(third).not.toEqual(first);
+  });
+
+  it("keeps handler picks in-bounds for both teams", () => {
+    const context: MatchContext = {
+      home: makeTeam("h"),
+      away: makeTeam("a"),
+    };
+    const rng = createSeededRng(55);
+    const emptyTouches = {
+      home: [0, 0, 0, 0, 0] as [number, number, number, number, number],
+      away: [0, 0, 0, 0, 0] as [number, number, number, number, number],
+    };
+
+    const homePick = pickBallHandlerIndex(context.home, "home", emptyTouches, LeagueLevel.PRO, rng);
+    const awayPick = pickBallHandlerIndex(context.away, "away", emptyTouches, LeagueLevel.PRO, rng);
+
+    expect(homePick).toBeGreaterThanOrEqual(0);
+    expect(homePick).toBeLessThan(5);
+    expect(awayPick).toBeGreaterThanOrEqual(0);
+    expect(awayPick).toBeLessThan(5);
   });
 });

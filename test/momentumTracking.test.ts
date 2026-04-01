@@ -162,18 +162,24 @@ describe("momentum tracking", () => {
     }
   });
 
-  it("resets touch counters on possession flip", () => {
+  it("persists touch counters across possession flips and resets on new game start", () => {
     const context = createContext();
     const rng = createSeededRng(777);
     const initial = initializePossession(context, LeagueLevel.PRO, rng, 240);
 
     const first = simulatePossession(context, initial, LeagueLevel.PRO, rng);
     const second = simulatePossession(context, first.nextState, LeagueLevel.PRO, rng);
+    const fresh = initializePossession(context, LeagueLevel.PRO, createSeededRng(777), 240);
 
-    expect(first.nextState.homeTouches).toEqual([0, 0, 0, 0, 0]);
-    expect(first.nextState.awayTouches).toEqual([0, 0, 0, 0, 0]);
-    expect(second.nextState.homeTouches).toEqual([0, 0, 0, 0, 0]);
-    expect(second.nextState.awayTouches).toEqual([0, 0, 0, 0, 0]);
+    expect(first.nextState.homeTouches.some((count) => count > 0) || first.nextState.awayTouches.some((count) => count > 0)).toBe(true);
+    expect(second.nextState.homeTouches.reduce((sum, count) => sum + count, 0)).toBeGreaterThanOrEqual(
+      first.nextState.homeTouches.reduce((sum, count) => sum + count, 0),
+    );
+    expect(second.nextState.awayTouches.reduce((sum, count) => sum + count, 0)).toBeGreaterThanOrEqual(
+      first.nextState.awayTouches.reduce((sum, count) => sum + count, 0),
+    );
+    expect(fresh.homeTouches).toEqual([0, 0, 0, 0, 0]);
+    expect(fresh.awayTouches).toEqual([0, 0, 0, 0, 0]);
   });
 
   it("stamina materially changes scoring rate under repeated possessions", () => {
@@ -202,5 +208,40 @@ describe("momentum tracking", () => {
     const lowPct = seeds.reduce((sum, seed) => sum + run(lowContext, seed), 0) / seeds.length;
     const highPct = seeds.reduce((sum, seed) => sum + run(highContext, seed), 0) / seeds.length;
     expect(Math.abs(highPct - lowPct)).toBeGreaterThan(0.005);
+  });
+
+  it("heavy touch volume hurts low-stamina primary handlers more than high-stamina ones", () => {
+    const buildDominantHandlerContext = (stamina: number): MatchContext => {
+      const context = createContext(
+        makeAttributes({ handle: 98, vision: 96, passing: 96, stamina, shortRange: 85, midrange: 85, threePoint: 85 }),
+        makeAttributes({ perimeterDefense: 40, interiorDefense: 40, blocking: 40, stealing: 40 }),
+      );
+      context.home.roster[1].attributes = makeAttributes({ handle: 20, vision: 20, passing: 20, stamina });
+      context.home.roster[2].attributes = makeAttributes({ handle: 20, vision: 20, passing: 20, stamina });
+      context.home.roster[3].attributes = makeAttributes({ handle: 20, vision: 20, passing: 20, stamina });
+      context.home.roster[4].attributes = makeAttributes({ handle: 20, vision: 20, passing: 20, stamina });
+      return context;
+    };
+
+    const runLateRate = (context: MatchContext): number => {
+      const rng = createSeededRng(404);
+      let state = initializePossession(context, LeagueLevel.PRO, rng, 6000);
+      const lateResults: boolean[] = [];
+
+      for (let i = 0; i < 140 && state.secondsRemaining > 0; i += 1) {
+        const result = simulatePossession(context, state, LeagueLevel.PRO, rng);
+        if (!result.turnoverLikeFailure && result.shooterIndex === 0 && i >= 100) {
+          lateResults.push(result.madeShot);
+        }
+        state = result.nextState;
+      }
+
+      return lateResults.filter(Boolean).length / Math.max(1, lateResults.length);
+    };
+
+    const lowStaminaLateRate = runLateRate(buildDominantHandlerContext(20));
+    const highStaminaLateRate = runLateRate(buildDominantHandlerContext(95));
+
+    expect(highStaminaLateRate).toBeGreaterThan(lowStaminaLateRate);
   });
 });

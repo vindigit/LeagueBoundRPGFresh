@@ -390,7 +390,7 @@ export const chooseAction = (
   );
 };
 
-const pickBallHandlerIndex = (
+export const pickBallHandlerIndex = (
   offenseTeam: Team,
   teamKey: TeamSide,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
@@ -399,12 +399,9 @@ const pickBallHandlerIndex = (
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
-    // Discipline maps decision sanity in who safely initiates offense.
-    const baseWeight = impact.handle * 0.45 + impact.discipline * 0.35 + impact.vision * 0.2;
-    const archetypePenalty = tuning.ballHandlerArchetypeMultipliers[player.archetype] ?? 1;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: baseWeight * archetypePenalty,
+      weight: impact.handle * 0.45 + impact.vision * 0.3 + player.attributes.passing * 0.25,
     };
   });
   return weightedPick(weighted, rng);
@@ -717,6 +714,7 @@ const getPutbackMakeProbability = (
 
 const flipPossession = (
   state: PossessionState,
+  touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   score: MatchScore,
   elapsedSeconds: number,
   nextBallHandlerIndex: number,
@@ -728,8 +726,8 @@ const flipPossession = (
   offenseKey: state.offenseKey === "home" ? "away" : "home",
   defenseKey: state.offenseKey,
   ballHandlerIndex: nextBallHandlerIndex,
-  homeTouches: [0, 0, 0, 0, 0],
-  awayTouches: [0, 0, 0, 0, 0],
+  homeTouches: [...touchCounts.home] as [number, number, number, number, number],
+  awayTouches: [...touchCounts.away] as [number, number, number, number, number],
   score,
   homeStreak: streaks.homeStreak,
   awayStreak: streaks.awayStreak,
@@ -786,6 +784,7 @@ export const simulatePossession = (
 
     const nextState = flipPossession(
       state,
+      touchCounts,
       state.score,
       elapsedSeconds,
       nextBallHandlerIndex,
@@ -820,6 +819,7 @@ export const simulatePossession = (
 
   if (action === "pass") {
     const receiverIndex = pickAssistReceiverIndex(offenseTeam, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel, rng);
+    incrementTouch(state.offenseKey, ballHandlerIndex);
     incrementTouch(state.offenseKey, receiverIndex);
     shooterIndex = receiverIndex;
     const receiverImpact = getPlayerImpact(
@@ -985,6 +985,7 @@ export const simulatePossession = (
   const nextBallHandlerIndex = pickBallHandlerIndex(nextOffenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
   const nextState = flipPossession(
     state,
+    touchCounts,
     score,
     elapsedSeconds,
     nextBallHandlerIndex,

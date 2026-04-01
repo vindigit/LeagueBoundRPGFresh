@@ -57,8 +57,9 @@ describe("assist attribution", () => {
         expect(result.action).toBe("pass");
         expect(result.madeShot).toBe(true);
         expect(result.assisterIndex).toBeDefined();
+        expect(["made_2", "made_3"]).toContain(result.eventType);
       }
-      if (result.eventType === "putback_make" || result.eventType === "putback_miss") {
+      if (result.eventType === "putback_make" || result.eventType === "putback_miss" || result.putbackAttempted) {
         expect(result.assisted).toBe(false);
         expect(result.assisterIndex).toBeUndefined();
       }
@@ -66,5 +67,30 @@ describe("assist attribution", () => {
     }
 
     expect(assistedMakes).toBeGreaterThan(0);
+  });
+
+  it("keeps assist attribution deterministic for a fixed seed", () => {
+    const context: MatchContext = { home: makeTeam("h"), away: makeTeam("a") };
+    const run = (): number => {
+      const rng = createSeededRng(9001);
+      let state = initializePossession(context, LeagueLevel.PRO, rng, 3000);
+      let assistedMakes = 0;
+
+      for (let i = 0; i < 180 && state.secondsRemaining > 0; i += 1) {
+        const result = simulatePossession(context, state, LeagueLevel.PRO, rng);
+        if (result.assisted) {
+          assistedMakes += 1;
+        }
+        state = result.nextState;
+      }
+
+      return assistedMakes;
+    };
+
+    const first = run();
+    const second = run();
+
+    expect(first).toBe(second);
+    expect(first).toBeGreaterThan(0);
   });
 });

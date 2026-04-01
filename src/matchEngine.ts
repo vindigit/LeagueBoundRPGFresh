@@ -112,6 +112,8 @@ type PlayerImpact = {
   interiorDefense: number;
   blocking: number;
   stealing: number;
+  offRebounding: number;
+  defRebounding: number;
   speed: number;
   strength: number;
 };
@@ -270,6 +272,8 @@ const getPlayerImpact = (
     interiorDefense: getScaledAttribute(player.attributes.interiorDefense, leagueLevel),
     blocking: getScaledAttribute(player.attributes.blocking, leagueLevel),
     stealing: getScaledAttribute(player.attributes.stealing, leagueLevel),
+    offRebounding: getScaledAttribute(player.attributes.offRebounding, leagueLevel),
+    defRebounding: getScaledAttribute(player.attributes.defRebounding, leagueLevel),
     speed: getScaledAttribute(player.attributes.speed, leagueLevel),
     strength: getScaledAttribute(player.attributes.strength, leagueLevel),
   };
@@ -296,6 +300,8 @@ const getPlayerImpact = (
     interiorDefense: scaledAttrs.interiorDefense * fatigueMultiplier,
     blocking: scaledAttrs.blocking * fatigueMultiplier,
     stealing: scaledAttrs.stealing * fatigueMultiplier,
+    offRebounding: scaledAttrs.offRebounding * fatigueMultiplier,
+    defRebounding: scaledAttrs.defRebounding * fatigueMultiplier,
     speed: scaledAttrs.speed * fatigueMultiplier,
     strength: scaledAttrs.strength * fatigueMultiplier,
   };
@@ -454,13 +460,17 @@ const pickRebounderIndex = (
   teamKey: TeamSide,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
+  reboundType: "offense" | "defense",
   rng: () => number,
 ): number => {
   const weighted = team.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.rebounding * 0.7 + impact.athleticism * 0.3,
+      weight:
+        reboundType === "offense"
+          ? impact.offRebounding * 0.8 + impact.athleticism * 0.2
+          : impact.defRebounding * 0.8 + impact.strength * 0.2,
     };
   });
   return weightedPick(weighted, rng);
@@ -669,15 +679,14 @@ const getOffensiveReboundProbability = (
   const offenseReb = average(
     offenseTeam.roster.map((player, index) => {
       const impact = getPlayerImpact(player, offenseKey, index, touchCounts, leagueLevel);
-      return impact.rebounding * 0.7 + impact.athleticism * 0.3;
+      return impact.offRebounding * 0.8 + impact.athleticism * 0.2;
     }),
   );
 
   const defenseReb = average(
     defenseTeam.roster.map((player, index) => {
       const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
-      // Legacy decision quality no longer influences defensive rebounding.
-      return impact.rebounding;
+      return impact.defRebounding * 0.85 + impact.strength * 0.15;
     }),
   );
 
@@ -807,8 +816,7 @@ export const simulatePossession = (
   pushTrace(trace, "SELECT_SHOT_ZONE");
 
   let shooterIndex = ballHandlerIndex;
-  let assisterIndex: number | undefined;
-  let assisted = false;
+  let pendingAssisterIndex: number | undefined;
 
   if (action === "pass") {
     const receiverIndex = pickAssistReceiverIndex(offenseTeam, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel, rng);
@@ -822,9 +830,8 @@ export const simulatePossession = (
       leagueLevel,
     );
     const assistProb = getAssistProbability(ballHandlerImpact, receiverImpact);
-    assisted = rng() <= assistProb;
-    if (assisted) {
-      assisterIndex = ballHandlerIndex;
+    if (rng() <= assistProb) {
+      pendingAssisterIndex = ballHandlerIndex;
     }
   }
 
@@ -859,6 +866,8 @@ export const simulatePossession = (
   let madeShot = false;
   let points: 0 | 2 | 3 = 0;
   let eventType: PossessionEventType = "miss";
+  let assisted = false;
+  let assisterIndex: number | undefined;
   let offensiveRebound = false;
   let rebounderIndex: number | undefined;
   let putbackAttempted = false;
@@ -878,6 +887,10 @@ export const simulatePossession = (
     points = shotZone === "three" ? 3 : 2;
     score = addPoints(state.score, state.offenseKey, points);
     eventType = points === 3 ? "made_3" : "made_2";
+    if (action === "pass" && pendingAssisterIndex !== undefined && pendingAssisterIndex !== shooterIndex) {
+      assisted = true;
+      assisterIndex = pendingAssisterIndex;
+    }
   } else {
     pushTrace(trace, "SHOT_MISSED");
     eventType = blocked ? "block" : "miss";
@@ -896,7 +909,7 @@ export const simulatePossession = (
 
     if (offensiveRebound) {
       eventType = "off_reb";
-      rebounderIndex = pickRebounderIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng);
+      rebounderIndex = pickRebounderIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, "offense", rng);
       incrementTouch(state.offenseKey, rebounderIndex);
       pushTrace(trace, "PUTBACK_ATTEMPT");
       putbackAttempted = true;
@@ -926,8 +939,7 @@ export const simulatePossession = (
       const putbackMade = rng() <= putbackProb;
 
       shooterIndex = rebounderIndex;
-      assisted = false;
-      assisterIndex = undefined;
+      pendingAssisterIndex = undefined;
 
       if (putbackMade) {
         madeShot = true;
@@ -942,15 +954,28 @@ export const simulatePossession = (
     }
 
     if (!offensiveRebound || eventType === "putback_miss") {
-      eventType = eventType === "putback_miss" ? "def_reb" : eventType;
-      if (eventType === "def_reb") {
-        rebounderIndex = pickRebounderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+      if (eventType === "putback_miss") {
+        const secondChanceProb = clamp(orebProb * 0.5, tuning.offensiveReboundMin, tuning.offensiveReboundMax);
+        offensiveRebound = rng() <= secondChanceProb;
+        eventType = offensiveRebound ? "off_reb" : "def_reb";
+        rebounderIndex = pickRebounderIndex(
+          offensiveRebound ? offenseTeam : defenseTeam,
+          offensiveRebound ? state.offenseKey : state.defenseKey,
+          touchCounts,
+          leagueLevel,
+          offensiveRebound ? "offense" : "defense",
+          rng,
+        );
+        incrementTouch(offensiveRebound ? state.offenseKey : state.defenseKey, rebounderIndex);
+      } else if (!offensiveRebound) {
+        eventType = "def_reb";
+        rebounderIndex = pickRebounderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "defense", rng);
         incrementTouch(state.defenseKey, rebounderIndex);
       }
     }
   }
 
-  if (!madeShot || action !== "pass" || assisterIndex === undefined) {
+  if (!madeShot || action !== "pass" || assisterIndex === undefined || eventType === "putback_make") {
     assisted = false;
     assisterIndex = undefined;
   }

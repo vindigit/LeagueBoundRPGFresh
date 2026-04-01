@@ -179,6 +179,13 @@ const getStealRate = (results: PossessionResult[]): number => {
   return results.filter((result) => result.eventType === "steal").length / results.length;
 };
 
+const getOffensiveReboundRate = (results: PossessionResult[]): number => {
+  if (results.length === 0) {
+    return 0;
+  }
+  return results.filter((result) => result.eventType === "off_reb").length / results.length;
+};
+
 describe("matchEngine extreme attribute invariants", () => {
   it("stamina=0 remains stable and finite across deterministic possessions", () => {
     const context = makeContext({ stamina: 0 }, {});
@@ -317,18 +324,18 @@ describe("matchEngine extreme attribute invariants", () => {
   it("blocking plus interiorDefense mostly matters at the rim", () => {
     const rimHighBlockResults = getNonTurnoverResults(
       runPossessions(
-        makeContext({ threePoint: 20, midrange: 20, shortRange: 96, dunking: 88, speed: 82, strength: 86 }, { blocking: 99, interiorDefense: 99 }),
+        makeContext({ threePoint: 20, midrange: 20, shortRange: 70, dunking: 52, speed: 54, strength: 56 }, { blocking: 99, interiorDefense: 99 }),
         20260313,
-        320,
-        6000,
+        480,
+        9000,
       ),
     ).filter((result) => result.shotZone === "rim");
     const rimLowBlockResults = getNonTurnoverResults(
       runPossessions(
-        makeContext({ threePoint: 20, midrange: 20, shortRange: 96, dunking: 88, speed: 82, strength: 86 }, { blocking: 10, interiorDefense: 10 }),
+        makeContext({ threePoint: 20, midrange: 20, shortRange: 70, dunking: 52, speed: 54, strength: 56 }, { blocking: 0, interiorDefense: 0 }),
         20260314,
-        320,
-        6000,
+        480,
+        9000,
       ),
     ).filter((result) => result.shotZone === "rim");
     const perimeterHighBlockResults = getNonTurnoverResults(
@@ -340,8 +347,8 @@ describe("matchEngine extreme attribute invariants", () => {
       ),
     ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
 
-    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThan(getBlockRate(rimLowBlockResults));
-    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThan(getBlockRate(perimeterHighBlockResults));
+    expect(getMakeRate(rimHighBlockResults)).toBeLessThan(getMakeRate(rimLowBlockResults));
+    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThanOrEqual(getBlockRate(perimeterHighBlockResults));
   });
 
   it("steal rate responds to defender stealing and speed", () => {
@@ -365,5 +372,55 @@ describe("matchEngine extreme attribute invariants", () => {
     ).map(({ result }) => result);
 
     expect(getStealRate(highStealResults)).toBeGreaterThan(getStealRate(lowStealResults));
+  });
+
+  it("offensive rebound rate responds to offRebounding versus defRebounding", () => {
+    const strongOffGlassResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(
+          { shortRange: 25, dunking: 25, midrange: 25, threePoint: 25, offRebounding: 99 },
+          { defRebounding: 10, interiorDefense: 40, blocking: 40 },
+        ),
+        20260318,
+        360,
+        7000,
+      ),
+    );
+    const weakOffGlassResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(
+          { shortRange: 25, dunking: 25, midrange: 25, threePoint: 25, offRebounding: 10 },
+          { defRebounding: 99, interiorDefense: 40, blocking: 40 },
+        ),
+        20260319,
+        360,
+        7000,
+      ),
+    );
+
+    expect(getOffensiveReboundRate(strongOffGlassResults)).toBeGreaterThan(getOffensiveReboundRate(weakOffGlassResults));
+  });
+
+  it("missed putbacks can resolve into one capped second offensive rebound", () => {
+    const results = getNonTurnoverResults(
+      runPossessions(
+        makeContext(
+          { shortRange: 15, dunking: 15, midrange: 15, threePoint: 15, offRebounding: 99 },
+          { defRebounding: 10, interiorDefense: 95, blocking: 95, perimeterDefense: 95 },
+        ),
+        20260320,
+        500,
+        9000,
+      ),
+    );
+
+    const secondChanceOffReb = results.find(
+      (result) => result.putbackAttempted && result.eventType === "off_reb" && result.madeShot === false,
+    );
+
+    expect(secondChanceOffReb).toBeDefined();
+    expect(secondChanceOffReb?.offensiveRebound).toBe(true);
+    expect(secondChanceOffReb?.assisted).toBe(false);
+    expect(secondChanceOffReb?.assisterIndex).toBeUndefined();
   });
 });

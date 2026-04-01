@@ -2,6 +2,7 @@ import type { Player } from "./types/player";
 import type { Team } from "./types/team";
 import { LEAGUE_MODIFIERS } from "./constants/leagueScaling";
 import { LeagueLevel } from "./types/career";
+import { computeOverall } from "./builder/derivedRatings";
 import tuning from "./matchEngineTuning.js";
 import { validateMatchEngineTuning } from "./matchEngineTuningValidation";
 
@@ -93,13 +94,9 @@ type HomeCourtKind = "shot" | "turnover";
 type DefenderRole = "turnover" | "perimeter" | "rim";
 
 type PlayerImpact = {
-  shooting: number;
-  finishing: number;
   vision: number;
+  passing: number;
   handle: number;
-  athleticism: number;
-  defense: number;
-  rebounding: number;
   consistency: number;
   discipline: number;
   stamina: number;
@@ -154,13 +151,6 @@ const getTeam = (context: MatchContext, key: "home" | "away"): Team =>
 
 const getPlayerByIndex = (team: Team, index: number): Player => team.roster[clamp(index, 0, 4) as 0 | 1 | 2 | 3 | 4];
 
-const getBbiqReplacements = (player: Player): { consistency: number; discipline: number } => {
-  const attrs = player.attributes;
-  const consistency = clamp(Math.round(attrs.vision * 0.65 + attrs.passing * 0.25 + attrs.handle * 0.1), 0, 99);
-  const discipline = clamp(Math.round(attrs.vision * 0.45 + attrs.handle * 0.35 + attrs.passing * 0.2), 0, 99);
-  return { consistency, discipline };
-};
-
 const varianceAmpFromConsistency = (consistency: number): number => 0.08 - (consistency / 99) * 0.03;
 
 const applyConsistencyVariance = (pBase: number, rng: () => number, consistency: number): number => {
@@ -169,33 +159,28 @@ const applyConsistencyVariance = (pBase: number, rng: () => number, consistency:
   return clamp(pBase + noise, 0, 1);
 };
 
-const turnoverMultFromDiscipline = (discipline: number): number =>
-  1.06 - (discipline / 99) * 0.12;
-
-const subtleDisciplineMultiplier = (discipline: number): number =>
-  clamp(1 + ((discipline - 50) / 49) * 0.05, 0.95, 1.05);
-
-const toCompositeAttributes = (player: Player): {
-  shooting: number;
-  finishing: number;
-  vision: number;
-  handle: number;
-  athleticism: number;
-  defense: number;
-  rebounding: number;
-  stamina: number;
-} => {
+const getDiscipline = (player: Player): number => {
   const attrs = player.attributes;
-  return {
-    shooting: average([attrs.shortRange, attrs.midrange, attrs.threePoint]),
-    finishing: attrs.shortRange * 0.35 + attrs.dunking * 0.4 + attrs.strength * 0.25,
-    vision: attrs.passing * 0.65 + attrs.vision * 0.35,
-    handle: attrs.handle,
-    athleticism: attrs.speed * 0.55 + attrs.strength * 0.35 + attrs.dunking * 0.1,
-    defense: attrs.perimeterDefense * 0.45 + attrs.interiorDefense * 0.35 + attrs.stealing * 0.1 + attrs.blocking * 0.1,
-    rebounding: attrs.offRebounding * 0.45 + attrs.defRebounding * 0.55,
-    stamina: attrs.stamina,
-  };
+  return clamp(Math.round(attrs.vision * 0.4 + attrs.handle * 0.25 + attrs.stamina * 0.35), 0, 99);
+};
+
+const getConsistency = (player: Player): number => {
+  const attrs = player.attributes;
+  return clamp(Math.round(attrs.vision * 0.45 + attrs.handle * 0.3 + attrs.stamina * 0.25), 0, 99);
+};
+
+const getPressure = (state: PossessionState): number => {
+  const timePressure = clamp((180 - state.secondsRemaining) / 180, 0, 1);
+  const marginPressure = clamp((10 - Math.abs(getScoreDiff(state))) / 10, 0, 1);
+  return clamp(timePressure * marginPressure, 0, 1);
+};
+
+const getComposureMultiplier = (discipline: number, pressure: number): number => {
+  if (pressure <= 0) {
+    return 1;
+  }
+  const disciplineEdge = clamp((discipline - 50) / 49, -1, 1);
+  return clamp(1 + disciplineEdge * 0.06 * pressure, 0.94, 1.06);
 };
 
 const getElapsedByEvent = (eventType: PossessionEventType, rng: () => number): number => {
@@ -235,13 +220,17 @@ export const createSeededRng = (seed: number): (() => number) => {
 };
 
 export const getPlayerOvr = (player: Player): number =>
-  average([...Object.values(toCompositeAttributes(player)), getBbiqReplacements(player).discipline]);
+  computeOverall(player.attributes, player.position);
 
 export const calculateTeamOvr = (team: Team): number =>
   Math.round(average(team.roster.map(getPlayerOvr)));
 
 const getFatigueMultiplier = (stamina: number, touchCount: number): number =>
-  clamp(1 - touchCount * tuning.fatigueTouchScale * (1 - stamina / 100), tuning.fatigueMinMultiplier, tuning.fatigueMaxMultiplier);
+  clamp(
+    1 - touchCount * tuning.fatigueTouchScale * 1.35 * (1 - stamina / 100),
+    tuning.fatigueMinMultiplier,
+    tuning.fatigueMaxMultiplier,
+  );
 
 const getPlayerImpact = (
   player: Player,
@@ -250,20 +239,14 @@ const getPlayerImpact = (
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
 ): PlayerImpact => {
-  const composite = toCompositeAttributes(player);
-  const replacements = getBbiqReplacements(player);
-  const shooting = getScaledAttribute(composite.shooting, leagueLevel);
-  const finishing = getScaledAttribute(composite.finishing, leagueLevel);
-  const vision = getScaledAttribute(composite.vision, leagueLevel);
-  const handle = getScaledAttribute(composite.handle, leagueLevel);
-  const athleticism = getScaledAttribute(composite.athleticism, leagueLevel);
-  const defense = getScaledAttribute(composite.defense, leagueLevel);
-  const rebounding = getScaledAttribute(composite.rebounding, leagueLevel);
-  const consistency = getScaledAttribute(replacements.consistency, leagueLevel);
-  const discipline = getScaledAttribute(replacements.discipline, leagueLevel);
-  const stamina = getScaledAttribute(composite.stamina, leagueLevel);
+  const consistency = getScaledAttribute(getConsistency(player), leagueLevel);
+  const discipline = getScaledAttribute(getDiscipline(player), leagueLevel);
+  const stamina = getScaledAttribute(player.attributes.stamina, leagueLevel);
   const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex]);
   const scaledAttrs = {
+    vision: getScaledAttribute(player.attributes.vision, leagueLevel),
+    passing: getScaledAttribute(player.attributes.passing, leagueLevel),
+    handle: getScaledAttribute(player.attributes.handle, leagueLevel),
     threePoint: getScaledAttribute(player.attributes.threePoint, leagueLevel),
     midrange: getScaledAttribute(player.attributes.midrange, leagueLevel),
     shortRange: getScaledAttribute(player.attributes.shortRange, leagueLevel),
@@ -279,16 +262,12 @@ const getPlayerImpact = (
   };
 
   return {
-    shooting: shooting * fatigueMultiplier,
-    finishing: finishing * fatigueMultiplier,
-    vision: vision * fatigueMultiplier,
-    handle: handle * fatigueMultiplier,
-    athleticism: athleticism * fatigueMultiplier,
-    defense: defense * fatigueMultiplier,
-    rebounding: rebounding * fatigueMultiplier,
+    vision: scaledAttrs.vision * fatigueMultiplier,
+    passing: scaledAttrs.passing * fatigueMultiplier,
+    handle: scaledAttrs.handle * fatigueMultiplier,
     // Consistency is used only to dampen variance; no direct mean boost.
     consistency: consistency * fatigueMultiplier,
-    // Discipline models decision sanity and mistake avoidance.
+    // Discipline models late-game composure only through pressure-scaled multipliers.
     discipline: discipline * fatigueMultiplier,
     stamina,
     fatigueMultiplier,
@@ -369,22 +348,51 @@ export const applyMomentumToShotMakeProbability = (
 
 export const chooseAction = (
   ballHandler: Player,
+  ballHandlerImpact: PlayerImpact,
   state: PossessionState,
   rng: () => number,
 ): PossessionAction => {
-  const scoreDiff = Math.abs(getScoreDiff(state));
-  const isLateGame = state.secondsRemaining <= 120;
-  const isHighPressure = isLateGame && scoreDiff <= 8;
+  const pressure = getPressure(state);
   const baseWeights: Record<PossessionAction, number> = tuning.baseActionWeights;
   const archetypeAdjust = tuning.archetypeWeightAdjustments[ballHandler.archetype];
-  const pressureAdjust: Record<PossessionAction, number> = isHighPressure
-    ? tuning.highPressureAdjustments
-    : tuning.lowPressureAdjustments;
+  const pressureAdjust: Record<PossessionAction, number> = {
+    pass:
+      tuning.lowPressureAdjustments.pass +
+      (tuning.highPressureAdjustments.pass - tuning.lowPressureAdjustments.pass) * pressure,
+    shoot:
+      tuning.lowPressureAdjustments.shoot +
+      (tuning.highPressureAdjustments.shoot - tuning.lowPressureAdjustments.shoot) * pressure,
+    dribble:
+      tuning.lowPressureAdjustments.dribble +
+      (tuning.highPressureAdjustments.dribble - tuning.lowPressureAdjustments.dribble) * pressure,
+  };
+  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline, pressure);
+  const composureAdjustment = (composureMultiplier - 1) * 20;
+  const shootingProfile = average([
+    ballHandlerImpact.threePoint,
+    ballHandlerImpact.midrange,
+    ballHandlerImpact.shortRange,
+    ballHandlerImpact.dunking,
+  ]);
+  const skillAdjust: Record<PossessionAction, number> = {
+    pass:
+      (ballHandlerImpact.vision - 50) * 0.12 +
+      (ballHandlerImpact.passing - 50) * 0.1 +
+      composureAdjustment,
+    shoot:
+      (shootingProfile - 50) * 0.1 +
+      (ballHandlerImpact.vision - 50) * 0.05 +
+      composureAdjustment * 0.5,
+    dribble:
+      (ballHandlerImpact.handle - 50) * 0.14 +
+      (ballHandlerImpact.speed - 50) * 0.06 -
+      composureAdjustment * 0.5,
+  };
 
   return weightedPick(
     (["pass", "shoot", "dribble"] as PossessionAction[]).map((action) => ({
       key: action,
-      weight: clamp(baseWeights[action] + archetypeAdjust[action] + pressureAdjust[action], 1, 99),
+      weight: clamp(baseWeights[action] + archetypeAdjust[action] + pressureAdjust[action] + skillAdjust[action], 1, 99),
     })),
     rng,
   );
@@ -401,7 +409,7 @@ export const pickBallHandlerIndex = (
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.handle * 0.45 + impact.vision * 0.3 + player.attributes.passing * 0.25,
+      weight: impact.handle * 0.45 + impact.vision * 0.3 + impact.passing * 0.25,
     };
   });
   return weightedPick(weighted, rng);
@@ -444,9 +452,15 @@ const pickAssistReceiverIndex = (
     .filter((entry) => entry.index !== ballHandlerIndex)
     .map(({ player, index }) => {
       const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+      const receiverShotValue =
+        impact.threePoint * 0.28 +
+        impact.midrange * 0.24 +
+        impact.shortRange * 0.32 +
+        impact.dunking * 0.1 +
+        impact.vision * 0.06;
       return {
         key: index as 0 | 1 | 2 | 3 | 4,
-        weight: impact.shooting * 0.5 + impact.finishing * 0.5,
+        weight: receiverShotValue,
       };
     });
   return weightedPick(weighted, rng);
@@ -466,7 +480,7 @@ const pickRebounderIndex = (
       key: index as 0 | 1 | 2 | 3 | 4,
       weight:
         reboundType === "offense"
-          ? impact.offRebounding * 0.8 + impact.athleticism * 0.2
+          ? impact.offRebounding * 0.85 + impact.strength * 0.15
           : impact.defRebounding * 0.8 + impact.strength * 0.2,
     };
   });
@@ -480,32 +494,29 @@ const pickShotZone = (
 ): ShotZone => {
   const base = tuning.shotZoneByAction[action];
   const suppressThree = shooterImpact.threePoint < tuning.lowShootingThreeSuppressionThreshold;
-  const threeTilt = (shooterImpact.threePoint - 50) * tuning.shotZoneThreePointWeight;
-  const midrangeTilt = (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight;
+  const decisionTilt = 1 + ((shooterImpact.vision - 50) / 49) * 0.08;
+  const threeTilt = (shooterImpact.threePoint - 50) * tuning.shotZoneThreePointWeight * decisionTilt;
+  const midrangeTilt = (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight * decisionTilt;
   const rimTilt =
-    (shooterImpact.shortRange - 50) * tuning.shotZoneRimShortRangeWeight +
-    (shooterImpact.dunking - 50) * tuning.shotZoneRimDunkingWeight;
-  // Discipline lightly steers shot selection quality and stays within a <=5% effect.
-  const disciplineEdge = clamp((shooterImpact.discipline - 50) / 49, -1, 1);
-  const rimDisciplineMultiplier = clamp(1 + disciplineEdge * 0.05, 0.95, 1.05);
-  const midrangeDisciplineMultiplier = clamp(1 + disciplineEdge * 0.03, 0.97, 1.03);
-  const threeDisciplineMultiplier = clamp(1 - disciplineEdge * 0.05, 0.95, 1.05);
+    ((shooterImpact.shortRange - 50) * tuning.shotZoneRimShortRangeWeight +
+      (shooterImpact.dunking - 50) * tuning.shotZoneRimDunkingWeight) *
+    decisionTilt;
   const fatigueTilt = (shooterImpact.fatigueMultiplier - 1) * 100 * tuning.shotZoneFatigueWeight;
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
       key: "midrange",
-      weight: (base.midrange + midrangeTilt - Math.abs(midrangeTilt - rimTilt) * 0.1) * midrangeDisciplineMultiplier,
+      weight: base.midrange + midrangeTilt - Math.abs(midrangeTilt - rimTilt) * 0.1,
     },
     {
       key: "rim",
-      weight: (base.rim + rimTilt - fatigueTilt * 0.2) * rimDisciplineMultiplier,
+      weight: base.rim + rimTilt - fatigueTilt * 0.2,
     },
   ];
 
   if (!suppressThree) {
     entries.unshift({
       key: "three",
-      weight: (base.three + threeTilt + fatigueTilt) * threeDisciplineMultiplier,
+      weight: base.three + threeTilt + fatigueTilt,
     });
   }
 
@@ -536,17 +547,18 @@ const getTurnoverProbability = (
   defenseKey: TeamSide,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
+  state: PossessionState,
 ): number => {
   const defenderPressure = average(defenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
-    return impact.defense * 0.65 + impact.athleticism * 0.35;
+    return impact.stealing * 0.45 + impact.speed * 0.35 + impact.perimeterDefense * 0.2;
   }));
-  // Discipline replaces legacy decision quality in ball security.
-  const ballSecurity = ballHandlerImpact.handle * 0.7 + ballHandlerImpact.discipline * 0.3;
-  const disciplineMult = turnoverMultFromDiscipline(ballHandlerImpact.discipline);
+  const ballSecurity = ballHandlerImpact.handle * 0.65 + ballHandlerImpact.vision * 0.35;
+  const pressure = getPressure(state);
+  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline, pressure);
 
   return clamp(
-    (tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor) * disciplineMult,
+    (tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor) / composureMultiplier,
     tuning.turnoverMin,
     tuning.turnoverMax,
   );
@@ -572,22 +584,18 @@ const getAssistProbability = (
 ): number => {
   const baseAssist =
     tuning.assistBase +
-    (passerImpact.vision * 0.7 + passerImpact.handle * 0.3 - shooterImpact.handle * 0.15) / tuning.assistDivisor;
-  // Discipline adds a bounded decision-quality adjustment (<=5%).
-  const disciplineMultiplier = clamp(
-    1 + ((passerImpact.discipline - shooterImpact.discipline) / 99) * 0.05,
-    0.95,
-    1.05,
-  );
-  return clamp(baseAssist * disciplineMultiplier, tuning.assistMin, tuning.assistMax);
+    (passerImpact.vision * 0.5 +
+      passerImpact.passing * 0.35 +
+      passerImpact.handle * 0.15 -
+      shooterImpact.handle * 0.15) /
+      tuning.assistDivisor;
+  return clamp(baseAssist, tuning.assistMin, tuning.assistMax);
 };
 
 const getContestValue = (shotZone: ShotZone, defenderImpact: PlayerImpact): number =>
   shotZone === "rim"
-    ? defenderImpact.interiorDefense * tuning.rimContestDefenseWeight +
-      defenderImpact.athleticism * tuning.rimContestAthleticismWeight
-    : defenderImpact.perimeterDefense * tuning.perimeterContestDefenseWeight +
-      defenderImpact.athleticism * tuning.perimeterContestAthleticismWeight;
+    ? defenderImpact.interiorDefense * 0.9 + defenderImpact.strength * 0.1
+    : defenderImpact.perimeterDefense * 0.9 + defenderImpact.speed * 0.1;
 
 const getBlockProbability = (
   defenderImpact: PlayerImpact,
@@ -602,6 +610,7 @@ const getBlockProbability = (
         ? tuning.midrangeBlockMultiplier
         : tuning.rimBlockMultiplier;
   const defenderBlockValue = defenderImpact.blocking * 0.65 + defenderImpact.interiorDefense * 0.35;
+  const zoneDefenseValue = shotZone === "rim" ? defenderImpact.interiorDefense : defenderImpact.perimeterDefense;
   const shooterResistance =
     shotZone === "rim"
       ? rimAttemptType === "dunk"
@@ -614,7 +623,7 @@ const getBlockProbability = (
         : shooterImpact.threePoint * 0.75 + shooterImpact.handle * 0.15 + shooterImpact.speed * 0.1;
 
   return clamp(
-    (tuning.blockBase + (defenderBlockValue - shooterResistance) / tuning.blockDivisor) * zoneMultiplier,
+    (tuning.blockBase + (defenderBlockValue + zoneDefenseValue * 0.15 - shooterResistance) / tuning.blockDivisor) * zoneMultiplier,
     tuning.blockMin * zoneMultiplier,
     tuning.blockMax * zoneMultiplier,
   );
@@ -646,12 +655,12 @@ const getShotMakeProbability = (
           : shooterImpact.shortRange * 0.7 + shooterImpact.speed * 0.15 + shooterImpact.strength * 0.15;
 
   const defenseValue = getContestValue(shotZone, defenderImpact);
-  // Discipline provides a small shot-decision quality adjustment (<=5%).
-  const disciplinedOffenseValue = offenseValue * subtleDisciplineMultiplier(shooterImpact.discipline);
+  const pressure = getPressure(state);
+  const composureMultiplier = getComposureMultiplier(shooterImpact.discipline, pressure);
   const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 4;
   const attemptBonus =
     shotZone === "rim" ? (rimAttemptType === "dunk" ? tuning.dunkMakeBonus : tuning.layupMakeBonus) : 0;
-  const offenseEdge = (disciplinedOffenseValue - defenseValue) / tuning.shotOffenseDivisor;
+  const offenseEdge = (offenseValue - defenseValue) / tuning.shotOffenseDivisor;
 
   const makeWithoutVariance = clamp(
     zoneBase + tuning.shotMakeBase + attemptBonus + offenseEdge - defenseValue / tuning.shotContestDivisor - fatiguePenalty,
@@ -659,7 +668,11 @@ const getShotMakeProbability = (
     tuning.shotMakeMax,
   );
   // Consistency only dampens or widens variance around the base make chance.
-  const baseProbability = applyConsistencyVariance(makeWithoutVariance, rng, shooterImpact.consistency);
+  const baseProbability = clamp(
+    applyConsistencyVariance(makeWithoutVariance, rng, shooterImpact.consistency) * composureMultiplier,
+    tuning.shotMakeMin,
+    tuning.shotMakeMax,
+  );
 
   return applyMomentumToShotMakeProbability(baseProbability, state, offenseKey);
 };
@@ -676,7 +689,7 @@ const getOffensiveReboundProbability = (
   const offenseReb = average(
     offenseTeam.roster.map((player, index) => {
       const impact = getPlayerImpact(player, offenseKey, index, touchCounts, leagueLevel);
-      return impact.offRebounding * 0.8 + impact.athleticism * 0.2;
+      return impact.offRebounding * 0.85 + impact.strength * 0.15;
     }),
   );
 
@@ -701,8 +714,9 @@ const getPutbackMakeProbability = (
   defenderImpact: ReturnType<typeof getPlayerImpact>,
   rng: () => number,
 ): number => {
-  const offenseValue = shooterImpact.finishing * 0.65 + shooterImpact.athleticism * 0.35;
-  const defenseValue = defenderImpact.defense * 0.65 + defenderImpact.rebounding * 0.35;
+  const offenseValue = shooterImpact.shortRange * 0.55 + shooterImpact.dunking * 0.25 + shooterImpact.strength * 0.2;
+  const defenseValue =
+    defenderImpact.interiorDefense * 0.5 + defenderImpact.defRebounding * 0.25 + defenderImpact.blocking * 0.25;
   const makeWithoutVariance = clamp(
     tuning.putbackBase + (offenseValue - defenseValue) / tuning.putbackDivisor,
     tuning.putbackMin,
@@ -758,7 +772,7 @@ export const simulatePossession = (
   const ballHandlerImpact = getPlayerImpact(ballHandler, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel);
 
   pushTrace(trace, "DECIDE_ACTION");
-  const action = chooseAction(ballHandler, state, rng);
+  const action = chooseAction(ballHandler, ballHandlerImpact, state, rng);
 
   pushTrace(trace, "RESOLVE_TURNOVER_PRESSURE");
   const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "turnover", rng);
@@ -773,7 +787,7 @@ export const simulatePossession = (
   );
 
   const turnoverProb = applyHomeCourtToProbability(
-    getTurnoverProbability(ballHandlerImpact, defenseTeam, state.defenseKey, touchCounts, leagueLevel),
+    getTurnoverProbability(ballHandlerImpact, defenseTeam, state.defenseKey, touchCounts, leagueLevel, state),
     state.offenseKey,
     "turnover",
   );
@@ -1025,27 +1039,7 @@ export const initializePossession = (
   secondsRemaining = 20 * 60,
 ): PossessionState => {
   const getScaledTeamOvr = (team: Team): number =>
-    Math.round(
-      average(
-        team.roster.map((player) =>
-          {
-            const discipline = getScaledAttribute(getBbiqReplacements(player).discipline, leagueLevel);
-            return average([
-              getScaledAttribute(toCompositeAttributes(player).shooting, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).finishing, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).vision, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).handle, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).athleticism, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).defense, leagueLevel),
-              getScaledAttribute(toCompositeAttributes(player).rebounding, leagueLevel),
-              // Discipline replaces legacy cognition in opening control odds.
-              discipline,
-              getScaledAttribute(toCompositeAttributes(player).stamina, leagueLevel),
-            ]);
-          },
-        ),
-      ),
-    );
+    Math.round(average(team.roster.map((player) => getScaledAttribute(getPlayerOvr(player), leagueLevel))));
 
   const homeOvr = getScaledTeamOvr(context.home);
   const awayOvr = getScaledTeamOvr(context.away);

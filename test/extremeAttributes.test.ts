@@ -186,6 +186,9 @@ const getOffensiveReboundRate = (results: PossessionResult[]): number => {
   return results.filter((result) => result.eventType === "off_reb").length / results.length;
 };
 
+const averageAcrossSeeds = (seeds: number[], metric: (seed: number) => number): number =>
+  seeds.reduce((sum, seed) => sum + metric(seed), 0) / seeds.length;
+
 describe("matchEngine extreme attribute invariants", () => {
   it("stamina=0 remains stable and finite across deterministic possessions", () => {
     const context = makeContext({ stamina: 0 }, {});
@@ -282,73 +285,69 @@ describe("matchEngine extreme attribute invariants", () => {
   it("perimeter and rim contests use the matching defender attribute", () => {
     const perimeterShooter = { threePoint: 92, midrange: 88, shortRange: 20, dunking: 20 };
     const rimShooter = { threePoint: 20, midrange: 20, shortRange: 92, dunking: 85, speed: 84, strength: 84 };
+    const perimeterSeeds = [20260309, 20260310, 20260311, 20260312];
+    const rimSeeds = [20260313, 20260314, 20260315, 20260316];
+    const getPerimeterMakeRate = (awayOverrides: Partial<PlayerAttributes>, seed: number): number =>
+      getMakeRate(
+        getNonTurnoverResults(runPossessions(makeContext(perimeterShooter, awayOverrides), seed, 320, 6000)).filter(
+          (result) => result.shotZone === "three" || result.shotZone === "midrange",
+        ),
+      );
+    const getRimMakeRate = (awayOverrides: Partial<PlayerAttributes>, seed: number): number =>
+      getMakeRate(
+        getNonTurnoverResults(runPossessions(makeContext(rimShooter, awayOverrides), seed, 220, 3600)).filter(
+          (result) => result.shotZone === "rim",
+        ),
+      );
 
-    const perimeterDefenseResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext(perimeterShooter, { perimeterDefense: 95, interiorDefense: 20, blocking: 20 }),
-        20260309,
-        320,
-        6000,
-      ),
-    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
-    const interiorOnlyAgainstPerimeterResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext(perimeterShooter, { perimeterDefense: 20, interiorDefense: 95, blocking: 20 }),
-        20260310,
-        320,
-        6000,
-      ),
-    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
+    const perimeterDefenseRate = averageAcrossSeeds(perimeterSeeds, (seed) =>
+      getPerimeterMakeRate({ perimeterDefense: 95, interiorDefense: 20, blocking: 20 }, seed),
+    );
+    const interiorOnlyPerimeterRate = averageAcrossSeeds(perimeterSeeds, (seed) =>
+      getPerimeterMakeRate({ perimeterDefense: 20, interiorDefense: 95, blocking: 20 }, seed),
+    );
+    const interiorDefenseRate = averageAcrossSeeds(rimSeeds, (seed) =>
+      getRimMakeRate({ perimeterDefense: 0, interiorDefense: 99, blocking: 20 }, seed),
+    );
+    const perimeterOnlyRimRate = averageAcrossSeeds(rimSeeds, (seed) =>
+      getRimMakeRate({ perimeterDefense: 99, interiorDefense: 0, blocking: 20 }, seed),
+    );
 
-    const interiorDefenseResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext(rimShooter, { perimeterDefense: 0, interiorDefense: 99, blocking: 20 }),
-        20260311,
-        220,
-        3600,
-      ),
-    ).filter((result) => result.shotZone === "rim");
-    const perimeterOnlyAgainstRimResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext(rimShooter, { perimeterDefense: 99, interiorDefense: 0, blocking: 20 }),
-        20260312,
-        220,
-        3600,
-      ),
-    ).filter((result) => result.shotZone === "rim");
-
-    expect(getMakeRate(perimeterDefenseResults)).toBeLessThan(getMakeRate(interiorOnlyAgainstPerimeterResults));
-    expect(getMakeRate(interiorDefenseResults)).toBeLessThan(getMakeRate(perimeterOnlyAgainstRimResults));
+    expect(perimeterDefenseRate).toBeLessThan(interiorOnlyPerimeterRate);
+    expect(interiorDefenseRate).toBeLessThan(perimeterOnlyRimRate);
   });
 
   it("blocking plus interiorDefense mostly matters at the rim", () => {
-    const rimHighBlockResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext({ threePoint: 20, midrange: 20, shortRange: 70, dunking: 52, speed: 54, strength: 56 }, { blocking: 99, interiorDefense: 99 }),
-        20260313,
-        480,
-        9000,
-      ),
-    ).filter((result) => result.shotZone === "rim");
-    const rimLowBlockResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext({ threePoint: 20, midrange: 20, shortRange: 70, dunking: 52, speed: 54, strength: 56 }, { blocking: 0, interiorDefense: 0 }),
-        20260314,
-        480,
-        9000,
-      ),
-    ).filter((result) => result.shotZone === "rim");
-    const perimeterHighBlockResults = getNonTurnoverResults(
-      runPossessions(
-        makeContext({ threePoint: 96, midrange: 88, shortRange: 20, dunking: 20 }, { blocking: 99, interiorDefense: 99 }),
-        20260315,
-        320,
-        6000,
-      ),
-    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
+    const rimSeeds = [20260321, 20260322, 20260323, 20260324];
+    const perimeterSeeds = [20260325, 20260326, 20260327, 20260328];
+    const rimShooter = { threePoint: 20, midrange: 20, shortRange: 70, dunking: 52, speed: 54, strength: 56 };
+    const perimeterShooter = { threePoint: 96, midrange: 88, shortRange: 20, dunking: 20 };
+    const getRimRates = (awayOverrides: Partial<PlayerAttributes>, seed: number): { make: number; block: number } => {
+      const results = getNonTurnoverResults(runPossessions(makeContext(rimShooter, awayOverrides), seed, 480, 9000)).filter(
+        (result) => result.shotZone === "rim",
+      );
+      return { make: getMakeRate(results), block: getBlockRate(results) };
+    };
+    const getPerimeterBlockRate = (seed: number): number =>
+      getBlockRate(
+        getNonTurnoverResults(
+          runPossessions(makeContext(perimeterShooter, { blocking: 99, interiorDefense: 99 }), seed, 320, 6000),
+        ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange"),
+      );
 
-    expect(getMakeRate(rimHighBlockResults)).toBeLessThan(getMakeRate(rimLowBlockResults));
-    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThanOrEqual(getBlockRate(perimeterHighBlockResults));
+    const rimHighBlockMakeRate = averageAcrossSeeds(rimSeeds, (seed) =>
+      getRimRates({ blocking: 99, interiorDefense: 99 }, seed).make,
+    );
+    const rimLowBlockMakeRate = averageAcrossSeeds(rimSeeds, (seed) =>
+      getRimRates({ blocking: 0, interiorDefense: 0 }, seed).make,
+    );
+    const rimHighBlockRate = averageAcrossSeeds(rimSeeds, (seed) =>
+      getRimRates({ blocking: 99, interiorDefense: 99 }, seed).block,
+    );
+    const perimeterHighBlockRate = averageAcrossSeeds(perimeterSeeds, (seed) => getPerimeterBlockRate(seed));
+
+    expect(rimHighBlockMakeRate).toBeLessThan(rimLowBlockMakeRate);
+    expect(rimHighBlockRate).toBeGreaterThanOrEqual(perimeterHighBlockRate);
   });
 
   it("steal rate responds to defender stealing and speed", () => {

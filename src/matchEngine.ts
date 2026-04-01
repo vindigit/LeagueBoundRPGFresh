@@ -7,6 +7,7 @@ import { validateMatchEngineTuning } from "./matchEngineTuningValidation";
 
 export type PossessionAction = "pass" | "shoot" | "dribble";
 export type ShotZone = "three" | "midrange" | "rim";
+export type RimAttemptType = "layup" | "dunk";
 export type PossessionEventType =
   | "turnover"
   | "steal"
@@ -72,6 +73,7 @@ export interface PossessionResult {
   nextState: PossessionState;
   eventType: PossessionEventType;
   shotZone?: ShotZone;
+  rimAttemptType?: RimAttemptType;
   shooterIndex: number;
   assisterIndex?: number;
   rebounderIndex?: number;
@@ -88,6 +90,31 @@ export interface MatchContext {
 
 type TeamSide = "home" | "away";
 type HomeCourtKind = "shot" | "turnover";
+type DefenderRole = "turnover" | "perimeter" | "rim";
+
+type PlayerImpact = {
+  shooting: number;
+  finishing: number;
+  vision: number;
+  handle: number;
+  athleticism: number;
+  defense: number;
+  rebounding: number;
+  consistency: number;
+  discipline: number;
+  stamina: number;
+  fatigueMultiplier: number;
+  threePoint: number;
+  midrange: number;
+  shortRange: number;
+  dunking: number;
+  perimeterDefense: number;
+  interiorDefense: number;
+  blocking: number;
+  stealing: number;
+  speed: number;
+  strength: number;
+};
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -220,19 +247,7 @@ const getPlayerImpact = (
   playerIndex: number,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
-): {
-  shooting: number;
-  finishing: number;
-  vision: number;
-  handle: number;
-  athleticism: number;
-  defense: number;
-  rebounding: number;
-  consistency: number;
-  discipline: number;
-  stamina: number;
-  fatigueMultiplier: number;
-} => {
+): PlayerImpact => {
   const composite = toCompositeAttributes(player);
   const replacements = getBbiqReplacements(player);
   const shooting = getScaledAttribute(composite.shooting, leagueLevel);
@@ -246,6 +261,18 @@ const getPlayerImpact = (
   const discipline = getScaledAttribute(replacements.discipline, leagueLevel);
   const stamina = getScaledAttribute(composite.stamina, leagueLevel);
   const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex]);
+  const scaledAttrs = {
+    threePoint: getScaledAttribute(player.attributes.threePoint, leagueLevel),
+    midrange: getScaledAttribute(player.attributes.midrange, leagueLevel),
+    shortRange: getScaledAttribute(player.attributes.shortRange, leagueLevel),
+    dunking: getScaledAttribute(player.attributes.dunking, leagueLevel),
+    perimeterDefense: getScaledAttribute(player.attributes.perimeterDefense, leagueLevel),
+    interiorDefense: getScaledAttribute(player.attributes.interiorDefense, leagueLevel),
+    blocking: getScaledAttribute(player.attributes.blocking, leagueLevel),
+    stealing: getScaledAttribute(player.attributes.stealing, leagueLevel),
+    speed: getScaledAttribute(player.attributes.speed, leagueLevel),
+    strength: getScaledAttribute(player.attributes.strength, leagueLevel),
+  };
 
   return {
     shooting: shooting * fatigueMultiplier,
@@ -261,6 +288,16 @@ const getPlayerImpact = (
     discipline: discipline * fatigueMultiplier,
     stamina,
     fatigueMultiplier,
+    threePoint: scaledAttrs.threePoint * fatigueMultiplier,
+    midrange: scaledAttrs.midrange * fatigueMultiplier,
+    shortRange: scaledAttrs.shortRange * fatigueMultiplier,
+    dunking: scaledAttrs.dunking * fatigueMultiplier,
+    perimeterDefense: scaledAttrs.perimeterDefense * fatigueMultiplier,
+    interiorDefense: scaledAttrs.interiorDefense * fatigueMultiplier,
+    blocking: scaledAttrs.blocking * fatigueMultiplier,
+    stealing: scaledAttrs.stealing * fatigueMultiplier,
+    speed: scaledAttrs.speed * fatigueMultiplier,
+    strength: scaledAttrs.strength * fatigueMultiplier,
   };
 };
 
@@ -372,13 +409,20 @@ const pickDefenderIndex = (
   teamKey: TeamSide,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
+  role: DefenderRole,
   rng: () => number,
 ): number => {
   const weighted = defenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+    const weight =
+      role === "turnover"
+        ? impact.stealing * 0.55 + impact.speed * 0.3 + impact.perimeterDefense * 0.15
+        : role === "perimeter"
+          ? impact.perimeterDefense * 0.75 + impact.speed * 0.25
+          : impact.interiorDefense * 0.55 + impact.blocking * 0.3 + impact.strength * 0.15;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.defense * 0.6 + impact.athleticism * 0.4,
+      weight,
     };
   });
   return weightedPick(weighted, rng);
@@ -424,13 +468,16 @@ const pickRebounderIndex = (
 
 const pickShotZone = (
   action: PossessionAction,
-  shooterImpact: ReturnType<typeof getPlayerImpact>,
+  shooterImpact: PlayerImpact,
   rng: () => number,
 ): ShotZone => {
   const base = tuning.shotZoneByAction[action];
-  const suppressThree = shooterImpact.shooting < tuning.lowShootingThreeSuppressionThreshold;
-  const shootingTilt = (shooterImpact.shooting - 50) * tuning.shotZoneSkillWeight;
-  const finishingTilt = (shooterImpact.finishing - 50) * tuning.shotZoneSkillWeight;
+  const suppressThree = shooterImpact.threePoint < tuning.lowShootingThreeSuppressionThreshold;
+  const threeTilt = (shooterImpact.threePoint - 50) * tuning.shotZoneThreePointWeight;
+  const midrangeTilt = (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight;
+  const rimTilt =
+    (shooterImpact.shortRange - 50) * tuning.shotZoneRimShortRangeWeight +
+    (shooterImpact.dunking - 50) * tuning.shotZoneRimDunkingWeight;
   // Discipline lightly steers shot selection quality and stays within a <=5% effect.
   const disciplineEdge = clamp((shooterImpact.discipline - 50) / 49, -1, 1);
   const rimDisciplineMultiplier = clamp(1 + disciplineEdge * 0.05, 0.95, 1.05);
@@ -440,23 +487,41 @@ const pickShotZone = (
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
       key: "midrange",
-      weight: (base.midrange - Math.abs(shootingTilt - finishingTilt) * 0.25) * midrangeDisciplineMultiplier,
+      weight: (base.midrange + midrangeTilt - Math.abs(midrangeTilt - rimTilt) * 0.1) * midrangeDisciplineMultiplier,
     },
     {
       key: "rim",
-      weight: (base.rim + finishingTilt - fatigueTilt * 0.2) * rimDisciplineMultiplier,
+      weight: (base.rim + rimTilt - fatigueTilt * 0.2) * rimDisciplineMultiplier,
     },
   ];
 
   if (!suppressThree) {
     entries.unshift({
       key: "three",
-      weight: (base.three + shootingTilt + fatigueTilt) * threeDisciplineMultiplier,
+      weight: (base.three + threeTilt + fatigueTilt) * threeDisciplineMultiplier,
     });
   }
 
   return weightedPick(entries, rng);
 };
+
+const getDunkProbability = (shooterImpact: PlayerImpact): number => {
+  if (shooterImpact.dunking < tuning.dunkAttemptThreshold) {
+    return 0;
+  }
+
+  return clamp(
+    tuning.dunkAttemptBase +
+      (shooterImpact.dunking - tuning.dunkAttemptThreshold) * tuning.dunkAttemptDunkingWeight +
+      shooterImpact.strength * tuning.dunkAttemptStrengthWeight +
+      shooterImpact.speed * tuning.dunkAttemptSpeedWeight,
+    tuning.dunkAttemptMin,
+    tuning.dunkAttemptMax,
+  );
+};
+
+const pickRimAttemptType = (shooterImpact: PlayerImpact, rng: () => number): RimAttemptType =>
+  rng() <= getDunkProbability(shooterImpact) ? "dunk" : "layup";
 
 const getTurnoverProbability = (
   ballHandlerImpact: ReturnType<typeof getPlayerImpact>,
@@ -481,12 +546,14 @@ const getTurnoverProbability = (
 };
 
 const getStealProbability = (
-  defenderImpact: ReturnType<typeof getPlayerImpact>,
-  ballHandlerImpact: ReturnType<typeof getPlayerImpact>,
+  defenderImpact: PlayerImpact,
+  ballHandlerImpact: PlayerImpact,
 ): number =>
   clamp(
     tuning.stealBase +
-      (defenderImpact.defense * 0.65 + defenderImpact.athleticism * 0.35 - ballHandlerImpact.handle) /
+      (defenderImpact.stealing * tuning.stealDefenseWeight +
+        defenderImpact.speed * tuning.stealSpeedWeight -
+        ballHandlerImpact.handle) /
         tuning.stealDivisor,
     tuning.stealMin,
     tuning.stealMax,
@@ -508,32 +575,52 @@ const getAssistProbability = (
   return clamp(baseAssist * disciplineMultiplier, tuning.assistMin, tuning.assistMax);
 };
 
-const getBlockProbability = (
-  defenderImpact: ReturnType<typeof getPlayerImpact>,
-  shooterImpact: ReturnType<typeof getPlayerImpact>,
-  shotZone: ShotZone,
-): number => {
-  if (shotZone === "three") {
-    return clamp(tuning.blockBase * 0.35, tuning.blockMin, tuning.blockMax);
-  }
+const getContestValue = (shotZone: ShotZone, defenderImpact: PlayerImpact): number =>
+  shotZone === "rim"
+    ? defenderImpact.interiorDefense * tuning.rimContestDefenseWeight +
+      defenderImpact.athleticism * tuning.rimContestAthleticismWeight
+    : defenderImpact.perimeterDefense * tuning.perimeterContestDefenseWeight +
+      defenderImpact.athleticism * tuning.perimeterContestAthleticismWeight;
 
-  const defenderBlockValue = defenderImpact.defense * 0.55 + defenderImpact.athleticism * 0.45;
-  const shooterReleaseValue = shooterImpact.finishing * (shotZone === "rim" ? 0.7 : 0.45) + shooterImpact.shooting * 0.35;
+const getBlockProbability = (
+  defenderImpact: PlayerImpact,
+  shooterImpact: PlayerImpact,
+  shotZone: ShotZone,
+  rimAttemptType?: RimAttemptType,
+): number => {
+  const zoneMultiplier =
+    shotZone === "three"
+      ? tuning.threeBlockMultiplier
+      : shotZone === "midrange"
+        ? tuning.midrangeBlockMultiplier
+        : tuning.rimBlockMultiplier;
+  const defenderBlockValue = defenderImpact.blocking * 0.65 + defenderImpact.interiorDefense * 0.35;
+  const shooterResistance =
+    shotZone === "rim"
+      ? rimAttemptType === "dunk"
+        ? (shooterImpact.dunking * 0.55 + shooterImpact.strength * 0.3 + shooterImpact.speed * 0.15) *
+          tuning.dunkBlockResistance
+        : (shooterImpact.shortRange * 0.6 + shooterImpact.speed * 0.25 + shooterImpact.strength * 0.15) *
+          tuning.layupBlockResistance
+      : shotZone === "midrange"
+        ? shooterImpact.midrange * 0.7 + shooterImpact.speed * 0.15 + shooterImpact.handle * 0.15
+        : shooterImpact.threePoint * 0.75 + shooterImpact.handle * 0.15 + shooterImpact.speed * 0.1;
 
   return clamp(
-    tuning.blockBase + (defenderBlockValue - shooterReleaseValue) / tuning.blockDivisor,
-    tuning.blockMin,
-    tuning.blockMax,
+    (tuning.blockBase + (defenderBlockValue - shooterResistance) / tuning.blockDivisor) * zoneMultiplier,
+    tuning.blockMin * zoneMultiplier,
+    tuning.blockMax * zoneMultiplier,
   );
 };
 
 const getShotMakeProbability = (
   shotZone: ShotZone,
-  shooterImpact: ReturnType<typeof getPlayerImpact>,
-  defenderImpact: ReturnType<typeof getPlayerImpact>,
+  shooterImpact: PlayerImpact,
+  defenderImpact: PlayerImpact,
   state: PossessionState,
   offenseKey: TeamSide,
   rng: () => number,
+  rimAttemptType?: RimAttemptType,
 ): number => {
   const zoneBase =
     shotZone === "three"
@@ -544,19 +631,23 @@ const getShotMakeProbability = (
 
   const offenseValue =
     shotZone === "three"
-      ? shooterImpact.shooting * 0.85
+      ? shooterImpact.threePoint * 0.88 + shooterImpact.speed * 0.12
       : shotZone === "midrange"
-        ? shooterImpact.shooting * 0.6 + shooterImpact.finishing * 0.2
-        : shooterImpact.finishing * 0.65 + shooterImpact.athleticism * 0.25;
+        ? shooterImpact.midrange * 0.8 + shooterImpact.shortRange * 0.1 + shooterImpact.speed * 0.1
+        : rimAttemptType === "dunk"
+          ? shooterImpact.dunking * 0.6 + shooterImpact.strength * 0.25 + shooterImpact.speed * 0.15
+          : shooterImpact.shortRange * 0.7 + shooterImpact.speed * 0.15 + shooterImpact.strength * 0.15;
 
-  const defenseValue = defenderImpact.defense * 0.7 + defenderImpact.athleticism * 0.3;
+  const defenseValue = getContestValue(shotZone, defenderImpact);
   // Discipline provides a small shot-decision quality adjustment (<=5%).
   const disciplinedOffenseValue = offenseValue * subtleDisciplineMultiplier(shooterImpact.discipline);
   const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 4;
+  const attemptBonus =
+    shotZone === "rim" ? (rimAttemptType === "dunk" ? tuning.dunkMakeBonus : tuning.layupMakeBonus) : 0;
   const offenseEdge = (disciplinedOffenseValue - defenseValue) / tuning.shotOffenseDivisor;
 
   const makeWithoutVariance = clamp(
-    zoneBase + tuning.shotMakeBase + offenseEdge - defenseValue / tuning.shotContestDivisor - fatiguePenalty,
+    zoneBase + tuning.shotMakeBase + attemptBonus + offenseEdge - defenseValue / tuning.shotContestDivisor - fatiguePenalty,
     tuning.shotMakeMin,
     tuning.shotMakeMax,
   );
@@ -663,7 +754,7 @@ export const simulatePossession = (
   const action = chooseAction(ballHandler, state, rng);
 
   pushTrace(trace, "RESOLVE_TURNOVER_PRESSURE");
-  const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+  const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "turnover", rng);
   incrementTouch(state.defenseKey, primaryDefenderIndex);
   const primaryDefender = getPlayerByIndex(defenseTeam, primaryDefenderIndex);
   const primaryDefenderImpact = getPlayerImpact(
@@ -741,9 +832,17 @@ export const simulatePossession = (
   incrementTouch(state.offenseKey, shooterIndex);
   const shooterImpact = getPlayerImpact(shooter, state.offenseKey, shooterIndex, touchCounts, leagueLevel);
   const shotZone = pickShotZone(action, shooterImpact, rng);
+  const rimAttemptType = shotZone === "rim" ? pickRimAttemptType(shooterImpact, rng) : undefined;
 
   pushTrace(trace, "RESOLVE_SHOT_CONTEST");
-  const shotDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+  const shotDefenderIndex = pickDefenderIndex(
+    defenseTeam,
+    state.defenseKey,
+    touchCounts,
+    leagueLevel,
+    shotZone === "rim" ? "rim" : "perimeter",
+    rng,
+  );
   incrementTouch(state.defenseKey, shotDefenderIndex);
   const shotDefender = getPlayerByIndex(defenseTeam, shotDefenderIndex);
   const shotDefenderImpact = getPlayerImpact(
@@ -754,7 +853,7 @@ export const simulatePossession = (
     leagueLevel,
   );
 
-  const blockProb = getBlockProbability(shotDefenderImpact, shooterImpact, shotZone);
+  const blockProb = getBlockProbability(shotDefenderImpact, shooterImpact, shotZone, rimAttemptType);
   const blocked = rng() <= blockProb;
 
   let madeShot = false;
@@ -767,7 +866,7 @@ export const simulatePossession = (
 
   if (!blocked) {
     const makeProb = applyHomeCourtToProbability(
-      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, state, state.offenseKey, rng),
+      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, state, state.offenseKey, rng, rimAttemptType),
       state.offenseKey,
       "shot",
     );
@@ -809,7 +908,7 @@ export const simulatePossession = (
         touchCounts,
         leagueLevel,
       );
-      const rimDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
+      const rimDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "rim", rng);
       incrementTouch(state.defenseKey, rimDefenderIndex);
       const rimDefenderImpact = getPlayerImpact(
         getPlayerByIndex(defenseTeam, rimDefenderIndex),
@@ -878,6 +977,7 @@ export const simulatePossession = (
     nextState,
     eventType,
     shotZone,
+    rimAttemptType,
     shooterIndex,
     assisterIndex,
     rebounderIndex,

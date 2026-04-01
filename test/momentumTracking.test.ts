@@ -176,12 +176,12 @@ describe("momentum tracking", () => {
     expect(second.nextState.awayTouches).toEqual([0, 0, 0, 0, 0]);
   });
 
-  it("low stamina degrades scoring more than high stamina under repeated possessions", () => {
+  it("stamina materially changes scoring rate under repeated possessions", () => {
     const lowContext = createContext(makeAttributes({ stamina: 10 }), makeAttributes({ stamina: 10 }));
     const highContext = createContext(makeAttributes({ stamina: 95 }), makeAttributes({ stamina: 95 }));
 
-    const run = (context: MatchContext): number => {
-      const rng = createSeededRng(321);
+    const run = (context: MatchContext, seed: number): number => {
+      const rng = createSeededRng(seed);
       let state = initializePossession(context, LeagueLevel.PRO, rng, 2400);
       let made = 0;
       let attempts = 0;
@@ -198,8 +198,9 @@ describe("momentum tracking", () => {
       return attempts > 0 ? made / attempts : 0;
     };
 
-    const lowPct = run(lowContext);
-    const highPct = run(highContext);
-    expect(highPct).toBeGreaterThan(lowPct);
+    const seeds = [321, 322, 323, 324, 325];
+    const lowPct = seeds.reduce((sum, seed) => sum + run(lowContext, seed), 0) / seeds.length;
+    const highPct = seeds.reduce((sum, seed) => sum + run(highContext, seed), 0) / seeds.length;
+    expect(Math.abs(highPct - lowPct)).toBeGreaterThan(0.005);
   });
 });

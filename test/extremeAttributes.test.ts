@@ -5,6 +5,7 @@ import {
   type MatchContext,
   type PossessionResult,
   type PossessionState,
+  type ShotZone,
 } from "../src/matchEngine";
 import { LeagueLevel } from "../src/types/career";
 import type { PlayerAttributes, Player } from "../src/types/player";
@@ -127,6 +128,10 @@ const assertFiniteNonNegativeResult = (result: PossessionResult, prevState: Poss
   if (!result.turnoverLikeFailure) {
     expect(result.shotZone).toBeDefined();
     expect(VALID_SHOT_ZONES.has(result.shotZone ?? "")).toBe(true);
+    if (result.rimAttemptType !== undefined) {
+      expect(result.shotZone).toBe("rim");
+      expect(["layup", "dunk"]).toContain(result.rimAttemptType);
+    }
   }
 
   expect(isFiniteNumber(result.nextState.secondsRemaining)).toBe(true);
@@ -141,6 +146,37 @@ const assertFiniteNonNegativeResult = (result: PossessionResult, prevState: Poss
 
   expect(result.nextState.secondsRemaining).toBeLessThanOrEqual(prevState.secondsRemaining);
   expect(result.nextState.possessionIndex).toBe(prevState.possessionIndex + 1);
+};
+
+const getNonTurnoverResults = (steps: Array<{ result: PossessionResult; prevState: PossessionState }>): PossessionResult[] =>
+  steps.map(({ result }) => result).filter((result) => !result.turnoverLikeFailure);
+
+const getZoneRate = (results: PossessionResult[], zone: ShotZone): number => {
+  if (results.length === 0) {
+    return 0;
+  }
+  return results.filter((result) => result.shotZone === zone).length / results.length;
+};
+
+const getMakeRate = (results: PossessionResult[]): number => {
+  if (results.length === 0) {
+    return 0;
+  }
+  return results.filter((result) => result.madeShot).length / results.length;
+};
+
+const getBlockRate = (results: PossessionResult[]): number => {
+  if (results.length === 0) {
+    return 0;
+  }
+  return results.filter((result) => result.eventType === "block").length / results.length;
+};
+
+const getStealRate = (results: PossessionResult[]): number => {
+  if (results.length === 0) {
+    return 0;
+  }
+  return results.filter((result) => result.eventType === "steal").length / results.length;
 };
 
 describe("matchEngine extreme attribute invariants", () => {
@@ -187,5 +223,147 @@ describe("matchEngine extreme attribute invariants", () => {
     for (const { result, prevState } of steps) {
       assertFiniteNonNegativeResult(result, prevState);
     }
+  });
+
+  it("zone selection responds to threePoint, midrange, and shortRange/dunking", () => {
+    const highThree = getNonTurnoverResults(
+      runPossessions(makeContext({ threePoint: 99, midrange: 30, shortRange: 30, dunking: 20 }, {}), 20260304, 320, 6000),
+    );
+    const highMid = getNonTurnoverResults(
+      runPossessions(makeContext({ threePoint: 30, midrange: 99, shortRange: 30, dunking: 20 }, {}), 20260305, 320, 6000),
+    );
+    const highRim = getNonTurnoverResults(
+      runPossessions(makeContext({ threePoint: 30, midrange: 30, shortRange: 99, dunking: 99 }, {}), 20260306, 320, 6000),
+    );
+
+    expect(getZoneRate(highThree, "three")).toBeGreaterThan(getZoneRate(highMid, "three"));
+    expect(getZoneRate(highThree, "three")).toBeGreaterThan(getZoneRate(highRim, "three"));
+    expect(getZoneRate(highMid, "midrange")).toBeGreaterThan(getZoneRate(highThree, "midrange"));
+    expect(getZoneRate(highMid, "midrange")).toBeGreaterThan(getZoneRate(highRim, "midrange"));
+    expect(getZoneRate(highRim, "rim")).toBeGreaterThan(getZoneRate(highThree, "rim"));
+    expect(getZoneRate(highRim, "rim")).toBeGreaterThan(getZoneRate(highMid, "rim"));
+  });
+
+  it("high dunking slashers produce more dunk attempts than low dunking finishers", () => {
+    const highDunkResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext({ shortRange: 95, dunking: 99, speed: 90, strength: 88, threePoint: 20, midrange: 20 }, {}),
+        20260307,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+    const lowDunkResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext({ shortRange: 95, dunking: 20, speed: 90, strength: 88, threePoint: 20, midrange: 20 }, {}),
+        20260308,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+
+    const highDunks = highDunkResults.filter((result) => result.rimAttemptType === "dunk").length;
+    const lowDunks = lowDunkResults.filter((result) => result.rimAttemptType === "dunk").length;
+
+    expect(highDunkResults.length).toBeGreaterThan(0);
+    expect(lowDunkResults.length).toBeGreaterThan(0);
+    expect(highDunks).toBeGreaterThan(0);
+    expect(lowDunks).toBe(0);
+    expect(highDunks / highDunkResults.length).toBeGreaterThan(0.2);
+  });
+
+  it("perimeter and rim contests use the matching defender attribute", () => {
+    const perimeterShooter = { threePoint: 92, midrange: 88, shortRange: 20, dunking: 20 };
+    const rimShooter = { threePoint: 20, midrange: 20, shortRange: 92, dunking: 85, speed: 84, strength: 84 };
+
+    const perimeterDefenseResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(perimeterShooter, { perimeterDefense: 95, interiorDefense: 20, blocking: 20 }),
+        20260309,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
+    const interiorOnlyAgainstPerimeterResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(perimeterShooter, { perimeterDefense: 20, interiorDefense: 95, blocking: 20 }),
+        20260310,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
+
+    const interiorDefenseResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(rimShooter, { perimeterDefense: 20, interiorDefense: 95, blocking: 20 }),
+        20260311,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+    const perimeterOnlyAgainstRimResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext(rimShooter, { perimeterDefense: 95, interiorDefense: 20, blocking: 20 }),
+        20260312,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+
+    expect(getMakeRate(perimeterDefenseResults)).toBeLessThan(getMakeRate(interiorOnlyAgainstPerimeterResults));
+    expect(getMakeRate(interiorDefenseResults)).toBeLessThan(getMakeRate(perimeterOnlyAgainstRimResults));
+  });
+
+  it("blocking plus interiorDefense mostly matters at the rim", () => {
+    const rimHighBlockResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext({ threePoint: 20, midrange: 20, shortRange: 96, dunking: 88, speed: 82, strength: 86 }, { blocking: 99, interiorDefense: 99 }),
+        20260313,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+    const rimLowBlockResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext({ threePoint: 20, midrange: 20, shortRange: 96, dunking: 88, speed: 82, strength: 86 }, { blocking: 10, interiorDefense: 10 }),
+        20260314,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "rim");
+    const perimeterHighBlockResults = getNonTurnoverResults(
+      runPossessions(
+        makeContext({ threePoint: 96, midrange: 88, shortRange: 20, dunking: 20 }, { blocking: 99, interiorDefense: 99 }),
+        20260315,
+        320,
+        6000,
+      ),
+    ).filter((result) => result.shotZone === "three" || result.shotZone === "midrange");
+
+    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThan(getBlockRate(rimLowBlockResults));
+    expect(getBlockRate(rimHighBlockResults)).toBeGreaterThan(getBlockRate(perimeterHighBlockResults));
+  });
+
+  it("steal rate responds to defender stealing and speed", () => {
+    const highStealResults = runPossessions(
+      makeContext(
+        { handle: 55, passing: 50, vision: 50 },
+        { stealing: 99, speed: 99, perimeterDefense: 40, interiorDefense: 40, blocking: 40 },
+      ),
+      20260316,
+      360,
+      7000,
+    ).map(({ result }) => result);
+    const lowStealResults = runPossessions(
+      makeContext(
+        { handle: 55, passing: 50, vision: 50 },
+        { stealing: 10, speed: 10, perimeterDefense: 40, interiorDefense: 40, blocking: 40 },
+      ),
+      20260317,
+      360,
+      7000,
+    ).map(({ result }) => result);
+
+    expect(getStealRate(highStealResults)).toBeGreaterThan(getStealRate(lowStealResults));
   });
 });

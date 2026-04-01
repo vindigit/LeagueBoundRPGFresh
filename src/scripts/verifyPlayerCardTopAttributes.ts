@@ -19,7 +19,7 @@ const sampleAttributes: PlayerAttributes = {
   speed: 90,
   strength: 74,
   stamina: 79,
-} as any;
+};
 
 const topAttributes = getTopAttributes(sampleAttributes);
 

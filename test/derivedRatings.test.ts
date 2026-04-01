@@ -20,7 +20,7 @@ const makeAttributes = (value: number): PlayerAttributes => {
     speed: rating,
     strength: rating,
     stamina: rating,
-  } as any;
+  };
 };
 
 describe("computeDerivedRatings", () => {
@@ -58,11 +58,11 @@ describe("computeDerivedRatings", () => {
       stealing: 82,
       blocking: 35,
       offRebounding: 32,
-      defRebounding: 36,
-      speed: 88,
-      strength: 50,
-      stamina: 84,
-    } as any;
+    defRebounding: 36,
+    speed: 88,
+    strength: 50,
+    stamina: 84,
+    };
 
     const pg = computeDerivedRatings(attrs, "PG");
     const c = computeDerivedRatings(attrs, "C");

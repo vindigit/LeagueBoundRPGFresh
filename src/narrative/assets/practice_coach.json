@@ -1,4 +1,4 @@
-{
+﻿{
   "inkVersion": 21,
   "root": [
     [
@@ -68,10 +68,10 @@
         null
       ],
       "study_film": [
-        "^Hours vanish. Your eyes ache from the grainy footage, but you start to see the patterns—the way their big man cheats on the pick-and-roll.",
+        "^Hours vanish. Your eyes ache from the grainy footage, but you start to see the patternsâ€”the way their big man cheats on the pick-and-roll.",
         "\n",
         "#",
-        "^ACTION: updateAttribute | bbiq | 1",
+        "^ACTION: updateAttribute | vision | 1",
         "/#",
         {
           "->": "coach_done"
@@ -82,7 +82,7 @@
         "^Lungs burning, legs screaming. You drill the baseline suicides until the floor is slick with sweat. You're exhausted, but your engine feels bigger.",
         "\n",
         "#",
-        "^ACTION: updateAttribute | athleticism | 1",
+        "^ACTION: updateAttribute | stamina | 1",
         "/#",
         {
           "->": "coach_done"

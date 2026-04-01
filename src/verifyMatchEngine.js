@@ -1,151 +1,22 @@
-// TODO: Sprint 2 � this script uses the old 9-attr shape. Update when match engine is rewritten.
 "use strict";
 
 const { register } = require("tsx/cjs/api");
 register();
 
+const { createBaseContext, createEvenContext, cloneContext } = require("./verifyFixtures.js");
+
 const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const clampInt = (value) => clamp(Math.round(value), 0, 99);
-
-const LEGACY_ATTR_TO_MODERN = {
-  shooting: ["threePoint", "midrange", "shortRange"],
-  finishing: ["shortRange", "dunking", "strength"],
-  vision: ["passing", "vision"],
-  handle: ["handle"],
-  athleticism: ["speed", "strength", "dunking"],
-  defense: ["perimeterDefense", "interiorDefense", "stealing", "blocking"],
-  rebounding: ["offRebounding", "defRebounding"],
-  bbiq: ["vision", "passing", "handle"],
-  stamina: ["stamina"],
-};
-
-const normalizeLegacyAttributes = (attrs) => {
-  if ("shortRange" in attrs) {
-    return attrs;
-  }
-  const shooting = attrs.shooting ?? 50;
-  const finishing = attrs.finishing ?? 50;
-  const vision = attrs.vision ?? 50;
-  const handle = attrs.handle ?? 50;
-  const athleticism = attrs.athleticism ?? 50;
-  const defense = attrs.defense ?? 50;
-  const rebounding = attrs.rebounding ?? 50;
-  const bbiq = attrs.bbiq ?? 50;
-  const stamina = attrs.stamina ?? 50;
-  return {
-    shortRange: clampInt(finishing),
-    dunking: clampInt(finishing * 0.8 + athleticism * 0.2),
-    midrange: clampInt(shooting * 0.9),
-    threePoint: clampInt(shooting),
-    handle: clampInt(handle),
-    passing: clampInt(vision * 0.6 + handle * 0.4),
-    vision: clampInt(bbiq),
-    perimeterDefense: clampInt(defense),
-    interiorDefense: clampInt(defense * 0.7 + rebounding * 0.3),
-    stealing: clampInt(defense * 0.6 + athleticism * 0.4),
-    blocking: clampInt(defense * 0.5 + athleticism * 0.5),
-    offRebounding: clampInt(rebounding * 0.8),
-    defRebounding: clampInt(rebounding),
-    speed: clampInt(athleticism),
-    strength: clampInt(athleticism * 0.5 + finishing * 0.5),
-    stamina: clampInt(stamina),
-  };
-};
-
-const createPlayer = (id, name, archetype, position, attrs) => ({
-  id,
-  name,
-  age: 19,
-  bankBalance: 0,
-  morale: 50,
-  position,
-  archetype,
-  attributes: normalizeLegacyAttributes(attrs),
-  gameStats: { points: 0, assists: 0, rebounds: 0, steals: 0, blocks: 0, fga: 0, fgm: 0 },
-});
-
-const createBaseContext = () => {
-  const home = {
-    name: "Metro State",
-    teamOvr: 0,
-    roster: [
-      createPlayer("h1", "A1", "Playmaker", "PG", { shooting: 70, finishing: 66, vision: 82, handle: 84, athleticism: 71, defense: 58, rebounding: 44, bbiq: 78, stamina: 80 }),
-      createPlayer("h2", "A2", "Sharpshooter", "SG", { shooting: 85, finishing: 61, vision: 58, handle: 63, athleticism: 64, defense: 54, rebounding: 47, bbiq: 70, stamina: 76 }),
-      createPlayer("h3", "A3", "Slasher", "SF", { shooting: 63, finishing: 79, vision: 55, handle: 72, athleticism: 81, defense: 66, rebounding: 60, bbiq: 68, stamina: 79 }),
-      createPlayer("h4", "A4", "Stretch Big", "PF", { shooting: 77, finishing: 68, vision: 57, handle: 48, athleticism: 60, defense: 70, rebounding: 74, bbiq: 71, stamina: 74 }),
-      createPlayer("h5", "A5", "Paint Beast", "C", { shooting: 52, finishing: 83, vision: 46, handle: 41, athleticism: 65, defense: 79, rebounding: 86, bbiq: 69, stamina: 72 }),
-    ],
-  };
-
-  const away = {
-    name: "Central Tech",
-    teamOvr: 0,
-    roster: [
-      createPlayer("a1", "B1", "Playmaker", "PG", { shooting: 68, finishing: 64, vision: 80, handle: 81, athleticism: 70, defense: 57, rebounding: 43, bbiq: 76, stamina: 79 }),
-      createPlayer("a2", "B2", "Sharpshooter", "SG", { shooting: 82, finishing: 59, vision: 55, handle: 61, athleticism: 63, defense: 53, rebounding: 45, bbiq: 68, stamina: 75 }),
-      createPlayer("a3", "B3", "Lockdown Defender", "SF", { shooting: 61, finishing: 72, vision: 52, handle: 67, athleticism: 77, defense: 81, rebounding: 64, bbiq: 72, stamina: 81 }),
-      createPlayer("a4", "B4", "Stretch Big", "PF", { shooting: 74, finishing: 66, vision: 55, handle: 45, athleticism: 59, defense: 72, rebounding: 76, bbiq: 70, stamina: 73 }),
-      createPlayer("a5", "B5", "Paint Beast", "C", { shooting: 50, finishing: 81, vision: 43, handle: 39, athleticism: 63, defense: 80, rebounding: 85, bbiq: 68, stamina: 71 }),
-    ],
-  };
-
-  return { home, away };
-};
-
-const cloneContext = (context) => ({
-  home: {
-    ...context.home,
-    roster: context.home.roster.map((player) => ({ ...player, attributes: { ...player.attributes }, gameStats: { ...player.gameStats } })),
-  },
-  away: {
-    ...context.away,
-    roster: context.away.roster.map((player) => ({ ...player, attributes: { ...player.attributes }, gameStats: { ...player.gameStats } })),
-  },
-});
-
-const createEvenContext = () => {
-  const base = createBaseContext();
-  const awayRoster = base.home.roster.map((player, index) => ({
-    ...player,
-    id: `eq-a${index + 1}`,
-    name: `Even Away ${index + 1}`,
-    attributes: { ...player.attributes },
-    gameStats: { ...player.gameStats },
-  }));
-  return {
-    home: {
-      ...base.home,
-      roster: base.home.roster.map((player, index) => ({
-        ...player,
-        id: `eq-h${index + 1}`,
-        name: `Even Home ${index + 1}`,
-        attributes: { ...player.attributes },
-        gameStats: { ...player.gameStats },
-      })),
-    },
-    away: {
-      ...base.away,
-      name: "Even Away",
-      roster: awayRoster,
-    },
-  };
-};
 
 const applyBoost = (context, teamKey, attrKey, boost) => {
-  const mappedKeys = LEGACY_ATTR_TO_MODERN[attrKey] ?? [attrKey];
   const target = context[teamKey];
-  target.roster = target.roster.map((player) => {
-    const nextAttributes = { ...player.attributes };
-    for (const key of mappedKeys) {
-      const current = nextAttributes[key];
-      nextAttributes[key] = clamp(current + boost, 0, 99);
-    }
-    return {
-      ...player,
-      attributes: nextAttributes,
-    };
-  });
+  target.roster = target.roster.map((player) => ({
+    ...player,
+    attributes: {
+      ...player.attributes,
+      [attrKey]: clamp(player.attributes[attrKey] + boost, 0, 99),
+    },
+  }));
 };
 
 const classifyEventType = (eventType) => {
@@ -157,9 +28,6 @@ const classifyEventType = (eventType) => {
   }
   if (eventType === "miss" || eventType === "block" || eventType === "def_reb" || eventType === "putback_miss") {
     return "miss";
-  }
-  if (eventType === "off_reb") {
-    return "info";
   }
   return "info";
 };
@@ -225,7 +93,6 @@ const runSingleSimulation = ({ context, seed, leagueLevel, secondsRemaining, max
         metrics.turnoversAway += 1;
       }
     }
-
     if (result.defensivePlay.steal) {
       metrics.steals += 1;
     }
@@ -331,66 +198,6 @@ const assertDirectional = (label, baseline, compared, direction, tolerance = 0) 
   }
 };
 
-const runHomeCourtCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 1000 }) => {
-  const context = createEvenContext();
-  const seeds = Array.from({ length: sampleSize }, (_, index) => 20270000 + index);
-  const runs = seeds.map((seed) =>
-    runSingleSimulation({
-      context: cloneContext(context),
-      seed,
-      leagueLevel,
-      secondsRemaining,
-      maxPossessions,
-      engine,
-    }),
-  );
-
-  const aggregate = aggregateRuns(runs);
-  let homeWins = 0;
-  let awayWins = 0;
-  let ties = 0;
-  for (const run of runs) {
-    if (run.metrics.pointsHome > run.metrics.pointsAway) {
-      homeWins += 1;
-    } else if (run.metrics.pointsAway > run.metrics.pointsHome) {
-      awayWins += 1;
-    } else {
-      ties += 1;
-    }
-  }
-  const homeWinRate = ((homeWins + ties * 0.5) / runs.length) * 100;
-  const scoreDiff = aggregate.avg.pointsHome - aggregate.avg.pointsAway;
-  const turnoverDiff = aggregate.avg.turnoversHome - aggregate.avg.turnoversAway;
-
-  console.log("\n=== Home-Court Validation (Even Teams) ===");
-  console.log(`Runs: ${runs.length} | Possession cap: ${maxPossessions}`);
-  console.log(`Home win rate: ${homeWinRate.toFixed(2)}% (wins=${homeWins}, losses=${awayWins}, ties=${ties})`);
-  console.log(`Avg score: HOME ${aggregate.avg.pointsHome.toFixed(2)} - AWAY ${aggregate.avg.pointsAway.toFixed(2)} (diff ${scoreDiff.toFixed(2)})`);
-  console.log(
-    `Avg turnovers: HOME ${aggregate.avg.turnoversHome.toFixed(2)} - AWAY ${aggregate.avg.turnoversAway.toFixed(2)} (diff ${turnoverDiff.toFixed(2)})`,
-  );
-
-  if (homeWinRate <= 50) {
-    throw new Error(`Home win rate check failed: ${homeWinRate.toFixed(2)}% should be > 50%.`);
-  }
-  if (aggregate.avg.pointsHome < aggregate.avg.pointsAway) {
-    throw new Error(
-      `Home scoring check failed: HOME ${aggregate.avg.pointsHome.toFixed(2)} < AWAY ${aggregate.avg.pointsAway.toFixed(2)}.`,
-    );
-  }
-  if (aggregate.avg.turnoversHome > aggregate.avg.turnoversAway) {
-    throw new Error(
-      `Home turnovers check failed: HOME ${aggregate.avg.turnoversHome.toFixed(2)} > AWAY ${aggregate.avg.turnoversAway.toFixed(2)}.`,
-    );
-  }
-
-  if (homeWinRate < 51 || homeWinRate > 52.5) {
-    console.log(
-      "Tuning reminder: target near-neutral home edge is ~51.0-52.5% home win rate for evenly matched teams.",
-    );
-  }
-};
-
 const getHomeWinRate = (runs) => {
   let homeWins = 0;
   let awayWins = 0;
@@ -410,6 +217,46 @@ const getHomeWinRate = (runs) => {
     ties,
     homeWinRate: ((homeWins + ties * 0.5) / runs.length) * 100,
   };
+};
+
+const runHomeCourtCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 1000 }) => {
+  const context = createEvenContext();
+  const seeds = Array.from({ length: sampleSize }, (_, index) => 20270000 + index);
+  const runs = seeds.map((seed) =>
+    runSingleSimulation({
+      context: cloneContext(context),
+      seed,
+      leagueLevel,
+      secondsRemaining,
+      maxPossessions,
+      engine,
+    }),
+  );
+
+  const aggregate = aggregateRuns(runs);
+  const homeWins = getHomeWinRate(runs);
+  const scoreDiff = aggregate.avg.pointsHome - aggregate.avg.pointsAway;
+  const turnoverDiff = aggregate.avg.turnoversHome - aggregate.avg.turnoversAway;
+
+  console.log("\n=== Home-Court Validation (Even Teams) ===");
+  console.log(`Runs: ${runs.length} | Possession cap: ${maxPossessions}`);
+  console.log(
+    `Home win rate: ${homeWins.homeWinRate.toFixed(2)}% (wins=${homeWins.homeWins}, losses=${homeWins.awayWins}, ties=${homeWins.ties})`,
+  );
+  console.log(`Avg score: HOME ${aggregate.avg.pointsHome.toFixed(2)} - AWAY ${aggregate.avg.pointsAway.toFixed(2)} (diff ${scoreDiff.toFixed(2)})`);
+  console.log(
+    `Avg turnovers: HOME ${aggregate.avg.turnoversHome.toFixed(2)} - AWAY ${aggregate.avg.turnoversAway.toFixed(2)} (diff ${turnoverDiff.toFixed(2)})`,
+  );
+
+  if (homeWins.homeWinRate <= 50) {
+    throw new Error(`Home win rate check failed: ${homeWins.homeWinRate.toFixed(2)}% should be > 50%.`);
+  }
+  if (aggregate.avg.pointsHome < aggregate.avg.pointsAway) {
+    throw new Error(`Home scoring check failed: HOME ${aggregate.avg.pointsHome.toFixed(2)} < AWAY ${aggregate.avg.pointsAway.toFixed(2)}.`);
+  }
+  if (aggregate.avg.turnoversHome > aggregate.avg.turnoversAway) {
+    throw new Error(`Home turnovers check failed: HOME ${aggregate.avg.turnoversHome.toFixed(2)} > AWAY ${aggregate.avg.turnoversAway.toFixed(2)}.`);
+  }
 };
 
 const runMomentumCheck = ({ engine, tuning, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 600 }) => {
@@ -500,22 +347,18 @@ const main = async () => {
   );
 
   const baseline = aggregateRuns(baselineRuns);
-  const perRunRows = baselineRuns.map((run, index) => {
-    const diff = run.metrics.pointsHome - run.metrics.pointsAway;
-    return {
-      run: index + 1,
-      seed: seeds[index],
-      home: run.metrics.pointsHome,
-      away: run.metrics.pointsAway,
-      diff,
-      possessions: run.metrics.possessions,
-      score: run.metrics.scoreEvents,
-      miss: run.metrics.missEvents,
-      turnover: run.metrics.turnoverEvents,
-      info: run.metrics.infoEvents,
-    };
-  });
-
+  const perRunRows = baselineRuns.map((run, index) => ({
+    run: index + 1,
+    seed: seeds[index],
+    home: run.metrics.pointsHome,
+    away: run.metrics.pointsAway,
+    diff: run.metrics.pointsHome - run.metrics.pointsAway,
+    possessions: run.metrics.possessions,
+    score: run.metrics.scoreEvents,
+    miss: run.metrics.missEvents,
+    turnover: run.metrics.turnoverEvents,
+    info: run.metrics.infoEvents,
+  }));
   const scoreDiffs = perRunRows.map((row) => row.diff);
 
   console.log("=== Core Box Score Simulation ===");
@@ -554,22 +397,14 @@ const main = async () => {
 
   if (checkAttributesEnabled) {
     const attributeChecks = [
-      {
-        attr: "shooting",
-        metric: (x) =>
-          x.avg.threePa + x.avg.midPa > 0
-            ? ((x.avg.threePm + x.avg.midPm) / (x.avg.threePa + x.avg.midPa)) * 100
-            : 0,
-        direction: "up",
-        tolerance: 1,
-      },
-      { attr: "finishing", metric: (x) => x.rimPct, direction: "up", tolerance: 0.5 },
+      { attr: "threePoint", metric: (x) => (x.avg.threePa > 0 ? (x.avg.threePm / x.avg.threePa) * 100 : 0), direction: "up", tolerance: 1 },
+      { attr: "shortRange", metric: (x) => x.rimPct, direction: "up", tolerance: 0.5 },
       { attr: "vision", metric: (x) => x.assistRate, direction: "up", tolerance: 0.5 },
       { attr: "handle", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
-      { attr: "athleticism", metric: (x) => x.avg.steals + x.avg.blocks + x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
-      { attr: "defense", metric: (x) => x.avg.pointsAway, direction: "down", tolerance: 0.5 },
-      { attr: "rebounding", metric: (x) => x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
-      { attr: "bbiq", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
+      { attr: "speed", metric: (x) => x.avg.steals + x.avg.blocks + x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
+      { attr: "perimeterDefense", metric: (x) => x.avg.pointsAway, direction: "down", tolerance: 0.5 },
+      { attr: "offRebounding", metric: (x) => x.offensiveReboundRate, direction: "up", tolerance: 0.5 },
+      { attr: "passing", metric: (x) => x.turnoverRate, direction: "down", tolerance: 0.5 },
       { attr: "stamina", metric: (x) => x.avg.q4HomePoints, direction: "up", tolerance: 0.5 },
     ];
 
@@ -577,7 +412,6 @@ const main = async () => {
     for (const check of attributeChecks) {
       const boostedContext = cloneContext(context);
       applyBoost(boostedContext, "home", check.attr, 18);
-
       const boostedRuns = seeds.map((seed) =>
         runSingleSimulation({
           context: cloneContext(boostedContext),
@@ -594,9 +428,7 @@ const main = async () => {
       const boostedMetric = check.metric(boosted);
       assertDirectional(check.attr, baselineMetric, boostedMetric, check.direction, check.tolerance ?? 0);
 
-      console.log(
-        `- ${check.attr}: baseline=${baselineMetric.toFixed(2)}, boosted=${boostedMetric.toFixed(2)} (${check.direction})`,
-      );
+      console.log(`- ${check.attr}: baseline=${baselineMetric.toFixed(2)}, boosted=${boostedMetric.toFixed(2)} (${check.direction})`);
     }
   }
 
@@ -626,4 +458,3 @@ main().catch((error) => {
   console.error("Match engine verification failed:", error);
   process.exitCode = 1;
 });
-

@@ -1,4 +1,5 @@
 import { getAllAttributesSorted } from "../src/components/playerCardUtils";
+import type { PlayerAttributes } from "../src/types/player";
 
 describe("playerCardUtils", () => {
   it("returns all 16 attributes sorted by value descending", () => {
@@ -19,7 +20,7 @@ describe("playerCardUtils", () => {
       speed: 72,
       strength: 60,
       stamina: 69,
-    } as any);
+    } satisfies PlayerAttributes);
 
     expect(sorted).toHaveLength(16);
     expect(sorted[0].key).toBe("speed");

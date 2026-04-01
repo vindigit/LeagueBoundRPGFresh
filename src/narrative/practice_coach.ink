@@ -1,4 +1,4 @@
-=== coach_aside ===
+﻿=== coach_aside ===
 The whistle echoes in the empty gym. Practice is over, but Coach grabs your arm. "Kid, that last game... you were coasting. Stay late. We're fixing what's broken." # SCENE_START
 
 * [Study Film: "Show me their tendencies."]
@@ -9,16 +9,17 @@ The whistle echoes in the empty gym. Practice is over, but Coach grabs your arm.
     -> extra_sprints
 
 === study_film ===
-Hours vanish. Your eyes ache from the grainy footage, but you start to see the patterns—the way their big man cheats on the pick-and-roll.
-# ACTION: updateAttribute | bbiq | 1
+Hours vanish. Your eyes ache from the grainy footage, but you start to see the patternsâ€”the way their big man cheats on the pick-and-roll.
+# ACTION: updateAttribute | vision | 1
 -> coach_done
 
 === extra_sprints ===
 Lungs burning, legs screaming. You drill the baseline suicides until the floor is slick with sweat. You're exhausted, but your engine feels bigger.
-# ACTION: updateAttribute | athleticism | 1
+# ACTION: updateAttribute | stamina | 1
 -> coach_done
 
 === coach_done ===
 Coach claps your shoulder. "Good work. Keep that fire, and you might actually make it out of this town."
 # SCENE_COMPLETE
 -> END
+

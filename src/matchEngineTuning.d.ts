@@ -9,10 +9,6 @@ declare const tuning: {
     "Slasher" | "Sharpshooter" | "Playmaker" | "Lockdown Defender" | "Paint Beast" | "Stretch Big",
     { pass: number; shoot: number; dribble: number }
   >;
-  ballHandlerArchetypeMultipliers: Record<
-    "Slasher" | "Sharpshooter" | "Playmaker" | "Lockdown Defender" | "Paint Beast" | "Stretch Big",
-    number
-  >;
   baseActionWeights: { pass: number; shoot: number; dribble: number };
   highPressureAdjustments: { pass: number; shoot: number; dribble: number };
   lowPressureAdjustments: { pass: number; shoot: number; dribble: number };
@@ -45,7 +41,6 @@ declare const tuning: {
   shotZoneMidrangeWeight: number;
   shotZoneRimShortRangeWeight: number;
   shotZoneRimDunkingWeight: number;
-  shotZoneBbiqWeight: number;
   shotZoneFatigueWeight: number;
   dunkAttemptThreshold: number;
   dunkAttemptBase: number;
@@ -83,10 +78,6 @@ declare const tuning: {
   fatigueTouchScale: number;
   fatigueMinMultiplier: number;
   fatigueMaxMultiplier: number;
-  decisionVarianceBase: number;
-  decisionVarianceBbiqScale: number;
-  energyModifierScale: number;
-  bbiqModifierScale: number;
   shotMakeBase: number;
   shotMakeMin: number;
   shotMakeMax: number;

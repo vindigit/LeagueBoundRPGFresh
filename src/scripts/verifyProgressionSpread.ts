@@ -1,5 +1,5 @@
 import { initializePossession, simulatePossession, createSeededRng, type MatchContext, type PossessionState } from "../matchEngine";
-import { CPI_CHECKPOINTS, CPI_TARGET_BAND, calculateCpi, getCpiRatio } from "../features/backstory/constants/growthModel";
+import { CPI_CHECKPOINTS, calculateCpi, getCpiRatio } from "../features/backstory/constants/growthModel";
 import type { AttributeGainSource } from "../types/backstory";
 import { LeagueLevel } from "../types/career";
 import type { Player, PlayerArchetype, PlayerAttributes } from "../types/player";
@@ -36,6 +36,12 @@ interface CpiCheckpointRow {
   inTargetBand: boolean;
   violatesDominanceGuard: boolean;
 }
+
+const VERIFY_CPI_BAND = {
+  min: 0.95,
+  max: 1.4,
+  dominanceMax: 1.45,
+} as const;
 
 const PROFILE_CONFIGS: ProfileConfig[] = [
   { key: "SLASHER_INSIDE_FINISHER", label: "Slasher / Inside Finisher", archetype: "Slasher", intendedDirection: "up" },
@@ -275,8 +281,8 @@ const run = async (): Promise<void> => {
       const cpiRatioVsControl = getCpiRatio(cpi, controlCpi);
       const inTargetBand = profile.key === CONTROL_PROFILE.key
         ? true
-        : cpiRatioVsControl >= CPI_TARGET_BAND.min && cpiRatioVsControl <= CPI_TARGET_BAND.max;
-      const violatesDominanceGuard = cpiRatioVsControl > CPI_TARGET_BAND.dominanceMax;
+        : cpiRatioVsControl >= VERIFY_CPI_BAND.min && cpiRatioVsControl <= VERIFY_CPI_BAND.max;
+      const violatesDominanceGuard = cpiRatioVsControl > VERIFY_CPI_BAND.dominanceMax;
 
       rows.push({
         checkpoint: checkpoint.label,

@@ -25,6 +25,7 @@ export interface KeyMomentChoice {
 
 export interface KeyMomentEvent {
   triggered: true;
+  pendingId: string;
   contextLine: string;
   reason: "critical_state" | "rng" | "critical_and_rng";
   choices: [KeyMomentChoice, KeyMomentChoice, KeyMomentChoice];
@@ -37,11 +38,24 @@ export interface KeyMomentEvent {
   };
 }
 
+export interface PendingPossession {
+  pendingId: string;
+  state: PossessionState;
+  result: PossessionResult;
+}
+
+export interface PendingKeyMoment {
+  pendingId: string;
+  event: KeyMomentEvent;
+}
+
 export interface AdapterStepOutput {
   state: PossessionState;
   metrics: SimMetrics;
   result?: PossessionResult;
   keyMoment?: KeyMomentEvent;
+  pendingPossession?: PendingPossession;
+  pendingKeyMoment?: PendingKeyMoment;
   userInkState?: { id: string } & InkPlayerState;
 }
 
@@ -49,6 +63,8 @@ export interface AdapterRunOutput {
   state: PossessionState;
   metrics: SimMetrics;
   keyMoments: KeyMomentEvent[];
+  pendingPossession?: PendingPossession;
+  pendingKeyMoment?: PendingKeyMoment;
 }
 
 export interface MatchEngineAdapter {
@@ -57,6 +73,7 @@ export interface MatchEngineAdapter {
   runPossessions(possessions: number): AdapterRunOutput;
   getState(): AdapterStepOutput;
   updateUserInkState(next: InkPlayerState): AdapterStepOutput;
+  resumePendingPossession(): AdapterStepOutput;
 }
 
 export interface MatchEngineAdapterOptions {
@@ -126,6 +143,8 @@ const applyInkPlayerState = (player: Player, inkState: InkPlayerState): Player =
   position: inkState.Position,
 });
 
+let pendingIdCounter = 1;
+
 export const createMatchEngineAdapter = (
   options: MatchEngineAdapterOptions,
 ): MatchEngineAdapter => {
@@ -144,6 +163,8 @@ export const createMatchEngineAdapter = (
     assists: 0,
     turnoverLikeFailures: 0,
   };
+  let pendingPossession: PendingPossession | undefined;
+  let pendingKeyMoment: PendingKeyMoment | undefined;
 
   const getUserInkState = (): AdapterStepOutput["userInkState"] => {
     const userPlayer = getPlayerById(context, options.userPlayerId);
@@ -162,6 +183,8 @@ export const createMatchEngineAdapter = (
       return {
         state,
         metrics,
+        pendingPossession,
+        pendingKeyMoment,
         userInkState: undefined,
       };
     }
@@ -174,6 +197,8 @@ export const createMatchEngineAdapter = (
     return {
       state,
       metrics,
+      pendingPossession,
+      pendingKeyMoment,
       userInkState: getUserInkState(),
     };
   };
@@ -201,8 +226,11 @@ export const createMatchEngineAdapter = (
       reason = "rng";
     }
 
+    const pendingId = `pending-possession-${pendingIdCounter}`;
+
     return {
       triggered: true,
+      pendingId,
       contextLine: createContextLine(result.action, previousState.secondsRemaining),
       reason,
       choices: KEY_MOMENT_CHOICES,
@@ -216,27 +244,50 @@ export const createMatchEngineAdapter = (
     };
   };
 
-  const stepPossession = (): AdapterStepOutput => {
-    const previousState = state;
-    const result = simulatePossession(context, previousState, leagueLevel, rng);
-    metrics = updateMetrics(metrics, result);
-    const keyMoment = buildKeyMoment(previousState, result);
-    state = result.nextState;
-
-    return {
-      state,
-      metrics,
-      result,
-      keyMoment,
-      userInkState: getUserInkState(),
-    };
-  };
-
-  const startGame = (): AdapterStepOutput => ({
+  const buildStepOutput = (overrides: Partial<AdapterStepOutput> = {}): AdapterStepOutput => ({
     state,
     metrics,
+    pendingPossession,
+    pendingKeyMoment,
     userInkState: getUserInkState(),
+    ...overrides,
   });
+
+  const stepPossession = (): AdapterStepOutput => {
+    if (pendingPossession) {
+      return buildStepOutput();
+    }
+
+    const previousState = state;
+    const result = simulatePossession(context, previousState, leagueLevel, rng);
+    const keyMoment = buildKeyMoment(previousState, result);
+
+    if (keyMoment) {
+      pendingIdCounter += 1;
+      pendingPossession = {
+        pendingId: keyMoment.pendingId,
+        state: previousState,
+        result,
+      };
+      pendingKeyMoment = {
+        pendingId: keyMoment.pendingId,
+        event: keyMoment,
+      };
+      return buildStepOutput({
+        result,
+        keyMoment,
+      });
+    }
+
+    metrics = updateMetrics(metrics, result);
+    state = result.nextState;
+
+    return buildStepOutput({
+      result,
+    });
+  };
+
+  const startGame = (): AdapterStepOutput => buildStepOutput();
 
   const runPossessions = (possessions: number): AdapterRunOutput => {
     const keyMoments: KeyMomentEvent[] = [];
@@ -244,6 +295,15 @@ export const createMatchEngineAdapter = (
       const step = stepPossession();
       if (step.keyMoment) {
         keyMoments.push(step.keyMoment);
+      }
+      if (step.pendingPossession) {
+        return {
+          state,
+          metrics,
+          keyMoments,
+          pendingPossession: step.pendingPossession,
+          pendingKeyMoment: step.pendingKeyMoment,
+        };
       }
     }
     return {
@@ -253,11 +313,23 @@ export const createMatchEngineAdapter = (
     };
   };
 
-  const getState = (): AdapterStepOutput => ({
-    state,
-    metrics,
-    userInkState: getUserInkState(),
-  });
+  const getState = (): AdapterStepOutput => buildStepOutput();
+
+  const resumePendingPossession = (): AdapterStepOutput => {
+    if (!pendingPossession) {
+      return buildStepOutput();
+    }
+
+    const pending = pendingPossession;
+    pendingPossession = undefined;
+    pendingKeyMoment = undefined;
+    metrics = updateMetrics(metrics, pending.result);
+    state = pending.result.nextState;
+
+    return buildStepOutput({
+      result: pending.result,
+    });
+  };
 
   return {
     startGame,
@@ -265,5 +337,6 @@ export const createMatchEngineAdapter = (
     runPossessions,
     getState,
     updateUserInkState,
+    resumePendingPossession,
   };
 };

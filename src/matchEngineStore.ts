@@ -3,6 +3,8 @@ import {
   type AdapterStepOutput,
   type KeyMomentEvent,
   type MatchEngineAdapterOptions,
+  type PendingKeyMoment,
+  type PendingPossession,
 } from "./matchEngineAdapter";
 
 export type AutoSaveReason = "week_advance" | "key_moment_resolution";
@@ -15,7 +17,10 @@ export interface AutoSaveEvent {
 export interface MatchEngineStoreState {
   started: boolean;
   pausedForKeyMoment: boolean;
+  pausedForPendingPossession: boolean;
   keyMoment?: KeyMomentEvent;
+  pendingKeyMoment?: PendingKeyMoment;
+  pendingPossession?: PendingPossession;
   lastStep?: AdapterStepOutput;
   autosaveEvents: AutoSaveEvent[];
 }
@@ -51,6 +56,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
   let state: MatchEngineStoreState = {
     started: false,
     pausedForKeyMoment: false,
+    pausedForPendingPossession: false,
     autosaveEvents: [],
   };
   const listeners = new Set<(next: MatchEngineStoreState) => void>();
@@ -80,22 +86,29 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     return setState({
       started: true,
       pausedForKeyMoment: false,
+      pausedForPendingPossession: false,
       keyMoment: undefined,
+      pendingKeyMoment: started.pendingKeyMoment,
+      pendingPossession: started.pendingPossession,
       lastStep: started,
       autosaveEvents: [],
     });
   };
 
   const stepPossession = (): MatchEngineStoreState => {
-    if (!adapter || !state.started || state.pausedForKeyMoment) {
+    if (!adapter || !state.started || state.pausedForPendingPossession) {
       return state;
     }
     const step = adapter.stepPossession();
+    const isPending = Boolean(step.pendingPossession);
     return setState({
       ...state,
       lastStep: step,
-      pausedForKeyMoment: Boolean(step.keyMoment),
+      pausedForKeyMoment: Boolean(step.pendingKeyMoment),
+      pausedForPendingPossession: isPending,
       keyMoment: step.keyMoment,
+      pendingKeyMoment: step.pendingKeyMoment,
+      pendingPossession: step.pendingPossession,
     });
   };
 
@@ -104,11 +117,11 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
       return state;
     }
     let remaining = possessions;
-    while (remaining > 0 && !state.pausedForKeyMoment) {
+    while (remaining > 0 && !state.pausedForPendingPossession) {
       stepPossession();
       remaining -= 1;
     }
-    if (state.pausedForKeyMoment) {
+    if (state.pausedForPendingPossession) {
       return state;
     }
     return setState(emitAutoSave(state, "week_advance", options.onAutoSave));
@@ -117,7 +130,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
   const resolveKeyMomentChoice = (
     choiceId: "force_shot" | "pass_to_corner" | "reset",
   ): MatchEngineStoreState => {
-    if (!adapter || !state.keyMoment || !state.lastStep?.userInkState) {
+    if (!adapter || !state.pendingKeyMoment || !state.pendingPossession || !state.lastStep?.userInkState) {
       return state;
     }
 
@@ -135,13 +148,18 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
       Morale: userInkState.Morale,
       Position: userInkState.Position,
     });
+    const resumed = adapter.resumePendingPossession();
 
     return setState(emitAutoSave({
       ...state,
       pausedForKeyMoment: false,
+      pausedForPendingPossession: false,
       keyMoment: undefined,
+      pendingKeyMoment: undefined,
+      pendingPossession: undefined,
       lastStep: {
         ...adapterSynced,
+        ...resumed,
         userInkState,
       },
     }, "key_moment_resolution", options.onAutoSave));

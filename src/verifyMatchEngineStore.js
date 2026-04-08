@@ -44,10 +44,14 @@ const run = async () => {
   }
 
   console.log(`Paused for key moment: ${store.getState().pausedForKeyMoment}`);
+  console.log(`Paused for pending possession: ${store.getState().pausedForPendingPossession}`);
   console.log(`Key moment present: ${Boolean(store.getState().keyMoment)}`);
+  console.log(`Pending key moment present: ${Boolean(store.getState().pendingKeyMoment)}`);
+  console.log(`Pending possession present: ${Boolean(store.getState().pendingPossession)}`);
 
   store.resolveKeyMomentChoice("pass_to_corner");
   console.log(`Paused after resolve: ${store.getState().pausedForKeyMoment}`);
+  console.log(`Pending possession after resolve: ${Boolean(store.getState().pendingPossession)}`);
   console.log(`Morale after resolve: ${store.getState().lastStep?.userInkState?.Morale}`);
 
   store.runPossessions(12);

@@ -61,6 +61,7 @@ export interface PlayerDNA {
   caps: PlayerAttributes;
   growthResidue: Partial<Record<keyof PlayerAttributes, number>>;
   publicTraits: string[];
+  builderProfile?: GeneratedBadgeProfile;
 }
 
 export interface BackstoryInput {

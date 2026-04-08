@@ -423,6 +423,12 @@ const buildBuilderProfile = (
   };
 };
 
+export const deriveGeneratedBadgeProfile = (
+  attributes: PlayerAttributes,
+  caps: PlayerAttributes,
+  position: Position,
+): GeneratedBadgeProfile => buildBuilderProfile(attributes, caps, position);
+
 /**
  * Generates identity, DNA, and starting attributes from builder input.
  *
@@ -492,6 +498,7 @@ export const generateBackstoryFromInput = (
       `${rawInput.bodyFrame} Frame`,
       `${hometown.city} Hooper`,
     ],
+    builderProfile: undefined,
   };
   const startingAttributes = buildStartingAttributes(
     rawInput.archetype,
@@ -508,6 +515,7 @@ export const generateBackstoryFromInput = (
     caps,
     primaryPosition,
   );
+  dna.builderProfile = builderProfile;
 
   return {
     identity,
@@ -599,7 +607,9 @@ export const generateBackstoryFromBuildInput = (
       `${rawInput.bodyFrame} Frame`,
       `${hometown.city} Hooper`,
     ],
+    builderProfile: undefined,
   };
+  dna.builderProfile = builderProfile;
 
   return {
     identity,

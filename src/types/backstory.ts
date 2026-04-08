@@ -1,5 +1,7 @@
 import type { LeagueLevel } from "./career";
 import type { PlayerArchetype, PlayerAttributes, Position } from "./player";
+import type { BuilderClassification } from "../builder/classify";
+import type { ResolvedBuilderBadge } from "../builder/badges/resolve";
 
 export type BodyFrame = "Lean" | "Athletic" | "Stocky";
 export type DominantHand = "Left" | "Right";
@@ -75,6 +77,27 @@ export interface BackstoryInput {
   height: ExactHeight;
   weightLbs: number;
   generationSeed?: number;
+}
+
+export interface BuildBackstoryInput {
+  firstName: string;
+  lastName: string;
+  stateCode: string;
+  citySlug: string;
+  ageStarted: number;
+  bodyFrame: BodyFrame;
+  dominantHand: DominantHand;
+  primaryPosition: Position;
+  secondaryPosition: Position;
+  height: ExactHeight;
+  weightLbs: number;
+  buildAttributes: PlayerAttributes;
+  generationSeed?: number;
+}
+
+export interface GeneratedBadgeProfile {
+  classification: BuilderClassification;
+  badges: ResolvedBuilderBadge[];
 }
 
 export interface CareerNewsItem {

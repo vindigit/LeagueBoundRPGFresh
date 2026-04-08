@@ -5,7 +5,8 @@ type AttributeKey = keyof PlayerAttributes;
 /**
  * Two primary attributes for each archetype.
  *
- * Generator uses these keys to grant a small primary-identity bonus when building caps.
+ * Compatibility only during the builder migration.
+ * New generator code should consume this data through `archetypeCompatibility.ts`.
  */
 export const ARCHETYPE_PRIMARY_ATTRIBUTES: Record<PlayerArchetype, readonly [AttributeKey, AttributeKey]> = {
   Slasher: ["shortRange", "dunking"],

@@ -5,6 +5,9 @@ import type { PlayerArchetype, PlayerAttributes } from "../../../types/player";
  *
  * Final caps are computed in the generator by layering potential, growth curve, frame,
  * position, and body-preset bonuses on top of these values.
+ *
+ * Compatibility only during the builder migration. New generator code should consume
+ * this data through `archetypeCompatibility.ts` so the dependency stays explicit.
  */
 export const ARCHETYPE_BASE_CAPS: Record<PlayerArchetype, PlayerAttributes> = {
   Slasher: {

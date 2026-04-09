@@ -345,6 +345,9 @@ export const useMatchLoop = (): void => {
             score: { home: homeScore, away: awayScore },
             homeStreak: possessionStateRef.current.homeStreak,
             awayStreak: possessionStateRef.current.awayStreak,
+            ballHandlerIndex: possessionStateRef.current.ballHandlerIndex,
+            homeTouches: possessionStateRef.current.homeTouches,
+            awayTouches: possessionStateRef.current.awayTouches,
           },
         });
 

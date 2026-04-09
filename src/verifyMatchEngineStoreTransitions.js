@@ -59,6 +59,7 @@ const run = async () => {
   assert(Boolean(snapshot.keyMoment), "Key moment payload should exist when paused.");
   assert(Boolean(snapshot.pendingKeyMoment), "Pending key moment payload should exist when paused.");
   assert(Boolean(snapshot.pendingPossession), "Pending possession should exist when paused.");
+  assert(!snapshot.lastStep?.result, "Paused key moments should not expose a finalized possession result.");
   const pendingMetrics = snapshot.lastStep?.metrics.possessions ?? -1;
   const interruptedAutosavesBeforeResolve = autosaves.length;
   const interruptedSnapshot = store.runPossessions(8);
@@ -74,15 +75,22 @@ const run = async () => {
 
   const updatesBeforeResolve = updates.length;
   const moraleBefore = snapshot.lastStep?.userInkState?.Morale ?? -1;
-  snapshot = store.resolveKeyMomentChoice("pass_to_corner");
+  const positiveChoiceId =
+    snapshot.pendingKeyMoment.options.find((option) => option.id === "kick_out" || option.id === "contain")?.id ??
+    snapshot.pendingKeyMoment.options[0].id;
+  snapshot = store.resolveKeyMoment({
+    pendingId: snapshot.pendingKeyMoment.id,
+    choiceId: positiveChoiceId,
+  });
 
   assert(!snapshot.pausedForKeyMoment, "Store should unpause after resolving key moment.");
   assert(!snapshot.pausedForPendingPossession, "Store should clear generic paused state after resolving key moment.");
   assert(!snapshot.keyMoment, "Key moment should be cleared after resolution.");
   assert(!snapshot.pendingKeyMoment, "Pending key moment should be cleared after resolution.");
   assert(!snapshot.pendingPossession, "Pending possession should be cleared after resolution.");
-  assert((snapshot.lastStep?.userInkState?.Morale ?? -1) === moraleBefore + 1, "Pass to corner should increase morale by 1.");
+  assert((snapshot.lastStep?.userInkState?.Morale ?? -1) === moraleBefore + 1, "Positive choice should increase morale by 1.");
   assert((snapshot.lastStep?.metrics.possessions ?? 0) === pendingMetrics + 1, "Resolving should commit the stored possession exactly once.");
+  assert(Boolean(snapshot.lastStep?.result), "Resolving should produce a finalized possession result.");
   assert(updates.length === updatesBeforeResolve + 1, "resolveKeyMomentChoice() should notify subscribers exactly once.");
   assert(autosaves.includes("key_moment_resolution"), "Autosave should fire on key moment resolution.");
 

@@ -127,6 +127,7 @@ export const resolveKeyMoment = (args: KeyMomentResolveArgs): KeyMomentResolutio
   const nextStreaks = getNextMomentumStreaks(possessionState, mapped.madeShot, mapped.turnoverLikeFailure);
 
   const nextState = {
+    ...possessionState,
     possessionIndex: possessionState.possessionIndex + 1,
     secondsRemaining: Math.max(0, possessionState.secondsRemaining - 8),
     offenseKey: possessionState.defenseKey,
@@ -135,7 +136,7 @@ export const resolveKeyMoment = (args: KeyMomentResolveArgs): KeyMomentResolutio
     score: nextScore,
     homeStreak: nextStreaks.homeStreak,
     awayStreak: nextStreaks.awayStreak,
-  } as const;
+  };
 
   const result: PossessionResult = {
     action: pending.mode === "choice" ? "pass" : "shoot",

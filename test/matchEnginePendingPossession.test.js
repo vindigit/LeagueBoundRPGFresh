@@ -10,7 +10,7 @@ const createContext = () => {
 };
 
 describe("pending possession plumbing", () => {
-  it("holds a triggered possession as pending until resumed", () => {
+  it("holds a triggered possession as pending until resolved", () => {
     const context = createContext();
     const adapter = createMatchEngineAdapter({
       home: context.home,
@@ -36,12 +36,58 @@ describe("pending possession plumbing", () => {
     expect(step.pendingKeyMoment).toBeDefined();
     expect(step.metrics.possessions).toBe(previousMetrics);
     expect(step.state).toEqual(step.pendingPossession.state);
+    expect(step.result).toBeUndefined();
+    expect(step.pendingKeyMoment.options?.length).toBeGreaterThan(0);
 
-    const resumed = adapter.resumePendingPossession();
-    expect(resumed.pendingPossession).toBeUndefined();
-    expect(resumed.pendingKeyMoment).toBeUndefined();
-    expect(resumed.metrics.possessions).toBe(step.metrics.possessions + 1);
-    expect(resumed.state).toEqual(step.pendingPossession.result.nextState);
+    const aggressive = adapter.resolvePendingKeyMoment({
+      pendingId: step.pendingKeyMoment.id,
+      choiceId: step.pendingKeyMoment.options[0].id,
+    });
+    expect(aggressive.pendingPossession).toBeUndefined();
+    expect(aggressive.pendingKeyMoment).toBeUndefined();
+    expect(aggressive.metrics.possessions).toBe(step.metrics.possessions + 1);
+    expect(aggressive.result).toBeDefined();
+  });
+
+  it("uses the user choice to influence the resolved possession result", () => {
+    const context = createContext();
+    const createPendingStep = () => {
+      const adapter = createMatchEngineAdapter({
+        home: context.home,
+        away: context.away,
+        userPlayerId: "h1",
+        seed: 20260214,
+        keyMomentRngChance: 1,
+      });
+
+      adapter.startGame();
+      let step;
+      for (let i = 0; i < 15; i += 1) {
+        step = adapter.stepPossession();
+        if (step.pendingKeyMoment) {
+          return { adapter, step };
+        }
+      }
+      throw new Error("Expected a pending key moment.");
+    };
+
+    const aggressive = createPendingStep();
+    const conservative = createPendingStep();
+    const aggressiveChoice = aggressive.step.pendingKeyMoment.options[0].id;
+    const conservativeChoice = conservative.step.pendingKeyMoment.options[conservative.step.pendingKeyMoment.options.length - 1].id;
+
+    const aggressiveResolved = aggressive.adapter.resolvePendingKeyMoment({
+      pendingId: aggressive.step.pendingKeyMoment.id,
+      choiceId: aggressiveChoice,
+    });
+    const conservativeResolved = conservative.adapter.resolvePendingKeyMoment({
+      pendingId: conservative.step.pendingKeyMoment.id,
+      choiceId: conservativeChoice,
+    });
+
+    expect(aggressiveResolved.result).toBeDefined();
+    expect(conservativeResolved.result).toBeDefined();
+    expect(aggressiveResolved.result.points).not.toBe(conservativeResolved.result.points);
   });
 
   it("keeps the store paused until the pending possession is resolved", () => {
@@ -68,12 +114,17 @@ describe("pending possession plumbing", () => {
     const interrupted = store.runPossessions(5);
     expect(interrupted.lastStep.metrics.possessions).toBe(pendingMetrics);
     expect(interrupted.pausedForPendingPossession).toBe(true);
+    expect(interrupted.lastStep.result).toBeUndefined();
 
-    const resolved = store.resolveKeyMomentChoice("pass_to_corner");
+    const resolved = store.resolveKeyMoment({
+      pendingId: snapshot.pendingKeyMoment.id,
+      choiceId: snapshot.pendingKeyMoment.options[0].id,
+    });
     expect(resolved.pausedForKeyMoment).toBe(false);
     expect(resolved.pausedForPendingPossession).toBe(false);
     expect(resolved.pendingPossession).toBeUndefined();
     expect(resolved.pendingKeyMoment).toBeUndefined();
     expect(resolved.lastStep.metrics.possessions).toBe(pendingMetrics + 1);
+    expect(resolved.lastStep.result).toBeDefined();
   });
 });

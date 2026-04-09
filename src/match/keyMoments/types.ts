@@ -1,4 +1,4 @@
-import type { MatchScore, MatchContext, PossessionResult } from "../../matchEngine";
+import type { MatchScore, MatchContext, PossessionResult, PossessionState } from "../../matchEngine";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
 
@@ -86,13 +86,5 @@ export interface KeyMomentResolveArgs {
   pending: KeyMomentPending;
   input: KeyMomentResolutionInput;
   context: MatchContext;
-  possessionState: {
-    offenseKey: "home" | "away";
-    defenseKey: "home" | "away";
-    secondsRemaining: number;
-    possessionIndex: number;
-    score: MatchScore;
-    homeStreak: number;
-    awayStreak: number;
-  };
+  possessionState: PossessionState;
 }

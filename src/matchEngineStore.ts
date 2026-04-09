@@ -1,11 +1,10 @@
 import {
   createMatchEngineAdapter,
   type AdapterStepOutput,
-  type KeyMomentEvent,
   type MatchEngineAdapterOptions,
-  type PendingKeyMoment,
   type PendingPossession,
 } from "./matchEngineAdapter";
+import type { KeyMomentPending, KeyMomentResolutionInput } from "./match/keyMoments/types";
 
 export type AutoSaveReason = "week_advance" | "key_moment_resolution";
 
@@ -18,8 +17,8 @@ export interface MatchEngineStoreState {
   started: boolean;
   pausedForKeyMoment: boolean;
   pausedForPendingPossession: boolean;
-  keyMoment?: KeyMomentEvent;
-  pendingKeyMoment?: PendingKeyMoment;
+  keyMoment?: KeyMomentPending;
+  pendingKeyMoment?: KeyMomentPending;
   pendingPossession?: PendingPossession;
   lastStep?: AdapterStepOutput;
   autosaveEvents: AutoSaveEvent[];
@@ -31,7 +30,7 @@ export interface MatchEngineStore {
   startMatch(options: MatchEngineAdapterOptions): MatchEngineStoreState;
   stepPossession(): MatchEngineStoreState;
   runPossessions(possessions: number): MatchEngineStoreState;
-  resolveKeyMomentChoice(choiceId: "force_shot" | "pass_to_corner" | "reset"): MatchEngineStoreState;
+  resolveKeyMoment(input: KeyMomentResolutionInput): MatchEngineStoreState;
 }
 
 export interface MatchEngineStoreOptions {
@@ -127,17 +126,18 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     return setState(emitAutoSave(state, "week_advance", options.onAutoSave));
   };
 
-  const resolveKeyMomentChoice = (
-    choiceId: "force_shot" | "pass_to_corner" | "reset",
-  ): MatchEngineStoreState => {
+  const resolveKeyMoment = (input: KeyMomentResolutionInput): MatchEngineStoreState => {
     if (!adapter || !state.pendingKeyMoment || !state.pendingPossession || !state.lastStep?.userInkState) {
+      return state;
+    }
+    if (input.pendingId !== state.pendingKeyMoment.id) {
       return state;
     }
 
     const userInkState = { ...state.lastStep.userInkState };
-    if (choiceId === "force_shot") {
+    if (input.choiceId === "attack_gap" || input.choiceId === "jump_lane") {
       userInkState.Morale = Math.max(0, userInkState.Morale - 1);
-    } else if (choiceId === "pass_to_corner") {
+    } else if (input.choiceId === "kick_out" || input.choiceId === "contain") {
       userInkState.Morale = Math.min(99, userInkState.Morale + 1);
     } else {
       userInkState.BankBalance = userInkState.BankBalance - 50;
@@ -148,7 +148,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
       Morale: userInkState.Morale,
       Position: userInkState.Position,
     });
-    const resumed = adapter.resumePendingPossession();
+    const resumed = adapter.resolvePendingKeyMoment(input);
 
     return setState(emitAutoSave({
       ...state,
@@ -171,6 +171,6 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     startMatch,
     stepPossession,
     runPossessions,
-    resolveKeyMomentChoice,
+    resolveKeyMoment,
   };
 };

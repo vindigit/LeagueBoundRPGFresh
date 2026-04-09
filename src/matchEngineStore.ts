@@ -135,10 +135,11 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     }
 
     const userInkState = { ...state.lastStep.userInkState };
-    if (input.choiceId === "attack_gap" || input.choiceId === "jump_lane") {
-      userInkState.Morale = Math.max(0, userInkState.Morale - 1);
-    } else if (input.choiceId === "kick_out" || input.choiceId === "contain") {
+    const selectedOption = state.pendingKeyMoment.options.find((option) => option.id === input.choiceId);
+    if ((selectedOption?.qualityDelta ?? 0) > 0) {
       userInkState.Morale = Math.min(99, userInkState.Morale + 1);
+    } else if ((selectedOption?.qualityDelta ?? 0) < 0) {
+      userInkState.Morale = Math.max(0, userInkState.Morale - 1);
     } else {
       userInkState.BankBalance = userInkState.BankBalance - 50;
     }

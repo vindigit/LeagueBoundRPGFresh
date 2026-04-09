@@ -1,6 +1,7 @@
 import type { MatchScore, MatchContext, PossessionResult, PossessionState } from "../../matchEngine";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
+export type KeyMomentType = "create_shot" | "make_the_read" | "on_ball_stop" | "jump_lane";
 
 export interface KeyMomentContext {
   id: string;
@@ -32,13 +33,14 @@ export interface MinigameSpec {
 
 export interface KeyMomentPending {
   id: string;
+  type: KeyMomentType;
   context: KeyMomentContext;
-  scenario: "offense_shot" | "offense_choice" | "defense_choice";
   promptText: string;
   mode: "choice" | "minigame";
-  options?: KeyMomentOption[];
+  options: KeyMomentOption[];
   minigame?: MinigameSpec;
   simBaselineQuality: number;
+  seedValue?: number;
   autoResolveAt?: number;
 }
 
@@ -58,6 +60,14 @@ export interface KeyMomentResolutionOutput {
   isUserAction: true;
 }
 
+export interface KeyMomentBuildArgs {
+  id: string;
+  context: KeyMomentContext;
+  matchContext?: MatchContext;
+  possessionState: PossessionState;
+  seedValue: number;
+}
+
 export interface KeyMomentSchedulerInput {
   context: KeyMomentContext;
   periodTotalSeconds: number;
@@ -71,15 +81,6 @@ export interface KeyMomentSchedulerOutput {
 export interface KeyMomentScheduler {
   reset(): void;
   onPossessionBoundary(input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput;
-}
-
-export interface KeyMomentTemplate {
-  id: string;
-  scenario: KeyMomentPending["scenario"];
-  mode: KeyMomentPending["mode"];
-  promptText: string;
-  options?: KeyMomentOption[];
-  minigame?: MinigameSpec;
 }
 
 export interface KeyMomentResolveArgs {

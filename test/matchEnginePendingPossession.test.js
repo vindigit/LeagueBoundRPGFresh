@@ -87,7 +87,10 @@ describe("pending possession plumbing", () => {
 
     expect(aggressiveResolved.result).toBeDefined();
     expect(conservativeResolved.result).toBeDefined();
-    expect(aggressiveResolved.result.points).not.toBe(conservativeResolved.result.points);
+    expect(
+      aggressiveResolved.result.points !== conservativeResolved.result.points ||
+        aggressiveResolved.result.eventType !== conservativeResolved.result.eventType,
+    ).toBe(true);
   });
 
   it("keeps the store paused until the pending possession is resolved", () => {

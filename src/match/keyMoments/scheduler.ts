@@ -1,10 +1,10 @@
-import { KEY_MOMENT_BASELINE_QUALITY, KEY_MOMENT_TEMPLATES } from "./catalog";
+import { KEY_MOMENT_DEFINITIONS } from "./catalog";
 import type {
+  KeyMomentBuildArgs,
   KeyMomentPending,
   KeyMomentScheduler,
   KeyMomentSchedulerInput,
   KeyMomentSchedulerOutput,
-  KeyMomentTemplate,
   PeriodKey,
 } from "./types";
 
@@ -21,17 +21,6 @@ export interface KeyMomentSchedulerConfig {
 
 const DEFAULT_TARGET_PER_PERIOD = 6;
 const DEFAULT_COOLDOWN_POSSESSIONS = 1;
-
-const createPending = (template: KeyMomentTemplate, input: KeyMomentSchedulerInput): KeyMomentPending => ({
-  id: `${template.id}-${input.context.periodKey}-${input.context.possessionIndex}`,
-  context: input.context,
-  scenario: template.scenario,
-  promptText: template.promptText,
-  mode: template.mode,
-  options: template.options,
-  minigame: template.minigame,
-  simBaselineQuality: KEY_MOMENT_BASELINE_QUALITY,
-});
 
 const getCurrentWindow = (
   contextSecondsRemaining: number,
@@ -61,20 +50,38 @@ const getPeriodState = (
   return next;
 };
 
+const pickScheduledPending = (input: KeyMomentSchedulerInput, seedValue: number): KeyMomentPending | undefined => {
+  const eligible = KEY_MOMENT_DEFINITIONS.filter((definition) =>
+    input.context.offense === input.context.userTeam
+      ? definition.type === "create_shot" || definition.type === "make_the_read"
+      : definition.type === "on_ball_stop" || definition.type === "jump_lane",
+  );
+  const pool = eligible.length > 0 ? eligible : KEY_MOMENT_DEFINITIONS;
+  const definition = pool[Math.abs(Math.floor(seedValue)) % pool.length];
+  const buildArgs: KeyMomentBuildArgs = {
+    id: `${definition.type}-${input.context.periodKey}-${input.context.possessionIndex}`,
+    context: input.context,
+    possessionState: {
+      possessionIndex: input.context.possessionIndex,
+      secondsRemaining: input.context.timeRemaining,
+      offenseKey: input.context.offense,
+      defenseKey: input.context.defense,
+      ballHandlerIndex: input.context.userPlayerIndex,
+      homeTouches: [0, 0, 0, 0, 0],
+      awayTouches: [0, 0, 0, 0, 0],
+      score: input.context.score,
+      homeStreak: 0,
+      awayStreak: 0,
+    },
+    seedValue,
+  };
+  return definition.buildPending(buildArgs);
+};
+
 export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}): KeyMomentScheduler => {
   const periodState = new Map<PeriodKey, SchedulerState>();
   const targetPerPeriod = config.targetPerPeriod ?? DEFAULT_TARGET_PER_PERIOD;
   const cooldownPossessions = config.cooldownPossessions ?? DEFAULT_COOLDOWN_POSSESSIONS;
-
-  const pickContextualTemplate = (input: KeyMomentSchedulerInput, currentWindow: number): KeyMomentTemplate => {
-    const eligibleTemplates =
-      input.context.offense === "home"
-        ? KEY_MOMENT_TEMPLATES.filter((template) => template.scenario === "offense_shot" || template.scenario === "offense_choice")
-        : KEY_MOMENT_TEMPLATES.filter((template) => template.scenario === "defense_choice");
-    const pool = eligibleTemplates.length > 0 ? eligibleTemplates : KEY_MOMENT_TEMPLATES;
-    const index = Math.abs(Math.floor(input.context.possessionIndex + currentWindow)) % pool.length;
-    return pool[index];
-  };
 
   const onPossessionBoundary = (input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput => {
     const state = getPeriodState(periodState, input.context.periodKey);
@@ -82,11 +89,7 @@ export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}):
       return { trigger: false };
     }
 
-    const currentWindow = getCurrentWindow(
-      input.context.timeRemaining,
-      input.periodTotalSeconds,
-      targetPerPeriod,
-    );
+    const currentWindow = getCurrentWindow(input.context.timeRemaining, input.periodTotalSeconds, targetPerPeriod);
     state.windowIndexReached = Math.max(state.windowIndexReached, currentWindow);
 
     const possessionsSinceLast = input.context.possessionIndex - state.lastTriggeredPossessionIndex;
@@ -104,9 +107,9 @@ export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}):
     state.triggeredCount += 1;
     state.lastTriggeredPossessionIndex = input.context.possessionIndex;
 
-    const template = pickContextualTemplate(input, currentWindow);
-    const pending = createPending(template, input);
-    return { trigger: true, pending };
+    const seedValue = input.context.possessionIndex + currentWindow;
+    const pending = pickScheduledPending(input, seedValue);
+    return pending ? { trigger: true, pending } : { trigger: false };
   };
 
   return {

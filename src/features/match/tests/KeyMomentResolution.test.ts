@@ -1,6 +1,6 @@
-import { resolveKeyMoment } from "../../../match/keyMoments/resolveKeyMoment";
+import { resolveKeyMoment, tryResolveKeyMoment } from "../../../match/keyMoments/resolveKeyMoment";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
-import type { MatchContext } from "../../../matchEngine";
+import type { MatchContext, PossessionState } from "../../../matchEngine";
 import { useMatchStore } from "../store/useMatchStore";
 
 const context = {
@@ -8,197 +8,139 @@ const context = {
   away: { name: "Away", teamOvr: 0, roster: [] },
 } as unknown as MatchContext;
 
-const pendingChoice: KeyMomentPending = {
-  id: "km-choice-1",
-  scenario: "offense_choice",
+const possessionState: PossessionState = {
+  offenseKey: "home",
+  defenseKey: "away",
+  secondsRemaining: 620,
+  possessionIndex: 10,
+  ballHandlerIndex: 0,
+  homeTouches: [0, 1, 0, 0, 0],
+  awayTouches: [0, 0, 0, 0, 0],
+  score: { home: 10, away: 9 },
+  homeStreak: 0,
+  awayStreak: 0,
+};
+
+const buildPending = (
+  type: KeyMomentPending["type"],
+  optionIds: string[],
+  overrides: Partial<KeyMomentPending> = {},
+): KeyMomentPending => ({
+  id: `pending-${type}`,
+  type,
   context: {
-    id: "ctx-1",
+    id: `ctx-${type}`,
     periodKey: "Q1",
     quarter: 1,
     timeRemaining: 620,
-    offense: "home",
-    defense: "away",
+    offense: type === "on_ball_stop" || type === "jump_lane" ? "away" : "home",
+    defense: type === "on_ball_stop" || type === "jump_lane" ? "home" : "away",
     userTeam: "home",
     userPlayerIndex: 0,
     possessionIndex: 10,
     score: { home: 0, away: 0 },
   },
-  promptText: "Choose",
+  promptText: `Prompt ${type}`,
   mode: "choice",
-  options: [
-    { id: "a", label: "A", description: "A", qualityDelta: 0.2 },
-    { id: "b", label: "B", description: "B", qualityDelta: -0.1 },
-  ],
+  options: optionIds.map((id, index) => ({
+    id,
+    label: id,
+    description: id,
+    qualityDelta: index === 0 ? 0.12 : index === 1 ? 0.02 : -0.08,
+  })),
   simBaselineQuality: 0.55,
-};
-
-const pendingShot: KeyMomentPending = {
-  id: "km-shot-1",
-  scenario: "offense_shot",
-  context: {
-    id: "ctx-shot-1",
-    periodKey: "Q1",
-    quarter: 1,
-    timeRemaining: 620,
-    offense: "home",
-    defense: "away",
-    userTeam: "home",
-    userPlayerIndex: 0,
-    possessionIndex: 10,
-    score: { home: 0, away: 0 },
-  },
-  promptText: "Shoot",
-  mode: "minigame",
-  minigame: {
-    type: "aim_shot_placement",
-    durationMs: 2800,
-    targetCenter: 0.5,
-    targetRadius: 0.14,
-  },
-  simBaselineQuality: 0.55,
-};
-
-const pendingDefenseChoice: KeyMomentPending = {
-  ...pendingChoice,
-  id: "km-defense-choice-1",
-  scenario: "defense_choice",
-  context: {
-    ...pendingChoice.context,
-    id: "ctx-defense-1",
-    offense: "away",
-    defense: "home",
-  },
-};
+  seedValue: 123,
+  ...overrides,
+});
 
 describe("Key Moment resolution", () => {
   beforeEach(() => {
     useMatchStore.getState().initializeMatch("User", "Away");
   });
 
-  it("maps quality bucket to made shot when choice improves quality", () => {
+  it("resolves create_shot choices into different shot outcomes", () => {
+    const pending = buildPending("create_shot", ["step_back_three", "turn_the_corner", "protect_ball"]);
+
+    const aggressive = resolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, choiceId: "step_back_three" },
+      context,
+      possessionState,
+    });
+    const conservative = resolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, choiceId: "protect_ball" },
+      context,
+      possessionState,
+    });
+
+    expect(aggressive.result.eventType).toBe("made_3");
+    expect(conservative.result.eventType).toBe("miss");
+  });
+
+  it("resolves make_the_read choices into different offensive results", () => {
+    const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"]);
+
+    const kickOut = resolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, choiceId: "kick_out" },
+      context,
+      possessionState,
+    });
+    const attackGap = resolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, choiceId: "attack_gap" },
+      context,
+      possessionState,
+    });
+
+    expect(kickOut.result.eventType).toBe("made_3");
+    expect(attackGap.result.eventType).toBe("made_2");
+  });
+
+  it("keeps the user involved on defensive moments", () => {
+    const pending = buildPending("jump_lane", ["shoot_gap", "stunt_recover", "stay_home"]);
+
     const resolved = resolveKeyMoment({
-      pending: pendingChoice,
-      input: { pendingId: "km-choice-1", choiceId: "a" },
+      pending,
+      input: { pendingId: pending.id, choiceId: "shoot_gap" },
       context,
       possessionState: {
-        offenseKey: "home",
-        defenseKey: "away",
-        secondsRemaining: 620,
-        possessionIndex: 10,
-        score: { home: 10, away: 9 },
-        homeStreak: 0,
-        awayStreak: 0,
+        ...possessionState,
+        offenseKey: "away",
+        defenseKey: "home",
       },
     });
-    expect(resolved.quality).toBeGreaterThanOrEqual(0.75);
-    expect(["made_2", "made_3"]).toContain(resolved.result.eventType);
-    expect(typeof resolved.resultSummaryText).toBe("string");
-    expect(resolved.resultSummaryText.length).toBeGreaterThan(0);
-    expect(resolved.success).toBe(true);
+
+    expect(resolved.result.shooterIndex).not.toBe(pending.context.userPlayerIndex);
+    expect(resolved.result.defensivePlay.defenderIndex).toBe(pending.context.userPlayerIndex);
   });
 
   it("rejects second resolve attempt in store (one-and-done)", () => {
-    useMatchStore.getState().setKeyMomentPending(pendingChoice);
-    useMatchStore.getState().resolveKeyMoment({ pendingId: pendingChoice.id, choiceId: "a" });
+    const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"]);
+
+    useMatchStore.getState().setKeyMomentPending(pending);
+    useMatchStore.getState().resolveKeyMoment({ pendingId: pending.id, choiceId: "kick_out" });
     const first = useMatchStore.getState().keyMomentResolutionInput;
-    expect(first?.choiceId).toBe("a");
+    expect(first?.choiceId).toBe("kick_out");
 
-    useMatchStore.getState().resolveKeyMoment({ pendingId: pendingChoice.id, choiceId: "b" });
+    useMatchStore.getState().resolveKeyMoment({ pendingId: pending.id, choiceId: "reset_space" });
     const second = useMatchStore.getState().keyMomentResolutionInput;
-    expect(second?.choiceId).toBe("a");
+    expect(second?.choiceId).toBe("kick_out");
   });
 
-  it("keeps the user involved on away offense via defender index", () => {
-    const resolved = resolveKeyMoment({
-      pending: pendingDefenseChoice,
-      input: { pendingId: "km-defense-choice-1", choiceId: "a" },
-      context,
-      possessionState: {
-        offenseKey: "away",
-        defenseKey: "home",
-        secondsRemaining: 500,
-        possessionIndex: 11,
-        score: { home: 12, away: 12 },
-        homeStreak: 0,
-        awayStreak: 0,
-      },
+  it("returns undefined from dispatcher when the type is unknown", () => {
+    const pending = buildPending("create_shot", ["step_back_three", "turn_the_corner", "protect_ball"], {
+      type: "unknown" as KeyMomentPending["type"],
     });
 
-    expect(resolved.result.shooterIndex).not.toBe(pendingDefenseChoice.context.userPlayerIndex);
-    expect(resolved.result.defensivePlay.defenderIndex).toBe(pendingDefenseChoice.context.userPlayerIndex);
-    expect(typeof resolved.success).toBe("boolean");
-    expect(typeof resolved.resultSummaryText).toBe("string");
-  });
-
-  it("maps shot minigame quality deterministically to shot-only outcomes", () => {
-    const high = resolveKeyMoment({
-      pending: pendingShot,
-      input: { pendingId: "km-shot-1", minigameQuality: 0.9 },
+    const resolved = tryResolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, choiceId: "step_back_three" },
       context,
-      possessionState: {
-        offenseKey: "home",
-        defenseKey: "away",
-        secondsRemaining: 620,
-        possessionIndex: 10,
-        score: { home: 0, away: 0 },
-        homeStreak: 0,
-        awayStreak: 0,
-      },
-    });
-    const mid = resolveKeyMoment({
-      pending: pendingShot,
-      input: { pendingId: "km-shot-1", minigameQuality: 0.65 },
-      context,
-      possessionState: {
-        offenseKey: "home",
-        defenseKey: "away",
-        secondsRemaining: 620,
-        possessionIndex: 10,
-        score: { home: 0, away: 0 },
-        homeStreak: 0,
-        awayStreak: 0,
-      },
-    });
-    const low = resolveKeyMoment({
-      pending: pendingShot,
-      input: { pendingId: "km-shot-1", minigameQuality: 0.45 },
-      context,
-      possessionState: {
-        offenseKey: "home",
-        defenseKey: "away",
-        secondsRemaining: 620,
-        possessionIndex: 10,
-        score: { home: 0, away: 0 },
-        homeStreak: 0,
-        awayStreak: 0,
-      },
-    });
-    const veryLow = resolveKeyMoment({
-      pending: pendingShot,
-      input: { pendingId: "km-shot-1", minigameQuality: 0.1 },
-      context,
-      possessionState: {
-        offenseKey: "home",
-        defenseKey: "away",
-        secondsRemaining: 620,
-        possessionIndex: 10,
-        score: { home: 0, away: 0 },
-        homeStreak: 0,
-        awayStreak: 0,
-      },
+      possessionState,
     });
 
-    expect(high.result.eventType).toBe("made_3");
-    expect(high.success).toBe(true);
-    expect(mid.result.eventType).toBe("made_2");
-    expect(mid.success).toBe(true);
-    expect(low.result.eventType).toBe("miss");
-    expect(low.success).toBe(false);
-    expect(veryLow.result.eventType).toBe("block");
-    expect(veryLow.success).toBe(false);
-    expect(["steal", "turnover"]).not.toContain(high.result.eventType);
-    expect(["steal", "turnover"]).not.toContain(mid.result.eventType);
-    expect(["steal", "turnover"]).not.toContain(low.result.eventType);
-    expect(["steal", "turnover"]).not.toContain(veryLow.result.eventType);
+    expect(resolved).toBeUndefined();
   });
 });

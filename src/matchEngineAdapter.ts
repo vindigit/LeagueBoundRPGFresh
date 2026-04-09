@@ -2,9 +2,9 @@ import type { Team } from "./types/team";
 import type { InkPlayerState, LegacyPlayerStateInput, Player } from "./types/player";
 import { normalizePlayerStateForInk } from "./types/player";
 import { LeagueLevel } from "./types/career";
-import { KEY_MOMENT_BASELINE_QUALITY, KEY_MOMENT_TEMPLATES } from "./match/keyMoments/catalog";
-import { resolveKeyMoment } from "./match/keyMoments/resolveKeyMoment";
-import type { KeyMomentPending, KeyMomentResolutionInput, KeyMomentTemplate, PeriodKey } from "./match/keyMoments/types";
+import { KEY_MOMENT_DEFINITIONS } from "./match/keyMoments/catalog";
+import { tryResolveKeyMoment } from "./match/keyMoments/resolveKeyMoment";
+import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, PeriodKey } from "./match/keyMoments/types";
 import {
   createSeededRng,
   initializePossession,
@@ -89,6 +89,29 @@ const getPlayerById = (context: MatchContext, playerId: string): Player | undefi
   return pool.find((player) => player.id === playerId);
 };
 
+const getPlayerLocation = (
+  context: MatchContext,
+  playerId: string,
+): { teamKey: "home" | "away"; playerIndex: number; player: Player } | undefined => {
+  const homeIndex = context.home.roster.findIndex((player) => player.id === playerId);
+  if (homeIndex >= 0) {
+    return {
+      teamKey: "home",
+      playerIndex: homeIndex,
+      player: context.home.roster[homeIndex],
+    };
+  }
+  const awayIndex = context.away.roster.findIndex((player) => player.id === playerId);
+  if (awayIndex >= 0) {
+    return {
+      teamKey: "away",
+      playerIndex: awayIndex,
+      player: context.away.roster[awayIndex],
+    };
+  }
+  return undefined;
+};
+
 const toInkPlayerState = (player: Pick<Player, "bankBalance" | "morale" | "position">): InkPlayerState => ({
   BankBalance: player.bankBalance,
   Morale: player.morale,
@@ -123,12 +146,6 @@ const getPeriodState = (
   return { quarter, periodKey: `Q${quarter}` as PeriodKey };
 };
 
-const pickChoiceTemplateForState = (state: PossessionState): KeyMomentTemplate => {
-  const scenario = state.offenseKey === "home" ? "offense_choice" : "defense_choice";
-  const eligible = KEY_MOMENT_TEMPLATES.filter((template) => template.mode === "choice" && template.scenario === scenario);
-  return eligible[0] ?? KEY_MOMENT_TEMPLATES.find((template) => template.mode === "choice") ?? KEY_MOMENT_TEMPLATES[0];
-};
-
 export const createMatchEngineAdapter = (
   options: MatchEngineAdapterOptions,
 ): MatchEngineAdapter => {
@@ -140,6 +157,7 @@ export const createMatchEngineAdapter = (
   const leagueLevel = options.leagueLevel ?? LeagueLevel.PRO;
   const keyMomentRngChance = options.keyMomentRngChance ?? 0.08;
   const totalSeconds = options.secondsRemaining ?? 20 * 60;
+  const userLocation = getPlayerLocation(context, options.userPlayerId);
   let state = initializePossession(context, leagueLevel, rng, totalSeconds);
   let metrics: SimMetrics = {
     possessions: 0,
@@ -189,10 +207,13 @@ export const createMatchEngineAdapter = (
   };
 
   const buildKeyMoment = (previousState: PossessionState): KeyMomentPending | undefined => {
-    const offenseTeam = previousState.offenseKey === "home" ? context.home : context.away;
-    const ballHandler = offenseTeam.roster[previousState.ballHandlerIndex];
-    const playerInvolved = ballHandler.id === options.userPlayerId;
-    if (!playerInvolved) {
+    if (!userLocation) {
+      return undefined;
+    }
+    const userOnOffense =
+      previousState.offenseKey === userLocation.teamKey && previousState.ballHandlerIndex === userLocation.playerIndex;
+    const userOnDefense = previousState.defenseKey === userLocation.teamKey;
+    if (!userOnOffense && !userOnDefense) {
       return undefined;
     }
     const critical = isCriticalState(previousState);
@@ -202,30 +223,36 @@ export const createMatchEngineAdapter = (
     }
 
     const pendingId = `pending-possession-${pendingIdCounter}`;
-    const template = pickChoiceTemplateForState(previousState);
     const periodState = getPeriodState(totalSeconds, previousState.secondsRemaining);
-
-    return {
+    const seedValue = Math.floor(rng() * 1_000_000);
+    const contextArgs = {
       id: pendingId,
-      context: {
-        id: pendingId,
-        periodKey: periodState.periodKey,
-        quarter: periodState.quarter,
-        overtimePeriod: periodState.overtimePeriod,
-        timeRemaining: previousState.secondsRemaining,
-        offense: previousState.offenseKey,
-        defense: previousState.defenseKey,
-        userTeam: "home",
-        userPlayerIndex: previousState.ballHandlerIndex,
-        possessionIndex: previousState.possessionIndex,
-        score: previousState.score,
-      },
-      scenario: template.scenario,
-      promptText: template.promptText,
-      mode: "choice",
-      options: template.options,
-      simBaselineQuality: KEY_MOMENT_BASELINE_QUALITY,
+      periodKey: periodState.periodKey,
+      quarter: periodState.quarter,
+      overtimePeriod: periodState.overtimePeriod,
+      timeRemaining: previousState.secondsRemaining,
+      offense: previousState.offenseKey,
+      defense: previousState.defenseKey,
+      userTeam: userLocation.teamKey,
+      userPlayerIndex: userLocation.playerIndex,
+      possessionIndex: previousState.possessionIndex,
+      score: previousState.score,
     };
+    const eligible = KEY_MOMENT_DEFINITIONS.filter((definition) =>
+      contextArgs.offense === contextArgs.userTeam
+        ? definition.type === "create_shot" || definition.type === "make_the_read"
+        : definition.type === "on_ball_stop" || definition.type === "jump_lane",
+    );
+    const pool = eligible.length > 0 ? eligible : KEY_MOMENT_DEFINITIONS;
+    const definition = pool[Math.abs(seedValue) % pool.length];
+    const buildArgs: KeyMomentBuildArgs = {
+      id: pendingId,
+      context: contextArgs,
+      matchContext: context,
+      possessionState: previousState,
+      seedValue,
+    };
+    return definition?.buildPending(buildArgs);
   };
 
   const buildStepOutput = (overrides: Partial<AdapterStepOutput> = {}): AdapterStepOutput => ({
@@ -305,20 +332,21 @@ export const createMatchEngineAdapter = (
     }
 
     const pending = pendingPossession;
-    const resolution = resolveKeyMoment({
+    const resolution = tryResolveKeyMoment({
       pending: pending.pending,
       input,
       context,
       possessionState: pending.state,
     });
+    const result = resolution?.result ?? simulatePossession(context, pending.state, leagueLevel, rng);
 
     pendingPossession = undefined;
     pendingKeyMoment = undefined;
-    metrics = updateMetrics(metrics, resolution.result);
-    state = resolution.result.nextState;
+    metrics = updateMetrics(metrics, result);
+    state = result.nextState;
 
     return buildStepOutput({
-      result: resolution.result,
+      result,
     });
   };
 

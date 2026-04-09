@@ -5,7 +5,8 @@ import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
 import { useMatchStore } from "../store/useMatchStore";
-import { KeyMomentOverlay } from "../components/KeyMomentOverlay";
+import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
+import type { KeyMomentPending } from "../../../match/keyMoments/types";
 
 const AWAY_NAME = "Rivals High";
 
@@ -20,6 +21,59 @@ const getPeriodLabel = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePer
   isOvertime ? `OT${overtimePeriod}` : `Q${quarter}`;
 
 const formatSpeedLabel = (speed: number): string => (Number.isInteger(speed) ? `${speed}x` : `${speed.toFixed(1)}x`);
+
+const toBandLabel = (value: number): string => {
+  if (value >= 75) {
+    return "High";
+  }
+  if (value >= 50) {
+    return "Medium";
+  }
+  return "Low";
+};
+
+const deriveFatigueLabel = (pending: KeyMomentPending): string => {
+  const clock = pending.context.timeRemaining;
+  if (clock <= 120) {
+    return "High";
+  }
+  if (clock <= 360) {
+    return "Medium";
+  }
+  return "Low";
+};
+
+const buildKeyMomentContextSummary = (args: {
+  pending?: KeyMomentPending;
+  homeScore: number;
+  awayScore: number;
+  quarter: 1 | 2 | 3 | 4;
+  isOvertime: boolean;
+  overtimePeriod: number;
+  timeRemaining: number;
+  playerPosition: string;
+  playerArchetype: string;
+  stamina: number;
+  morale: number;
+}): KeyMomentContextSummary | undefined => {
+  const { pending } = args;
+  if (!pending) {
+    return undefined;
+  }
+
+  const sideLabel = pending.context.offense === pending.context.userTeam ? "On offense" : "On defense";
+  const opponentSide = pending.context.offense === pending.context.userTeam ? pending.context.defense : pending.context.offense;
+
+  return {
+    score: `${args.homeScore} - ${args.awayScore}`,
+    period: getPeriodLabel(args.quarter, args.isOvertime, args.overtimePeriod),
+    clock: formatClock(args.timeRemaining),
+    fatigue: deriveFatigueLabel(pending),
+    workRate: `${args.stamina} (${toBandLabel(args.stamina)})`,
+    focus: `${args.morale} (${toBandLabel(args.morale)})`,
+    matchup: `${args.playerPosition} ${args.playerArchetype} • ${sideLabel} vs ${opponentSide.toUpperCase()}`,
+  };
+};
 
 const getLogTextClassName = (item: PlayLog): string => {
   if (item.isUserAction) {
@@ -74,6 +128,10 @@ export function MatchScreen() {
   useMatchLoop();
   const hasAppliedResultRef = useRef(false);
   const playerName = useCareerStore((state) => state.player.name);
+  const playerArchetype = useCareerStore((state) => state.player.archetype);
+  const playerPosition = useCareerStore((state) => state.player.position);
+  const playerStamina = useCareerStore((state) => state.player.attributes.stamina);
+  const playerMorale = useCareerStore((state) => state.player.morale);
   const homeDisplayName = playerName.trim().length > 0 ? playerName : "My Player";
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
@@ -96,6 +154,19 @@ export function MatchScreen() {
   const resolveKeyMoment = useMatchStore((state) => state.resolveKeyMoment);
   const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
   const completeMatch = useCareerStore((state) => state.completeMatch);
+  const keyMomentContextSummary = buildKeyMomentContextSummary({
+    pending: keyMomentPending,
+    homeScore,
+    awayScore,
+    quarter,
+    isOvertime,
+    overtimePeriod,
+    timeRemaining,
+    playerPosition,
+    playerArchetype,
+    stamina: playerStamina,
+    morale: playerMorale,
+  });
 
   useEffect(() => {
     hasAppliedResultRef.current = false;
@@ -206,6 +277,7 @@ export function MatchScreen() {
           <KeyMomentOverlay
             pending={keyMomentPending}
             feedback={keyMomentFeedback ? { success: keyMomentFeedback.success, text: keyMomentFeedback.text } : undefined}
+            contextSummary={keyMomentContextSummary}
             onResolve={(input) => {
               resolveKeyMoment(input);
             }}

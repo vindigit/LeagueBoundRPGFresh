@@ -37,9 +37,9 @@ describe("KeyMomentScheduler", () => {
     }
   });
 
-  it("never schedules shot minigame on away offense possessions", () => {
+  it("only schedules defensive types on away offense possessions", () => {
     const scheduler = createKeyMomentScheduler({ targetPerPeriod: 6, cooldownPossessions: 1 });
-    const triggeredScenarios: string[] = [];
+    const triggeredTypes: string[] = [];
 
     for (let possessionIndex = 1; possessionIndex <= 70; possessionIndex += 1) {
       const elapsed = possessionIndex * 10;
@@ -50,11 +50,11 @@ describe("KeyMomentScheduler", () => {
       });
       if (response.trigger && response.pending) {
         if (response.pending.context.offense === "away") {
-          triggeredScenarios.push(response.pending.scenario);
+          triggeredTypes.push(response.pending.type);
         }
       }
     }
 
-    expect(triggeredScenarios.every((scenario) => scenario === "defense_choice")).toBe(true);
+    expect(triggeredTypes.every((type) => type === "on_ball_stop" || type === "jump_lane")).toBe(true);
   });
 });

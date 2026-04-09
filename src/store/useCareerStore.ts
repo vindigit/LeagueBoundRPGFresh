@@ -8,7 +8,10 @@ import { calculateAttributeGain } from "../features/backstory/progression/calcul
 import { findCityByLegacySlug, getDefaultCityForState, getDefaultStateCode, resolveHometown } from "../features/backstory/data/hometowns";
 import {
   createBackstorySeed,
+  createBuildBackstorySeed,
+  deriveGeneratedBadgeProfile,
   enforceCapsAtLeastCurrent,
+  generateBackstoryFromBuildInput,
   generateBackstoryFromInput,
   getDefaultSecondaryPosition,
   synthesizeBackstoryInputFromLegacy,
@@ -21,7 +24,7 @@ import {
   type CareerState,
 } from "../types/career";
 import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
-import type { BackstoryInput, HeightPreset, WeightPreset } from "../types/backstory";
+import type { BackstoryInput, BuildBackstoryInput, GeneratedBadgeProfile, HeightPreset, WeightPreset } from "../types/backstory";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
@@ -116,6 +119,9 @@ const emptyBoxScore = (): MatchBoxScore => ({
 
 const normalizePersistedPlayer = (player: LegacyPlayerStateInput): Player => normalizePlayerStateForInk(player);
 
+const isBuildBackstoryInput = (input: BackstoryInput | BuildBackstoryInput): input is BuildBackstoryInput =>
+  "buildAttributes" in input;
+
 const isInitializedPlayer = (player: Player): boolean =>
   player.id.trim().length > 0 && player.name.trim().length > 0 && Boolean(player.identity) && Boolean(player.dna);
 
@@ -160,6 +166,15 @@ const normalizePlayerIdentityHometown = (player: Player): Player => {
   };
 };
 
+const buildPlayerBuilderProfile = (player: Player): GeneratedBadgeProfile | undefined => {
+  if (!player.dna) {
+    return undefined;
+  }
+
+  const caps = enforceCapsAtLeastCurrent(player.dna.caps, player.attributes);
+  return deriveGeneratedBadgeProfile(player.attributes, caps, player.position);
+};
+
 const migratePlayerWithBackstory = (player: Player): Player => {
   let migratedPlayer = normalizePlayerIdentityHometown({ ...player });
   if (!migratedPlayer.identity || !migratedPlayer.dna) {
@@ -175,9 +190,11 @@ const migratePlayerWithBackstory = (player: Player): Player => {
           ...generated.dna,
           caps: enforceCapsAtLeastCurrent(generated.dna.caps, migratedPlayer.attributes),
           growthResidue: generated.dna.growthResidue ?? {},
+          builderProfile: generated.dna.builderProfile ?? generated.builderProfile,
         },
       };
     } else {
+      const builderProfile = migratedPlayer.dna.builderProfile ?? buildPlayerBuilderProfile(migratedPlayer);
       migratedPlayer = {
         ...migratedPlayer,
       secondaryPosition:
@@ -189,6 +206,7 @@ const migratePlayerWithBackstory = (player: Player): Player => {
           potentialTier: migratedPlayer.dna.potentialTier ?? getPotentialTier(migratedPlayer.dna.potential),
           caps: enforceCapsAtLeastCurrent(migratedPlayer.dna.caps, migratedPlayer.attributes),
           growthResidue: migratedPlayer.dna.growthResidue ?? {},
+          builderProfile,
         },
       };
     }
@@ -199,9 +217,13 @@ export const useCareerStore = create<CareerStore>()(
   persist(
     (set, get) => ({
       ...initialCareerState,
-      initializeCareer: (input: BackstoryInput) => {
-        const seed = input.generationSeed ?? Date.now();
-        const generated = generateBackstoryFromInput(input, { seedOverride: seed });
+      initializeCareer: (input: BackstoryInput | BuildBackstoryInput) => {
+        const seed =
+          input.generationSeed ??
+          (isBuildBackstoryInput(input) ? createBuildBackstorySeed(input) : createBackstorySeed(input));
+        const generated = isBuildBackstoryInput(input)
+          ? generateBackstoryFromBuildInput(input, { seedOverride: seed })
+          : generateBackstoryFromInput(input, { seedOverride: seed });
         const creationNews = createCareerCreationNewsItem(generated.identity, initialCareerState.currentWeek);
 
         set(() => ({
@@ -215,7 +237,10 @@ export const useCareerStore = create<CareerStore>()(
             secondaryPosition: generated.identity.secondaryPosition,
             archetype: generated.identity.archetype,
             identity: generated.identity,
-            dna: generated.dna,
+            dna: {
+              ...generated.dna,
+              builderProfile: generated.dna.builderProfile ?? generated.builderProfile,
+            },
             attributes: generated.startingAttributes,
           },
           view: "HUB",
@@ -373,7 +398,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {

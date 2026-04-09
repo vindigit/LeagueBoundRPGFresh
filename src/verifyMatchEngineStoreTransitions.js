@@ -47,6 +47,7 @@ const run = async () => {
 
   assert(snapshot.started, "Store should be started after startMatch().");
   assert(!snapshot.pausedForKeyMoment, "Store should not start paused.");
+  assert(!snapshot.pausedForPendingPossession, "Store should not start with a pending possession.");
   assert(Boolean(snapshot.lastStep?.userInkState?.Position), "Ink-facing state should be present on start.");
 
   for (let i = 0; i < 15 && !snapshot.pausedForKeyMoment; i += 1) {
@@ -54,30 +55,44 @@ const run = async () => {
   }
 
   assert(snapshot.pausedForKeyMoment, "Store should pause when key moment triggers.");
+  assert(snapshot.pausedForPendingPossession, "Store should expose generic paused pending state when key moment triggers.");
   assert(Boolean(snapshot.keyMoment), "Key moment payload should exist when paused.");
+  assert(Boolean(snapshot.pendingKeyMoment), "Pending key moment payload should exist when paused.");
+  assert(Boolean(snapshot.pendingPossession), "Pending possession should exist when paused.");
+  assert(!snapshot.lastStep?.result, "Paused key moments should not expose a finalized possession result.");
+  const pendingMetrics = snapshot.lastStep?.metrics.possessions ?? -1;
+  const interruptedAutosavesBeforeResolve = autosaves.length;
+  const interruptedSnapshot = store.runPossessions(8);
+  assert(interruptedSnapshot.pausedForPendingPossession, "Interrupted run should remain paused for pending possession.");
+  assert(
+    (interruptedSnapshot.lastStep?.metrics.possessions ?? -1) === pendingMetrics,
+    "Interrupted run must not advance committed possession metrics while paused.",
+  );
+  assert(
+    autosaves.length === interruptedAutosavesBeforeResolve,
+    "Interrupted run must not emit a week_advance autosave.",
+  );
 
   const updatesBeforeResolve = updates.length;
   const moraleBefore = snapshot.lastStep?.userInkState?.Morale ?? -1;
-  snapshot = store.resolveKeyMomentChoice("pass_to_corner");
+  const positiveChoiceId =
+    snapshot.pendingKeyMoment.options.find((option) => option.id === "kick_out" || option.id === "contain")?.id ??
+    snapshot.pendingKeyMoment.options[0].id;
+  snapshot = store.resolveKeyMoment({
+    pendingId: snapshot.pendingKeyMoment.id,
+    choiceId: positiveChoiceId,
+  });
 
   assert(!snapshot.pausedForKeyMoment, "Store should unpause after resolving key moment.");
+  assert(!snapshot.pausedForPendingPossession, "Store should clear generic paused state after resolving key moment.");
   assert(!snapshot.keyMoment, "Key moment should be cleared after resolution.");
-  assert((snapshot.lastStep?.userInkState?.Morale ?? -1) === moraleBefore + 1, "Pass to corner should increase morale by 1.");
+  assert(!snapshot.pendingKeyMoment, "Pending key moment should be cleared after resolution.");
+  assert(!snapshot.pendingPossession, "Pending possession should be cleared after resolution.");
+  assert((snapshot.lastStep?.userInkState?.Morale ?? -1) === moraleBefore + 1, "Positive choice should increase morale by 1.");
+  assert((snapshot.lastStep?.metrics.possessions ?? 0) === pendingMetrics + 1, "Resolving should commit the stored possession exactly once.");
+  assert(Boolean(snapshot.lastStep?.result), "Resolving should produce a finalized possession result.");
   assert(updates.length === updatesBeforeResolve + 1, "resolveKeyMomentChoice() should notify subscribers exactly once.");
   assert(autosaves.includes("key_moment_resolution"), "Autosave should fire on key moment resolution.");
-
-  let pausedSnapshot = snapshot;
-  for (let i = 0; i < 15 && !pausedSnapshot.pausedForKeyMoment; i += 1) {
-    pausedSnapshot = store.stepPossession();
-  }
-  assert(pausedSnapshot.pausedForKeyMoment, "Store should be paused before interrupted run test.");
-  const autosavesBeforeInterruptedRun = autosaves.length;
-  pausedSnapshot = store.runPossessions(8);
-  assert(pausedSnapshot.pausedForKeyMoment, "Interrupted run should remain paused for key moment.");
-  assert(
-    autosaves.length === autosavesBeforeInterruptedRun,
-    "Interrupted run must not emit a week_advance autosave.",
-  );
 
   const completionAutosaves = [];
   const completionStore = createMatchEngineStore({

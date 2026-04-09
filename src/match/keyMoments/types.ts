@@ -1,6 +1,7 @@
-import type { MatchScore, MatchContext, PossessionResult } from "../../matchEngine";
+import type { MatchScore, MatchContext, PossessionResult, PossessionState } from "../../matchEngine";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
+export type KeyMomentType = "create_shot" | "make_the_read" | "on_ball_stop" | "jump_lane";
 
 export interface KeyMomentContext {
   id: string;
@@ -30,21 +31,28 @@ export interface MinigameSpec {
   targetRadius: number;
 }
 
+export interface KeyMomentExecutionQuality {
+  normalizedScore: number;
+  source: "minigame" | "sim_it" | "choice";
+}
+
 export interface KeyMomentPending {
   id: string;
+  type: KeyMomentType;
   context: KeyMomentContext;
-  scenario: "offense_shot" | "offense_choice" | "defense_choice";
   promptText: string;
   mode: "choice" | "minigame";
-  options?: KeyMomentOption[];
+  options: KeyMomentOption[];
   minigame?: MinigameSpec;
   simBaselineQuality: number;
+  seedValue?: number;
   autoResolveAt?: number;
 }
 
 export interface KeyMomentResolutionInput {
   pendingId: string;
   choiceId?: string;
+  executionQuality?: KeyMomentExecutionQuality;
   minigameQuality?: number;
   usedFallbackBaseline?: boolean;
 }
@@ -56,6 +64,14 @@ export interface KeyMomentResolutionOutput {
   result: PossessionResult;
   outcomeText?: string;
   isUserAction: true;
+}
+
+export interface KeyMomentBuildArgs {
+  id: string;
+  context: KeyMomentContext;
+  matchContext?: MatchContext;
+  possessionState: PossessionState;
+  seedValue: number;
 }
 
 export interface KeyMomentSchedulerInput {
@@ -73,26 +89,9 @@ export interface KeyMomentScheduler {
   onPossessionBoundary(input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput;
 }
 
-export interface KeyMomentTemplate {
-  id: string;
-  scenario: KeyMomentPending["scenario"];
-  mode: KeyMomentPending["mode"];
-  promptText: string;
-  options?: KeyMomentOption[];
-  minigame?: MinigameSpec;
-}
-
 export interface KeyMomentResolveArgs {
   pending: KeyMomentPending;
   input: KeyMomentResolutionInput;
   context: MatchContext;
-  possessionState: {
-    offenseKey: "home" | "away";
-    defenseKey: "home" | "away";
-    secondsRemaining: number;
-    possessionIndex: number;
-    score: MatchScore;
-    homeStreak: number;
-    awayStreak: number;
-  };
+  possessionState: PossessionState;
 }

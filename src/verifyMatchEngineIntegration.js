@@ -42,18 +42,24 @@ const run = async () => {
 
   const step1 = adapter.stepPossession();
   console.log(
-    `Step1 -> action=${step1.result?.action}, points=${step1.result?.points}, turnover=${step1.result?.turnoverLikeFailure}`,
+    `Step1 -> action=${step1.result?.action}, points=${step1.result?.points}, turnover=${step1.result?.turnoverLikeFailure}, pending=${Boolean(step1.pendingPossession)}`,
   );
   if (step1.keyMoment) {
-    console.log(`Step1 keyMoment: ${step1.keyMoment.reason} | ${step1.keyMoment.contextLine}`);
+    console.log(`Step1 keyMoment: ${step1.keyMoment.promptText}`);
+    console.log(`Step1 pending id: ${step1.pendingKeyMoment?.id}`);
   }
 
-  const step2 = adapter.stepPossession();
+  const step2 = step1.pendingPossession
+    ? adapter.resolvePendingKeyMoment({
+        pendingId: step1.pendingKeyMoment.id,
+        choiceId: step1.pendingKeyMoment.options[0].id,
+      })
+    : adapter.stepPossession();
   console.log(
-    `Step2 -> action=${step2.result?.action}, points=${step2.result?.points}, turnover=${step2.result?.turnoverLikeFailure}`,
+    `Step2 -> action=${step2.result?.action}, points=${step2.result?.points}, turnover=${step2.result?.turnoverLikeFailure}, pending=${Boolean(step2.pendingPossession)}`,
   );
   if (step2.keyMoment) {
-    console.log(`Step2 keyMoment: ${step2.keyMoment.reason} | ${step2.keyMoment.contextLine}`);
+    console.log(`Step2 keyMoment: ${step2.keyMoment.promptText}`);
   }
 
   const batch = adapter.runPossessions(30);
@@ -64,7 +70,7 @@ const run = async () => {
   );
   console.log(`Key moments triggered: ${batch.keyMoments.length}`);
   if (batch.keyMoments[0]) {
-    console.log(`Sample key moment choice labels: ${batch.keyMoments[0].choices.map((c) => c.label).join(", ")}`);
+    console.log(`Sample key moment choice labels: ${batch.keyMoments[0].options.map((c) => c.label).join(", ")}`);
   }
 };
 

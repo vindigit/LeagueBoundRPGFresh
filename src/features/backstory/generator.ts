@@ -1,9 +1,23 @@
-import { ARCHETYPE_DEFAULTS } from "../../constants/archetypes";
-import type { BackstoryInput, ExactHeight, GrowthCurve, HeightPreset, PlayerDNA, PlayerIdentity, WeightPreset } from "../../types/backstory";
-import type { LegacyPlayerStateInput, PlayerAttributes, Position } from "../../types/player";
-import { ARCHETYPE_BASE_CAPS } from "./constants/archetypeCaps";
-import { ARCHETYPE_PRIMARY_ATTRIBUTES } from "./constants/archetypePrimaries";
+import type {
+  BackstoryInput,
+  BuildBackstoryInput,
+  ExactHeight,
+  GeneratedBadgeProfile,
+  GrowthCurve,
+  HeightPreset,
+  PlayerDNA,
+  PlayerIdentity,
+  WeightPreset,
+} from "../../types/backstory";
+import type { LegacyPlayerStateInput, PlayerArchetype, PlayerAttributes, Position } from "../../types/player";
+import { classifyBuilderBuild, type BuilderClassification } from "../../builder/classify";
+import { resolveBuilderBadges } from "../../builder/badges/resolve";
 import { clampHeight, clampWeight, heightFromPresetMidpoint, toHeightPreset, toWeightPreset, weightFromPresetMidpoint } from "./constants/bodyMapping";
+import {
+  getLegacyArchetypeBaseCaps,
+  getLegacyArchetypePrimaryAttributes,
+  getLegacyArchetypeStartDefaults,
+} from "./constants/archetypeCompatibility";
 import { HEIGHT_PRESET_CONFIG, WEIGHT_PRESET_CONFIG } from "./constants/bodyPresets";
 import { GROWTH_BY_CURVE, GROWTH_OUTLOOK_BY_CURVE } from "./constants/growthCurves";
 import { getPotentialTier } from "./constants/potentialTier";
@@ -13,6 +27,7 @@ export interface GeneratedBackstory {
   identity: PlayerIdentity;
   dna: PlayerDNA;
   startingAttributes: PlayerAttributes;
+  builderProfile: GeneratedBadgeProfile;
 }
 
 const ALL_ATTRIBUTE_KEYS: ReadonlyArray<keyof PlayerAttributes> = [
@@ -129,6 +144,9 @@ const asRating = (value: number): PlayerAttributes["shortRange"] =>
 
 const asCap = (value: number): PlayerAttributes["shortRange"] =>
   clamp(Math.round(value), 40, 99) as PlayerAttributes["shortRange"];
+
+const clampAttribute = (value: number): PlayerAttributes["shortRange"] =>
+  clamp(Math.round(value), 0, 99) as PlayerAttributes["shortRange"];
 
 const getAgeStartedBand = (ageStarted: number): PlayerIdentity["ageStartedBand"] => {
   if (ageStarted <= 6) {
@@ -260,7 +278,7 @@ const rollPotential = (rng: () => number): number => {
 const buildDisplayName = (firstName: string, lastName: string): string => `${firstName} ${lastName}`.trim();
 
 const getPrimaryBonus = (attribute: keyof PlayerAttributes, archetype: PlayerIdentity["archetype"]): number => {
-  const primaries = ARCHETYPE_PRIMARY_ATTRIBUTES[archetype];
+  const primaries = getLegacyArchetypePrimaryAttributes(archetype);
   return primaries.includes(attribute) ? 2 : 0;
 };
 
@@ -274,7 +292,7 @@ const buildCapTable = (
   heightPreset: HeightPreset,
   weightPreset: WeightPreset,
 ): PlayerAttributes => {
-  const archetypeBaseCaps = ARCHETYPE_BASE_CAPS[archetype];
+  const archetypeBaseCaps = getLegacyArchetypeBaseCaps(archetype);
   const frameBonus = FRAME_BONUSES[frame];
   const curveBonus = CURVE_CAP_BONUSES[growthCurve];
   const primaryPositionBonus = POSITION_CAP_BONUSES[primaryPosition];
@@ -309,7 +327,7 @@ const buildStartingAttributes = (
   weightPreset: WeightPreset,
   caps: PlayerAttributes,
 ): PlayerAttributes => {
-  const base = ARCHETYPE_DEFAULTS[archetype];
+  const base = getLegacyArchetypeStartDefaults(archetype);
   const frameBonus = FRAME_BONUSES[frame];
   const ageOffset = AGE_BAND_OFFSETS[ageStartedBand];
   const primaryPositionBonus = POSITION_START_BONUSES[primaryPosition];
@@ -359,6 +377,57 @@ export const createBackstorySeed = (input: BackstoryInput): number =>
       input.weightLbs,
     ].join("|"),
   );
+
+export const createBuildBackstorySeed = (input: BuildBackstoryInput): number =>
+  hashString(
+    [
+      input.firstName.trim().toLowerCase(),
+      input.lastName.trim().toLowerCase(),
+      input.stateCode.trim().toLowerCase(),
+      input.citySlug.trim().toLowerCase(),
+      input.primaryPosition,
+      input.secondaryPosition,
+      input.ageStarted,
+      input.bodyFrame,
+      input.dominantHand,
+      input.height.feet,
+      input.height.inches,
+      input.weightLbs,
+      ...ALL_ATTRIBUTE_KEYS.map((key) => input.buildAttributes[key]),
+    ].join("|"),
+  );
+
+const clampAttributesToCaps = (attributes: PlayerAttributes, caps: PlayerAttributes): PlayerAttributes => {
+  const clamped = {} as PlayerAttributes;
+
+  for (const key of ALL_ATTRIBUTE_KEYS) {
+    clamped[key] = Math.min(clampAttribute(attributes[key]), caps[key]) as PlayerAttributes[typeof key];
+  }
+
+  return clamped;
+};
+
+const buildBuilderProfile = (
+  attributes: PlayerAttributes,
+  caps: PlayerAttributes,
+  position: Position,
+): GeneratedBadgeProfile => {
+  const classification = classifyBuilderBuild(attributes, position);
+  return {
+    classification,
+    badges: resolveBuilderBadges({
+      attributes,
+      caps,
+      classification,
+    }),
+  };
+};
+
+export const deriveGeneratedBadgeProfile = (
+  attributes: PlayerAttributes,
+  caps: PlayerAttributes,
+  position: Position,
+): GeneratedBadgeProfile => buildBuilderProfile(attributes, caps, position);
 
 /**
  * Generates identity, DNA, and starting attributes from builder input.
@@ -429,21 +498,124 @@ export const generateBackstoryFromInput = (
       `${rawInput.bodyFrame} Frame`,
       `${hometown.city} Hooper`,
     ],
+    builderProfile: undefined,
   };
+  const startingAttributes = buildStartingAttributes(
+    rawInput.archetype,
+    ageStartedBand,
+    rawInput.bodyFrame,
+    primaryPosition,
+    secondaryPosition,
+    heightPreset,
+    weightPreset,
+    caps,
+  );
+  const builderProfile = buildBuilderProfile(
+    startingAttributes,
+    caps,
+    primaryPosition,
+  );
+  dna.builderProfile = builderProfile;
 
   return {
     identity,
     dna,
-    startingAttributes: buildStartingAttributes(
-      rawInput.archetype,
-      ageStartedBand,
-      rawInput.bodyFrame,
+    startingAttributes,
+    builderProfile,
+  };
+};
+
+const deriveCompatibilityArchetype = (input: BuildBackstoryInput): BuilderClassification =>
+  classifyBuilderBuild(input.buildAttributes, input.primaryPosition);
+
+export const generateBackstoryFromBuildInput = (
+  rawInput: BuildBackstoryInput,
+  options: { seedOverride?: number } = {},
+): GeneratedBackstory => {
+  const firstName = sanitizeNamePart(rawInput.firstName, "Unnamed");
+  const lastName = sanitizeNamePart(rawInput.lastName, "Prospect");
+  const hometown = resolveHometown(rawInput.stateCode, rawInput.citySlug);
+  const ageStarted = clamp(Math.round(rawInput.ageStarted), AGE_STARTED_MIN, AGE_STARTED_MAX);
+  const ageStartedBand = getAgeStartedBand(ageStarted);
+  const growthCurve = getGrowthCurveFromBand(ageStartedBand);
+  const normalizedHeight = clampHeight(rawInput.height);
+  const normalizedWeight = clampWeight(rawInput.weightLbs);
+  const heightPreset = toHeightPreset(normalizedHeight);
+  const weightPreset = toWeightPreset(normalizedWeight);
+  const primaryPosition = rawInput.primaryPosition;
+  const secondaryPosition =
+    rawInput.secondaryPosition === rawInput.primaryPosition
+      ? getDefaultSecondaryPosition(rawInput.primaryPosition)
+      : rawInput.secondaryPosition;
+  const compatibilityClassification = deriveCompatibilityArchetype({
+    ...rawInput,
+    primaryPosition,
+    secondaryPosition,
+  });
+  const compatibilityArchetype = compatibilityClassification.legacyArchetype;
+  const generationSeed =
+    options.seedOverride ??
+    createBuildBackstorySeed({
+      ...rawInput,
+      firstName,
+      lastName,
+      ageStarted,
       primaryPosition,
       secondaryPosition,
-      heightPreset,
-      weightPreset,
-      caps,
-    ),
+    });
+  const rng = createSeededRng(generationSeed);
+  const potential = rollPotential(rng);
+  const caps = buildCapTable(
+    compatibilityArchetype,
+    potential,
+    rawInput.bodyFrame,
+    growthCurve,
+    primaryPosition,
+    secondaryPosition,
+    heightPreset,
+    weightPreset,
+  );
+  const startingAttributes = clampAttributesToCaps(rawInput.buildAttributes, caps);
+  const builderProfile = buildBuilderProfile(startingAttributes, caps, primaryPosition);
+  const identity: PlayerIdentity = {
+    firstName,
+    lastName,
+    displayName: buildDisplayName(firstName, lastName),
+    hometown,
+    ageStarted,
+    ageStartedBand,
+    bodyFrame: rawInput.bodyFrame,
+    dominantHand: rawInput.dominantHand,
+    archetype: builderProfile.classification.legacyArchetype,
+    primaryPosition,
+    secondaryPosition,
+    height: normalizedHeight,
+    weightLbs: normalizedWeight,
+  };
+  const potentialTier = getPotentialTier(potential);
+  const dna: PlayerDNA = {
+    potential,
+    potentialTier,
+    growthCurve,
+    generationSeed,
+    growthByLeague: GROWTH_BY_CURVE[growthCurve],
+    caps,
+    growthResidue: {},
+    publicTraits: [
+      `Potential Tier: ${potentialTier}`,
+      getCurveLabel(growthCurve),
+      `${rawInput.bodyFrame} Frame`,
+      `${hometown.city} Hooper`,
+    ],
+    builderProfile: undefined,
+  };
+  dna.builderProfile = builderProfile;
+
+  return {
+    identity,
+    dna,
+    startingAttributes,
+    builderProfile,
   };
 };
 
@@ -488,12 +660,14 @@ export const synthesizeBackstoryInputFromLegacy = (player: LegacyPlayerStateInpu
   const height: ExactHeight = player.identity?.height ?? heightFromPresetMidpoint(legacyHeightPreset);
   const weightLbs = player.identity?.weightLbs ?? weightFromPresetMidpoint(legacyWeightPreset);
 
+  const compatibilityArchetype = player.archetype as PlayerArchetype;
+
   return {
     firstName: name.firstName,
     lastName: name.lastName,
     stateCode,
     citySlug,
-    archetype: player.archetype,
+    archetype: compatibilityArchetype,
     ageStarted,
     bodyFrame,
     dominantHand,

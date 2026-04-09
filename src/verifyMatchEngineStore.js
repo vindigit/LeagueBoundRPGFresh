@@ -44,10 +44,21 @@ const run = async () => {
   }
 
   console.log(`Paused for key moment: ${store.getState().pausedForKeyMoment}`);
+  console.log(`Paused for pending possession: ${store.getState().pausedForPendingPossession}`);
   console.log(`Key moment present: ${Boolean(store.getState().keyMoment)}`);
+  console.log(`Pending key moment present: ${Boolean(store.getState().pendingKeyMoment)}`);
+  console.log(`Pending possession present: ${Boolean(store.getState().pendingPossession)}`);
+  console.log(`Finalized result while paused: ${Boolean(store.getState().lastStep?.result)}`);
 
-  store.resolveKeyMomentChoice("pass_to_corner");
+  const positiveChoiceId =
+    store.getState().pendingKeyMoment.options.find((option) => option.id === "kick_out" || option.id === "contain")?.id ??
+    store.getState().pendingKeyMoment.options[0].id;
+  store.resolveKeyMoment({
+    pendingId: store.getState().pendingKeyMoment.id,
+    choiceId: positiveChoiceId,
+  });
   console.log(`Paused after resolve: ${store.getState().pausedForKeyMoment}`);
+  console.log(`Pending possession after resolve: ${Boolean(store.getState().pendingPossession)}`);
   console.log(`Morale after resolve: ${store.getState().lastStep?.userInkState?.Morale}`);
 
   store.runPossessions(12);

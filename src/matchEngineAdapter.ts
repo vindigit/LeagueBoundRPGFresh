@@ -2,6 +2,9 @@ import type { Team } from "./types/team";
 import type { InkPlayerState, LegacyPlayerStateInput, Player } from "./types/player";
 import { normalizePlayerStateForInk } from "./types/player";
 import { LeagueLevel } from "./types/career";
+import { KEY_MOMENT_DEFINITIONS } from "./match/keyMoments/catalog";
+import { tryResolveKeyMoment } from "./match/keyMoments/resolveKeyMoment";
+import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, PeriodKey } from "./match/keyMoments/types";
 import {
   createSeededRng,
   initializePossession,
@@ -16,39 +19,28 @@ type TeamInput = Omit<Team, "roster"> & {
   roster: [LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput, LegacyPlayerStateInput];
 };
 
-type KeyMomentChoiceId = "force_shot" | "pass_to_corner" | "reset";
-
-export interface KeyMomentChoice {
-  id: KeyMomentChoiceId;
-  label: string;
-}
-
-export interface KeyMomentEvent {
-  triggered: true;
-  contextLine: string;
-  reason: "critical_state" | "rng" | "critical_and_rng";
-  choices: [KeyMomentChoice, KeyMomentChoice, KeyMomentChoice];
-  immediateStatResult: {
-    action: PossessionResult["action"];
-    pointsDelta: PossessionResult["points"];
-    madeShot: boolean;
-    turnoverLikeFailure: boolean;
-    assisted: boolean;
-  };
+export interface PendingPossession {
+  pendingId: string;
+  state: PossessionState;
+  pending: KeyMomentPending;
 }
 
 export interface AdapterStepOutput {
   state: PossessionState;
   metrics: SimMetrics;
   result?: PossessionResult;
-  keyMoment?: KeyMomentEvent;
+  keyMoment?: KeyMomentPending;
+  pendingPossession?: PendingPossession;
+  pendingKeyMoment?: KeyMomentPending;
   userInkState?: { id: string } & InkPlayerState;
 }
 
 export interface AdapterRunOutput {
   state: PossessionState;
   metrics: SimMetrics;
-  keyMoments: KeyMomentEvent[];
+  keyMoments: KeyMomentPending[];
+  pendingPossession?: PendingPossession;
+  pendingKeyMoment?: KeyMomentPending;
 }
 
 export interface MatchEngineAdapter {
@@ -57,6 +49,7 @@ export interface MatchEngineAdapter {
   runPossessions(possessions: number): AdapterRunOutput;
   getState(): AdapterStepOutput;
   updateUserInkState(next: InkPlayerState): AdapterStepOutput;
+  resolvePendingKeyMoment(input: KeyMomentResolutionInput): AdapterStepOutput;
 }
 
 export interface MatchEngineAdapterOptions {
@@ -69,12 +62,6 @@ export interface MatchEngineAdapterOptions {
   keyMomentRngChance?: number;
 }
 
-const KEY_MOMENT_CHOICES: [KeyMomentChoice, KeyMomentChoice, KeyMomentChoice] = [
-  { id: "force_shot", label: "Force Shot" },
-  { id: "pass_to_corner", label: "Pass to Corner" },
-  { id: "reset", label: "Reset" },
-];
-
 const normalizeTeamInput = (team: TeamInput): Team => {
   const roster = team.roster.map((player) => normalizePlayerStateForInk(player)) as Team["roster"];
   return {
@@ -82,17 +69,6 @@ const normalizeTeamInput = (team: TeamInput): Team => {
     roster,
     teamOvr: team.teamOvr,
   };
-};
-
-const createContextLine = (action: PossessionResult["action"], secondsRemaining: number): string => {
-  const clock = Math.max(0, Math.floor(secondsRemaining));
-  if (action === "shoot") {
-    return `Double team incoming, ${clock}s remaining.`;
-  }
-  if (action === "pass") {
-    return `Defense collapses on drive, ${clock}s remaining.`;
-  }
-  return `Shot clock pressure, ${clock}s remaining.`;
 };
 
 const isCriticalState = (state: PossessionState): boolean => {
@@ -113,6 +89,29 @@ const getPlayerById = (context: MatchContext, playerId: string): Player | undefi
   return pool.find((player) => player.id === playerId);
 };
 
+const getPlayerLocation = (
+  context: MatchContext,
+  playerId: string,
+): { teamKey: "home" | "away"; playerIndex: number; player: Player } | undefined => {
+  const homeIndex = context.home.roster.findIndex((player) => player.id === playerId);
+  if (homeIndex >= 0) {
+    return {
+      teamKey: "home",
+      playerIndex: homeIndex,
+      player: context.home.roster[homeIndex],
+    };
+  }
+  const awayIndex = context.away.roster.findIndex((player) => player.id === playerId);
+  if (awayIndex >= 0) {
+    return {
+      teamKey: "away",
+      playerIndex: awayIndex,
+      player: context.away.roster[awayIndex],
+    };
+  }
+  return undefined;
+};
+
 const toInkPlayerState = (player: Pick<Player, "bankBalance" | "morale" | "position">): InkPlayerState => ({
   BankBalance: player.bankBalance,
   Morale: player.morale,
@@ -126,6 +125,27 @@ const applyInkPlayerState = (player: Player, inkState: InkPlayerState): Player =
   position: inkState.Position,
 });
 
+let pendingIdCounter = 1;
+
+const getPeriodState = (
+  totalSeconds: number,
+  secondsRemaining: number,
+): { quarter: 1 | 2 | 3 | 4; overtimePeriod?: number; periodKey: PeriodKey } => {
+  const regulationSeconds = Math.max(4, totalSeconds);
+  const quarterSeconds = Math.max(1, Math.floor(regulationSeconds / 4));
+  if (secondsRemaining <= 0) {
+    return { quarter: 4, periodKey: "Q4" };
+  }
+  if (secondsRemaining > regulationSeconds) {
+    const overtimeSeconds = secondsRemaining - regulationSeconds;
+    const overtimePeriod = Math.max(1, Math.ceil(overtimeSeconds / quarterSeconds));
+    return { quarter: 4, overtimePeriod, periodKey: `OT${overtimePeriod}` };
+  }
+  const elapsed = Math.max(0, regulationSeconds - secondsRemaining);
+  const quarter = Math.min(4, Math.floor(elapsed / quarterSeconds) + 1) as 1 | 2 | 3 | 4;
+  return { quarter, periodKey: `Q${quarter}` as PeriodKey };
+};
+
 export const createMatchEngineAdapter = (
   options: MatchEngineAdapterOptions,
 ): MatchEngineAdapter => {
@@ -136,7 +156,9 @@ export const createMatchEngineAdapter = (
   const rng = createSeededRng(options.seed);
   const leagueLevel = options.leagueLevel ?? LeagueLevel.PRO;
   const keyMomentRngChance = options.keyMomentRngChance ?? 0.08;
-  let state = initializePossession(context, leagueLevel, rng, options.secondsRemaining ?? 20 * 60);
+  const totalSeconds = options.secondsRemaining ?? 20 * 60;
+  const userLocation = getPlayerLocation(context, options.userPlayerId);
+  let state = initializePossession(context, leagueLevel, rng, totalSeconds);
   let metrics: SimMetrics = {
     possessions: 0,
     fga: 0,
@@ -144,6 +166,8 @@ export const createMatchEngineAdapter = (
     assists: 0,
     turnoverLikeFailures: 0,
   };
+  let pendingPossession: PendingPossession | undefined;
+  let pendingKeyMoment: KeyMomentPending | undefined;
 
   const getUserInkState = (): AdapterStepOutput["userInkState"] => {
     const userPlayer = getPlayerById(context, options.userPlayerId);
@@ -162,6 +186,8 @@ export const createMatchEngineAdapter = (
       return {
         state,
         metrics,
+        pendingPossession,
+        pendingKeyMoment,
         userInkState: undefined,
       };
     }
@@ -174,18 +200,20 @@ export const createMatchEngineAdapter = (
     return {
       state,
       metrics,
+      pendingPossession,
+      pendingKeyMoment,
       userInkState: getUserInkState(),
     };
   };
 
-  const buildKeyMoment = (
-    previousState: PossessionState,
-    result: PossessionResult,
-  ): KeyMomentEvent | undefined => {
-    const offenseTeam = previousState.offenseKey === "home" ? context.home : context.away;
-    const ballHandler = offenseTeam.roster[previousState.ballHandlerIndex];
-    const playerInvolved = ballHandler.id === options.userPlayerId;
-    if (!playerInvolved) {
+  const buildKeyMoment = (previousState: PossessionState): KeyMomentPending | undefined => {
+    if (!userLocation) {
+      return undefined;
+    }
+    const userOnOffense =
+      previousState.offenseKey === userLocation.teamKey && previousState.ballHandlerIndex === userLocation.playerIndex;
+    const userOnDefense = previousState.defenseKey === userLocation.teamKey;
+    if (!userOnOffense && !userOnDefense) {
       return undefined;
     }
     const critical = isCriticalState(previousState);
@@ -194,56 +222,96 @@ export const createMatchEngineAdapter = (
       return undefined;
     }
 
-    let reason: KeyMomentEvent["reason"] = "critical_state";
-    if (critical && rngTrigger) {
-      reason = "critical_and_rng";
-    } else if (rngTrigger) {
-      reason = "rng";
-    }
-
-    return {
-      triggered: true,
-      contextLine: createContextLine(result.action, previousState.secondsRemaining),
-      reason,
-      choices: KEY_MOMENT_CHOICES,
-      immediateStatResult: {
-        action: result.action,
-        pointsDelta: result.points,
-        madeShot: result.madeShot,
-        turnoverLikeFailure: result.turnoverLikeFailure,
-        assisted: result.assisted,
-      },
+    const pendingId = `pending-possession-${pendingIdCounter}`;
+    const periodState = getPeriodState(totalSeconds, previousState.secondsRemaining);
+    const seedValue = Math.floor(rng() * 1_000_000);
+    const contextArgs = {
+      id: pendingId,
+      periodKey: periodState.periodKey,
+      quarter: periodState.quarter,
+      overtimePeriod: periodState.overtimePeriod,
+      timeRemaining: previousState.secondsRemaining,
+      offense: previousState.offenseKey,
+      defense: previousState.defenseKey,
+      userTeam: userLocation.teamKey,
+      userPlayerIndex: userLocation.playerIndex,
+      possessionIndex: previousState.possessionIndex,
+      score: previousState.score,
     };
+    const eligible = KEY_MOMENT_DEFINITIONS.filter((definition) =>
+      contextArgs.offense === contextArgs.userTeam
+        ? definition.type === "create_shot" || definition.type === "make_the_read"
+        : definition.type === "on_ball_stop" || definition.type === "jump_lane",
+    );
+    const pool = eligible.length > 0 ? eligible : KEY_MOMENT_DEFINITIONS;
+    const definition = pool[Math.abs(seedValue) % pool.length];
+    const buildArgs: KeyMomentBuildArgs = {
+      id: pendingId,
+      context: contextArgs,
+      matchContext: context,
+      possessionState: previousState,
+      seedValue,
+    };
+    return definition?.buildPending(buildArgs);
   };
 
-  const stepPossession = (): AdapterStepOutput => {
-    const previousState = state;
-    const result = simulatePossession(context, previousState, leagueLevel, rng);
-    metrics = updateMetrics(metrics, result);
-    const keyMoment = buildKeyMoment(previousState, result);
-    state = result.nextState;
-
-    return {
-      state,
-      metrics,
-      result,
-      keyMoment,
-      userInkState: getUserInkState(),
-    };
-  };
-
-  const startGame = (): AdapterStepOutput => ({
+  const buildStepOutput = (overrides: Partial<AdapterStepOutput> = {}): AdapterStepOutput => ({
     state,
     metrics,
+    pendingPossession,
+    pendingKeyMoment,
     userInkState: getUserInkState(),
+    ...overrides,
   });
 
+  const stepPossession = (): AdapterStepOutput => {
+    if (pendingPossession) {
+      return buildStepOutput();
+    }
+
+    const previousState = state;
+    const keyMoment = buildKeyMoment(previousState);
+
+    if (keyMoment) {
+      pendingIdCounter += 1;
+      pendingPossession = {
+        pendingId: keyMoment.id,
+        state: previousState,
+        pending: keyMoment,
+      };
+      pendingKeyMoment = keyMoment;
+      return buildStepOutput({
+        keyMoment,
+      });
+    }
+
+    const result = simulatePossession(context, previousState, leagueLevel, rng);
+
+    metrics = updateMetrics(metrics, result);
+    state = result.nextState;
+
+    return buildStepOutput({
+      result,
+    });
+  };
+
+  const startGame = (): AdapterStepOutput => buildStepOutput();
+
   const runPossessions = (possessions: number): AdapterRunOutput => {
-    const keyMoments: KeyMomentEvent[] = [];
+    const keyMoments: KeyMomentPending[] = [];
     for (let i = 0; i < possessions && state.secondsRemaining > 0; i += 1) {
       const step = stepPossession();
       if (step.keyMoment) {
         keyMoments.push(step.keyMoment);
+      }
+      if (step.pendingPossession) {
+        return {
+          state,
+          metrics,
+          keyMoments,
+          pendingPossession: step.pendingPossession,
+          pendingKeyMoment: step.pendingKeyMoment,
+        };
       }
     }
     return {
@@ -253,11 +321,34 @@ export const createMatchEngineAdapter = (
     };
   };
 
-  const getState = (): AdapterStepOutput => ({
-    state,
-    metrics,
-    userInkState: getUserInkState(),
-  });
+  const getState = (): AdapterStepOutput => buildStepOutput();
+
+  const resolvePendingKeyMoment = (input: KeyMomentResolutionInput): AdapterStepOutput => {
+    if (!pendingPossession) {
+      return buildStepOutput();
+    }
+    if (input.pendingId !== pendingPossession.pendingId) {
+      return buildStepOutput();
+    }
+
+    const pending = pendingPossession;
+    const resolution = tryResolveKeyMoment({
+      pending: pending.pending,
+      input,
+      context,
+      possessionState: pending.state,
+    });
+    const result = resolution?.result ?? simulatePossession(context, pending.state, leagueLevel, rng);
+
+    pendingPossession = undefined;
+    pendingKeyMoment = undefined;
+    metrics = updateMetrics(metrics, result);
+    state = result.nextState;
+
+    return buildStepOutput({
+      result,
+    });
+  };
 
   return {
     startGame,
@@ -265,5 +356,6 @@ export const createMatchEngineAdapter = (
     runPossessions,
     getState,
     updateUserInkState,
+    resolvePendingKeyMoment,
   };
 };

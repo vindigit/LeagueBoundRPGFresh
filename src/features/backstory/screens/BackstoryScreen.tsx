@@ -1,26 +1,87 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+ï»¿import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
-import { createBackstorySeed, getBackstoryGrowthOutlook, generateBackstoryFromInput, getDefaultSecondaryPosition } from "../generator";
-import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
-import { clampHeight, clampWeight } from "../constants/bodyMapping";
-import type { BackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
-import type { PlayerArchetype, Position } from "../../../types/player";
+import { applyAllocation } from "../../../builder/allocate";
+import { getTotalBuildCost } from "../../../builder/progression";
 import { useCareerStore } from "../../../store/useCareerStore";
-import { POSITION_RECOMMENDATIONS } from "../constants/positionRecommendations";
+import type { BuildBackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
+import type { PlayerAttributes, Position } from "../../../types/player";
+import { clampHeight, clampWeight } from "../constants/bodyMapping";
+import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
+import { createBuildBackstorySeed, generateBackstoryFromBuildInput, getBackstoryGrowthOutlook, getDefaultSecondaryPosition } from "../generator";
 
-const ARCHETYPES: readonly PlayerArchetype[] = [
-  "Slasher",
-  "Sharpshooter",
-  "Playmaker",
-  "Lockdown Defender",
-  "Paint Beast",
-  "Stretch Big",
-];
 const POSITIONS: readonly Position[] = ["PG", "SG", "SF", "PF", "C"];
 const BODY_FRAMES: readonly BodyFrame[] = ["Lean", "Athletic", "Stocky"];
 const DOMINANT_HANDS: readonly DominantHand[] = ["Right", "Left"];
 const MAX_HOMETOWN_RESULTS = 24;
 const MAX_STATE_RESULTS = 12;
+const BUILD_POINT_BUDGET = 120;
+const ATTRIBUTE_FLOOR = 25;
+
+const MAX_BUILD_CAPS: PlayerAttributes = {
+  shortRange: 99,
+  dunking: 99,
+  midrange: 99,
+  threePoint: 99,
+  handle: 99,
+  passing: 99,
+  vision: 99,
+  perimeterDefense: 99,
+  interiorDefense: 99,
+  stealing: 99,
+  blocking: 99,
+  offRebounding: 99,
+  defRebounding: 99,
+  speed: 99,
+  strength: 99,
+  stamina: 99,
+};
+
+const BUILD_BASELINE: PlayerAttributes = {
+  shortRange: 60,
+  dunking: 60,
+  midrange: 60,
+  threePoint: 60,
+  handle: 60,
+  passing: 60,
+  vision: 60,
+  perimeterDefense: 60,
+  interiorDefense: 60,
+  stealing: 60,
+  blocking: 60,
+  offRebounding: 60,
+  defRebounding: 60,
+  speed: 60,
+  strength: 60,
+  stamina: 60,
+};
+
+const ATTRIBUTE_GROUPS: Array<{ title: string; keys: Array<keyof PlayerAttributes> }> = [
+  { title: "Finishing", keys: ["shortRange", "dunking"] },
+  { title: "Shooting", keys: ["midrange", "threePoint"] },
+  { title: "Creation", keys: ["handle", "passing", "vision"] },
+  { title: "Defense", keys: ["perimeterDefense", "interiorDefense", "stealing", "blocking"] },
+  { title: "Rebounding", keys: ["offRebounding", "defRebounding"] },
+  { title: "Physical", keys: ["speed", "strength", "stamina"] },
+];
+
+const ATTRIBUTE_LABELS: Record<keyof PlayerAttributes, string> = {
+  shortRange: "Short Range",
+  dunking: "Dunking",
+  midrange: "Midrange",
+  threePoint: "Three Point",
+  handle: "Handle",
+  passing: "Passing",
+  vision: "Vision",
+  perimeterDefense: "Perimeter Defense",
+  interiorDefense: "Interior Defense",
+  stealing: "Stealing",
+  blocking: "Blocking",
+  offRebounding: "Off Reb",
+  defRebounding: "Def Reb",
+  speed: "Speed",
+  strength: "Strength",
+  stamina: "Stamina",
+};
 
 const clampAgeStarted = (value: number): number => Math.min(12, Math.max(4, Math.round(value)));
 const clampFeet = (value: number): number => Math.min(7, Math.max(5, Math.round(value)));
@@ -96,7 +157,6 @@ export function BackstoryScreen() {
   const [cityQuery, setCityQuery] = useState("");
   const [stateCode, setStateCode] = useState<string>(getDefaultStateCode());
   const [citySlug, setCitySlug] = useState<string>(() => getDefaultCityForState(getDefaultStateCode()).slug);
-  const [archetype, setArchetype] = useState<PlayerArchetype>("Slasher");
   const [primaryPosition, setPrimaryPosition] = useState<Position>("PG");
   const [secondaryPosition, setSecondaryPosition] = useState<Position>("SG");
   const [heightFeet, setHeightFeet] = useState(6);
@@ -105,6 +165,7 @@ export function BackstoryScreen() {
   const [bodyFrame, setBodyFrame] = useState<BodyFrame>("Athletic");
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
   const [ageStarted, setAgeStarted] = useState(8);
+  const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(BUILD_BASELINE);
   const stepTransition = useRef(new Animated.Value(1)).current;
 
   const setClampedHeight = (nextFeet: number, nextInches: number): void => {
@@ -153,20 +214,32 @@ export function BackstoryScreen() {
     [availableCities, citySlug],
   );
 
-  const recommendedArchetypes = useMemo(() => POSITION_RECOMMENDATIONS[primaryPosition], [primaryPosition]);
-  const isRecommendedArchetype = recommendedArchetypes.includes(archetype);
-
   const normalizedHeight = useMemo(() => clampHeight({ feet: heightFeet, inches: heightInches }), [heightFeet, heightInches]);
   const normalizedWeight = useMemo(() => clampWeight(weightLbs), [weightLbs]);
   const safeSecondaryPosition = secondaryPosition === primaryPosition ? getDefaultSecondaryPosition(primaryPosition) : secondaryPosition;
+  const currentBuildCost = useMemo(() => getTotalBuildCost(buildAttributes, BUILD_BASELINE), [buildAttributes]);
+  const remainingBuildPoints = BUILD_POINT_BUDGET - currentBuildCost;
 
-  const draftInput: BackstoryInput = useMemo(
+  const adjustAttribute = (attribute: keyof PlayerAttributes, delta: number): void => {
+    const allocation = applyAllocation({
+      attributes: buildAttributes,
+      caps: MAX_BUILD_CAPS,
+      availablePoints: remainingBuildPoints,
+      changes: { [attribute]: delta },
+      minAttribute: ATTRIBUTE_FLOOR,
+    });
+
+    if (allocation.success) {
+      setBuildAttributes(allocation.attributes);
+    }
+  };
+
+  const draftInput: BuildBackstoryInput = useMemo(
     () => ({
       firstName,
       lastName,
       stateCode,
       citySlug,
-      archetype,
       ageStarted,
       bodyFrame,
       dominantHand,
@@ -174,13 +247,13 @@ export function BackstoryScreen() {
       secondaryPosition: safeSecondaryPosition,
       height: normalizedHeight,
       weightLbs: normalizedWeight,
+      buildAttributes,
     }),
     [
       firstName,
       lastName,
       stateCode,
       citySlug,
-      archetype,
       ageStarted,
       bodyFrame,
       dominantHand,
@@ -188,11 +261,12 @@ export function BackstoryScreen() {
       safeSecondaryPosition,
       normalizedHeight,
       normalizedWeight,
+      buildAttributes,
     ],
   );
 
-  const previewSeed = useMemo(() => createBackstorySeed(draftInput), [draftInput]);
-  const preview = useMemo(() => generateBackstoryFromInput(draftInput, { seedOverride: previewSeed }), [draftInput, previewSeed]);
+  const previewSeed = useMemo(() => createBuildBackstorySeed(draftInput), [draftInput]);
+  const preview = useMemo(() => generateBackstoryFromBuildInput(draftInput, { seedOverride: previewSeed }), [draftInput, previewSeed]);
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
   const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
@@ -353,28 +427,8 @@ export function BackstoryScreen() {
             </View>
           ) : null}
 
-          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Archetype</Text>
-          <SelectGroup options={ARCHETYPES} selected={archetype} onSelect={setArchetype} />
-
-          <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2">
-            <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Recommended for {primaryPosition}</Text>
-            <View className="mt-2 flex-row flex-wrap gap-2">
-              {recommendedArchetypes.map((option) => (
-                <View key={option} className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-1">
-                  <Text className="text-[11px] font-semibold text-emerald-200">{option}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {!isRecommendedArchetype ? (
-            <View className="mt-3 rounded-lg border border-amber-400/50 bg-amber-500/10 px-3 py-2">
-              <Text className="text-xs font-semibold text-amber-200">This archetype is off-meta for {primaryPosition}, but still allowed.</Text>
-            </View>
-          ) : null}
-
           <View className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
-            <Text className="text-xs font-semibold text-cyan-100">You’re starting in 8th grade. Height and weight can fluctuate as your player develops.</Text>
+            <Text className="text-xs font-semibold text-cyan-100">The new builder path is build-driven. Archetype is now derived from your preview, not selected directly.</Text>
           </View>
 
           <Stepper
@@ -395,7 +449,7 @@ export function BackstoryScreen() {
             onDec={() => setWeightLbs((value) => clampWeight(value - 1))}
             onInc={() => setWeightLbs((value) => clampWeight(value + 1))}
           />
-          <Text className="mt-2 text-[11px] text-slate-400">Height range: 5'4" to 7'1"</Text>
+          <Text className="mt-2 text-[11px] text-slate-400">Height range: 5'4\" to 7'1\"</Text>
           <Text className="mt-1 text-[11px] text-slate-400">Weight range: 120 to 270 lbs</Text>
 
           <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Body Frame</Text>
@@ -410,8 +464,29 @@ export function BackstoryScreen() {
     if (step === 4) {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-          <Text className="text-sm font-semibold text-white">Step 4: Age You Started Playing</Text>
-          <Text className="mt-2 text-xs text-slate-400">This determines growth curve and early starting profile. Range: 4 to 12.</Text>
+          <Text className="text-sm font-semibold text-white">Step 4: Attributes And Age Started</Text>
+          <Text className="mt-2 text-xs text-slate-400">Allocate from a shared point budget and set when you started playing.</Text>
+          <View className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Build Points Remaining</Text>
+            <Text className="mt-1 text-lg font-bold text-white">{remainingBuildPoints}</Text>
+          </View>
+
+          {ATTRIBUTE_GROUPS.map((group) => (
+            <View key={group.title} className="mt-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
+              {group.keys.map((key) => (
+                <Stepper
+                  key={key}
+                  label={ATTRIBUTE_LABELS[key]}
+                  value={buildAttributes[key]}
+                  onDec={() => adjustAttribute(key, -1)}
+                  onInc={() => adjustAttribute(key, 1)}
+                />
+              ))}
+            </View>
+          ))}
+
+          <Text className="mt-4 text-xs text-slate-400">Age started determines growth curve and early starting profile. Range: 4 to 12.</Text>
           <View className="mt-4 flex-row items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 py-3">
             <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={() => setAgeStarted((value) => clampAgeStarted(value - 1))}>
               <Text className="text-sm font-semibold text-white">-</Text>
@@ -434,8 +509,10 @@ export function BackstoryScreen() {
             {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.primaryPosition}/{preview.identity.secondaryPosition}
           </Text>
           <Text className="mt-1 text-sm text-slate-300">
-            {preview.identity.height.feet}'{preview.identity.height.inches}" • {preview.identity.weightLbs} lbs
+            {preview.identity.height.feet}'{preview.identity.height.inches}\" â€¢ {preview.identity.weightLbs} lbs
           </Text>
+          <Text className="mt-1 text-sm text-slate-300">Build: {preview.builderProfile.classification.taxonomy.label}</Text>
+          <Text className="mt-1 text-sm text-slate-300">Compatibility Archetype: {preview.identity.archetype}</Text>
 
           <View className="mt-4 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
             <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Traits</Text>
@@ -445,6 +522,17 @@ export function BackstoryScreen() {
                   <Text className="text-xs font-semibold text-emerald-200">{trait}</Text>
                 </View>
               ))}
+            </View>
+          </View>
+
+          <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Badges</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {preview.builderProfile.badges.length > 0 ? preview.builderProfile.badges.map((badge) => (
+                <View key={badge.id} className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-3 py-1">
+                  <Text className="text-xs font-semibold text-cyan-100">{badge.label} {badge.tier}</Text>
+                </View>
+              )) : <Text className="text-xs text-slate-300">No badges unlocked at the current build thresholds.</Text>}
             </View>
           </View>
 
@@ -493,5 +581,3 @@ export function BackstoryScreen() {
     </SafeAreaView>
   );
 }
-
-

@@ -1,6 +1,6 @@
 import type { Player, PlayerAttributes } from "./player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
-import type { AttributeGainSource, BackstoryInput, CareerNewsItem } from "./backstory";
+import type { AttributeGainSource, BackstoryInput, BuildBackstoryInput, CareerNewsItem } from "./backstory";
 
 export enum LeagueLevel {
   MIDDLE_SCHOOL = "MIDDLE_SCHOOL",
@@ -49,7 +49,7 @@ export interface CareerState {
 }
 
 export interface CareerActions {
-  initializeCareer(input: BackstoryInput): void;
+  initializeCareer(input: BackstoryInput | BuildBackstoryInput): void;
   applyAttributeGain(attr: keyof PlayerAttributes, amount: number, source?: AttributeGainSource): void;
   updateAttribute(attr: keyof PlayerAttributes, amount: number): void;
   updateBankBalance(amount: number): void;

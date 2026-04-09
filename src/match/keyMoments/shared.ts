@@ -2,6 +2,7 @@ import { getNextMomentumStreaks, type MatchContext, type PossessionAction, type 
 import type { Player } from "../../types/player";
 import type {
   KeyMomentBuildArgs,
+  KeyMomentExecutionQuality,
   KeyMomentOption,
   KeyMomentPending,
   KeyMomentResolutionInput,
@@ -24,6 +25,16 @@ export const clamp01 = (value: number): number => Math.max(0, Math.min(1, value)
 
 export const getOptionById = (pending: KeyMomentPending, choiceId?: string): KeyMomentOption | undefined =>
   pending.options.find((option) => option.id === choiceId);
+
+export const getResolvedChoiceId = (pending: KeyMomentPending, input: KeyMomentResolutionInput): string | undefined => {
+  if (input.choiceId) {
+    return input.choiceId;
+  }
+  if (pending.mode === "minigame") {
+    return pending.options[0]?.id;
+  }
+  return undefined;
+};
 
 export const getTeamPlayer = (
   context: MatchContext | undefined,
@@ -82,7 +93,31 @@ export const buildBaselineQuality = (args: {
 };
 
 export const choiceQuality = (pending: KeyMomentPending, input: KeyMomentResolutionInput): number =>
-  clamp01((pending.simBaselineQuality ?? 0.55) + (getOptionById(pending, input.choiceId)?.qualityDelta ?? 0));
+  clamp01((pending.simBaselineQuality ?? 0.55) + (getOptionById(pending, getResolvedChoiceId(pending, input))?.qualityDelta ?? 0));
+
+export const normalizeExecutionQuality = (executionQuality: KeyMomentExecutionQuality | undefined): number | undefined => {
+  if (!executionQuality) {
+    return undefined;
+  }
+  return clamp01(executionQuality.normalizedScore);
+};
+
+export const resolveEffectiveQuality = (pending: KeyMomentPending, input: KeyMomentResolutionInput): number => {
+  const explicitQuality = normalizeExecutionQuality(input.executionQuality);
+  if (explicitQuality !== undefined) {
+    return explicitQuality;
+  }
+
+  if (typeof input.minigameQuality === "number") {
+    return clamp01(input.minigameQuality);
+  }
+
+  if (input.usedFallbackBaseline) {
+    return clamp01(pending.simBaselineQuality ?? 0.55);
+  }
+
+  return choiceQuality(pending, input);
+};
 
 export const makeOption = (
   id: string,
@@ -174,7 +209,7 @@ export const buildResolution = (args: {
   };
 
   return {
-    quality: choiceQuality(args.pending, args.input),
+    quality: resolveEffectiveQuality(args.pending, args.input),
     success: args.success,
     resultSummaryText: args.resultSummaryText,
     result,

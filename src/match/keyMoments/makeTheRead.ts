@@ -1,5 +1,5 @@
-import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionOutput } from "./types";
-import { buildBaselineQuality, buildResolution, choiceQuality, getUserPlayer, makeOption } from "./shared";
+import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
+import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
 
 const PROMPT = "Key Moment: Make the read before the help defense closes.";
 
@@ -37,11 +37,11 @@ export const buildMakeTheReadPending = (args: KeyMomentBuildArgs): KeyMomentPend
 
 export const resolveMakeTheRead = (args: {
   pending: KeyMomentPending;
-  input: { pendingId: string; choiceId?: string };
+  input: KeyMomentResolutionInput;
   possessionState: KeyMomentBuildArgs["possessionState"];
 }): KeyMomentResolutionOutput | undefined => {
-  const optionId = args.input.choiceId;
-  const quality = choiceQuality(args.pending, args.input);
+  const optionId = getResolvedChoiceId(args.pending, args.input);
+  const quality = resolveEffectiveQuality(args.pending, args.input);
 
   if (optionId === "kick_out") {
     return buildResolution({

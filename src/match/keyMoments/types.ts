@@ -31,6 +31,11 @@ export interface MinigameSpec {
   targetRadius: number;
 }
 
+export interface KeyMomentExecutionQuality {
+  normalizedScore: number;
+  source: "minigame" | "sim_it" | "choice";
+}
+
 export interface KeyMomentPending {
   id: string;
   type: KeyMomentType;
@@ -47,6 +52,7 @@ export interface KeyMomentPending {
 export interface KeyMomentResolutionInput {
   pendingId: string;
   choiceId?: string;
+  executionQuality?: KeyMomentExecutionQuality;
   minigameQuality?: number;
   usedFallbackBaseline?: boolean;
 }

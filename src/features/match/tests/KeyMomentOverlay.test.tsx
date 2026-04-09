@@ -92,6 +92,23 @@ describe("KeyMomentOverlay", () => {
     );
 
     expect(screen.getByText("Minigame Shell Placeholder")).toBeTruthy();
+    expect(screen.getByText("Rough Attempt")).toBeTruthy();
+    fireEvent.press(screen.getByText("Solid Attempt"));
+    expect(onResolve).toHaveBeenCalledWith({
+      pendingId: "pending-placeholder-1",
+      executionQuality: {
+        normalizedScore: 0.62,
+        source: "minigame",
+      },
+    });
+  });
+
+  it("still supports sim-it from the minigame placeholder", () => {
+    const onResolve = jest.fn();
+    const screen = render(
+      <KeyMomentOverlay pending={pendingPlaceholder} contextSummary={contextSummary} onResolve={onResolve} />,
+    );
+
     fireEvent.press(screen.getByText("Sim It"));
     expect(onResolve).toHaveBeenCalledWith({ pendingId: "pending-placeholder-1", usedFallbackBaseline: true });
   });

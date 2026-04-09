@@ -78,6 +78,34 @@ describe("Key Moment resolution", () => {
     expect(conservative.result.eventType).toBe("miss");
   });
 
+  it("lets explicit execution quality drive minigame-mode resolution", () => {
+    const pending = buildPending("create_shot", ["step_back_three", "turn_the_corner", "protect_ball"], {
+      mode: "minigame",
+    });
+
+    const lowQuality = resolveKeyMoment({
+      pending,
+      input: {
+        pendingId: pending.id,
+        executionQuality: { normalizedScore: 0.22, source: "minigame" },
+      },
+      context,
+      possessionState,
+    });
+    const highQuality = resolveKeyMoment({
+      pending,
+      input: {
+        pendingId: pending.id,
+        executionQuality: { normalizedScore: 0.88, source: "minigame" },
+      },
+      context,
+      possessionState,
+    });
+
+    expect(lowQuality.result.eventType).toBe("block");
+    expect(highQuality.result.eventType).toBe("made_3");
+  });
+
   it("resolves make_the_read choices into different offensive results", () => {
     const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"]);
 
@@ -96,6 +124,44 @@ describe("Key Moment resolution", () => {
 
     expect(kickOut.result.eventType).toBe("made_3");
     expect(attackGap.result.eventType).toBe("made_2");
+  });
+
+  it("uses sim baseline quality when fallback baseline is requested", () => {
+    const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"], {
+      mode: "minigame",
+      simBaselineQuality: 0.55,
+    });
+
+    const resolved = resolveKeyMoment({
+      pending,
+      input: { pendingId: pending.id, usedFallbackBaseline: true },
+      context,
+      possessionState,
+    });
+
+    expect(resolved.quality).toBeCloseTo(0.55, 5);
+    expect(resolved.result.eventType).toBe("miss");
+  });
+
+  it("prefers executionQuality over legacy minigameQuality", () => {
+    const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"], {
+      mode: "minigame",
+    });
+
+    const resolved = resolveKeyMoment({
+      pending,
+      input: {
+        pendingId: pending.id,
+        choiceId: "kick_out",
+        executionQuality: { normalizedScore: 0.2, source: "minigame" },
+        minigameQuality: 0.95,
+      },
+      context,
+      possessionState,
+    });
+
+    expect(resolved.quality).toBeCloseTo(0.2, 5);
+    expect(resolved.result.eventType).toBe("miss");
   });
 
   it("keeps the user involved on defensive moments", () => {

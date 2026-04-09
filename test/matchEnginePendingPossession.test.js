@@ -93,6 +93,53 @@ describe("pending possession plumbing", () => {
     ).toBe(true);
   });
 
+  it("accepts execution quality input when resolving a pending possession", () => {
+    const context = createContext();
+    const createPendingStep = () => {
+      const adapter = createMatchEngineAdapter({
+        home: context.home,
+        away: context.away,
+        userPlayerId: "h1",
+        seed: 20260214,
+        keyMomentRngChance: 1,
+      });
+
+      adapter.startGame();
+      let step;
+      for (let i = 0; i < 15; i += 1) {
+        step = adapter.stepPossession();
+        if (step.pendingKeyMoment) {
+          return { adapter, step };
+        }
+      }
+      throw new Error("Expected a pending key moment.");
+    };
+
+    const lowAttempt = createPendingStep();
+    const highAttempt = createPendingStep();
+
+    const lowResolved = lowAttempt.adapter.resolvePendingKeyMoment({
+      pendingId: lowAttempt.step.pendingKeyMoment.id,
+      choiceId: lowAttempt.step.pendingKeyMoment.options[0].id,
+      executionQuality: {
+        normalizedScore: 0.2,
+        source: "minigame",
+      },
+    });
+    const highResolved = highAttempt.adapter.resolvePendingKeyMoment({
+      pendingId: highAttempt.step.pendingKeyMoment.id,
+      choiceId: highAttempt.step.pendingKeyMoment.options[0].id,
+      executionQuality: {
+        normalizedScore: 0.85,
+        source: "minigame",
+      },
+    });
+
+    expect(lowResolved.result).toBeDefined();
+    expect(highResolved.result).toBeDefined();
+    expect(lowResolved.result.eventType === highResolved.result.eventType && lowResolved.result.points === highResolved.result.points).toBe(false);
+  });
+
   it("keeps the store paused until the pending possession is resolved", () => {
     const context = createContext();
     const store = createMatchEngineStore();

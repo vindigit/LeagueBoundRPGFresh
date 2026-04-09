@@ -1,5 +1,5 @@
-import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionOutput } from "./types";
-import { buildBaselineQuality, buildResolution, choiceQuality, getUserPlayer, makeOption } from "./shared";
+import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
+import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
 
 const PROMPT = "Key Moment: Create the shot and get to your spot.";
 
@@ -37,11 +37,11 @@ export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPendi
 
 export const resolveCreateShot = (args: {
   pending: KeyMomentPending;
-  input: { pendingId: string; choiceId?: string };
+  input: KeyMomentResolutionInput;
   possessionState: KeyMomentBuildArgs["possessionState"];
 }): KeyMomentResolutionOutput | undefined => {
-  const optionId = args.input.choiceId;
-  const quality = choiceQuality(args.pending, args.input);
+  const optionId = getResolvedChoiceId(args.pending, args.input);
+  const quality = resolveEffectiveQuality(args.pending, args.input);
 
   if (optionId === "step_back_three") {
     if (quality >= 0.66) {

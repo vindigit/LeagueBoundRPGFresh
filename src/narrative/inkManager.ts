@@ -49,7 +49,13 @@ interface UpdateAttributeAction {
   amount: number;
 }
 
-type ParsedAction = UpdateAttributeAction;
+interface UpdateTeamInterestAction {
+  type: "updateTeamInterest";
+  targetId: string;
+  amount: number;
+}
+
+type ParsedAction = UpdateAttributeAction | UpdateTeamInterestAction;
 
 interface InkStoryLike {
   canContinue: boolean;
@@ -75,30 +81,45 @@ const parseActionTag = (tag: string): ParsedAction | null => {
   }
 
   const [actionType, key, rawValue] = parts;
-  if (actionType !== "updateAttribute") {
-    throw new Error(`Unsupported ACTION type "${actionType}" in tag "${tag}"`);
-  }
-
-  if (!isAttributeKey(key)) {
-    throw new Error(`Unknown attribute key "${key}" in tag "${tag}"`);
-  }
-
   const amount = Number(rawValue);
   if (!Number.isFinite(amount)) {
     throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
   }
 
-  return {
-    type: "updateAttribute",
-    attributeKey: key,
-    amount,
-  };
+  if (actionType === "updateAttribute") {
+    if (!isAttributeKey(key)) {
+      throw new Error(`Unknown attribute key "${key}" in tag "${tag}"`);
+    }
+
+    return {
+      type: "updateAttribute",
+      attributeKey: key,
+      amount,
+    };
+  }
+
+  if (actionType === "updateTeamInterest") {
+    if (key.length === 0) {
+      throw new Error(`Unknown team-interest target "${key}" in tag "${tag}"`);
+    }
+
+    return {
+      type: "updateTeamInterest",
+      targetId: key,
+      amount,
+    };
+  }
+
+  throw new Error(`Unsupported ACTION type "${actionType}" in tag "${tag}"`);
 };
 
 const applyAction = (action: ParsedAction): void => {
   if (action.type === "updateAttribute") {
     useCareerStore.getState().applyAttributeGain(action.attributeKey, action.amount, "NARRATIVE");
+    return;
   }
+
+  useCareerStore.getState().applyTeamInterestDelta(action.targetId, action.amount);
 };
 
 const processTags = (tags: string[]): void => {

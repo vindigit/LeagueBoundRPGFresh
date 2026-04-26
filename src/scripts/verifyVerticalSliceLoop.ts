@@ -1,3 +1,5 @@
+import type { MatchBoxScore } from "../features/match/store/useMatchStore";
+
 const assert = (condition: unknown, message: string): void => {
   if (!condition) {
     throw new Error(message);
@@ -10,13 +12,13 @@ const run = async (): Promise<void> => {
 
   const { loadNarrativeInkManager } = await import("../narrative/inkManager");
   const { useCareerStore } = await import("../store/useCareerStore");
-  const typeModule = await import("../features/match/store/useMatchStore");
 
-  const boxScore: typeModule.MatchBoxScore = {
+  const boxScore: MatchBoxScore = {
     homePlayers: [
       {
         id: "home-0",
         name: "Smoke Tester",
+        team: "home",
         pts: 22,
         reb: 4,
         ast: 6,
@@ -25,12 +27,16 @@ const run = async (): Promise<void> => {
         to: 2,
         fgm: 8,
         fga: 15,
+        ftm: 0,
+        fta: 0,
+        pf: 1,
       },
     ],
     awayPlayers: [
       {
         id: "away-0",
         name: "Rivals High",
+        team: "away",
         pts: 16,
         reb: 3,
         ast: 2,
@@ -39,10 +45,13 @@ const run = async (): Promise<void> => {
         to: 3,
         fgm: 6,
         fga: 14,
+        ftm: 0,
+        fta: 0,
+        pf: 2,
       },
     ],
-    homeTotals: { pts: 64, reb: 21, ast: 15, stl: 5, blk: 2, to: 10, fgm: 25, fga: 49 },
-    awayTotals: { pts: 52, reb: 18, ast: 9, stl: 4, blk: 1, to: 12, fgm: 20, fga: 47 },
+    homeTotals: { pts: 64, reb: 21, ast: 15, stl: 5, blk: 2, to: 10, fgm: 25, fga: 49, ftm: 0, fta: 0, pf: 8 },
+    awayTotals: { pts: 52, reb: 18, ast: 9, stl: 4, blk: 1, to: 12, fgm: 20, fga: 47, ftm: 0, fta: 0, pf: 10 },
   };
 
   useCareerStore.getState().initializeCareer({
@@ -112,20 +121,29 @@ const run = async (): Promise<void> => {
 
   useCareerStore.getState().resolvePostgameAndAdvanceWeek();
   const resolvedWeek = useCareerStore.getState();
-  assert(resolvedWeek.view === "HUB", `Expected HUB after resolving week, got ${resolvedWeek.view}.`);
-  assert(resolvedWeek.currentWeek === 2, `Expected currentWeek 2 after resolution, got ${resolvedWeek.currentWeek}.`);
-  assert(resolvedWeek.lastMatchResult === null, "Expected lastMatchResult to clear after resolution.");
-  assert(resolvedWeek.newsFeed.length >= 2, `Expected feed to contain creation + postgame items, got ${resolvedWeek.newsFeed.length}.`);
-  assert(resolvedWeek.newsFeed.some((item) => item.category === "POSTGAME_RECAP"), "Expected a postgame recap in the feed.");
-  assert(Boolean(resolvedWeek.player.identity), "Expected player identity to persist after week resolution.");
-  assert(Boolean(resolvedWeek.player.dna), "Expected player DNA to persist after week resolution.");
-  assert(resolvedWeek.player.name === "Smoke Tester", `Expected player name to persist, got ${resolvedWeek.player.name}.`);
-  assert(resolvedWeek.player.bankBalance > baselineBank, "Expected bank balance to increase after postgame resolution.");
-  assert(resolvedWeek.player.morale !== baselineMorale, "Expected morale to change after postgame resolution.");
   assert(
-    !resolvedWeek.weeklyLoop.eventCompleted &&
-      !resolvedWeek.weeklyLoop.matchCompleted &&
-      !resolvedWeek.weeklyLoop.postgamePending,
+    resolvedWeek.view === "SCHOOL_PATH_SELECT",
+    `Expected SCHOOL_PATH_SELECT after resolving tutorial week, got ${resolvedWeek.view}.`,
+  );
+  assert(resolvedWeek.pendingSchoolPathSelection, "Expected pendingSchoolPathSelection after tutorial resolution.");
+  useCareerStore.getState().selectSchoolPath("STATE_5A");
+  const selectedPath = useCareerStore.getState();
+  assert(selectedPath.view === "HUB", `Expected HUB after school-path selection, got ${selectedPath.view}.`);
+  assert(selectedPath.leagueLevel === "HIGH_SCHOOL", `Expected HIGH_SCHOOL after selection, got ${selectedPath.leagueLevel}.`);
+  assert(selectedPath.schoolPath === "STATE_5A", `Expected STATE_5A after selection, got ${selectedPath.schoolPath}.`);
+  assert(selectedPath.currentWeek === 2, `Expected currentWeek 2 after resolution, got ${selectedPath.currentWeek}.`);
+  assert(selectedPath.lastMatchResult === null, "Expected lastMatchResult to clear after resolution.");
+  assert(selectedPath.newsFeed.length >= 3, `Expected feed to contain creation + postgame + path items, got ${selectedPath.newsFeed.length}.`);
+  assert(selectedPath.newsFeed.some((item) => item.category === "POSTGAME_RECAP"), "Expected a postgame recap in the feed.");
+  assert(Boolean(selectedPath.player.identity), "Expected player identity to persist after week resolution.");
+  assert(Boolean(selectedPath.player.dna), "Expected player DNA to persist after week resolution.");
+  assert(selectedPath.player.name === "Smoke Tester", `Expected player name to persist, got ${selectedPath.player.name}.`);
+  assert(selectedPath.player.bankBalance > baselineBank, "Expected bank balance to increase after postgame resolution.");
+  assert(selectedPath.player.morale !== baselineMorale, "Expected morale to change after postgame resolution.");
+  assert(
+    !selectedPath.weeklyLoop.eventCompleted &&
+      !selectedPath.weeklyLoop.matchCompleted &&
+      !selectedPath.weeklyLoop.postgamePending,
     "Expected weekly loop state to reset for the next week.",
   );
 

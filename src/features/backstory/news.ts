@@ -1,5 +1,7 @@
 import type { CareerNewsItem, PlayerIdentity } from "../../types/backstory";
 import type { LastMatchResult } from "../../types/career";
+import { formatSchoolPathLabel } from "../../constants/schoolPaths";
+import type { SchoolPath } from "../../types/careerProgression";
 
 const createNewsId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -60,3 +62,16 @@ export const createPostgameNewsItem = (
     subhead: `Final: ${scoreLine}`,
   };
 };
+
+export const createSchoolPathCommitmentNewsItem = (
+  identity: PlayerIdentity,
+  schoolPath: SchoolPath,
+  week: number,
+): CareerNewsItem => ({
+  id: createNewsId("school-path"),
+  createdAt: Date.now(),
+  week,
+  category: "LOCAL_BUZZ",
+  headline: `${toPossessive(identity.hometown.city)} ${identity.lastName} commits to the ${formatSchoolPathLabel(schoolPath)} route.`,
+  subhead: `New stage unlocked: ${formatSchoolPathLabel(schoolPath)} high school ball.`,
+});

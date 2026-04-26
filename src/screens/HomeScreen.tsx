@@ -1,10 +1,15 @@
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { formatSchoolPathLabel, getSchoolPathProfile } from "../constants/schoolPaths";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
 import { BackstoryScreen } from "../features/backstory/screens/BackstoryScreen";
+import { HIGH_SCHOOL_RECRUITING_PROGRAMS } from "../features/career/recruiting";
+import { SchoolPathSelectionScreen } from "../features/career/screens/SchoolPathSelectionScreen";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
+import { LeagueLevel } from "../types/career";
+import type { ProjectedRole } from "../types/careerProgression";
 
 const formatLeagueLevel = (value: string): string =>
   value
@@ -16,16 +21,49 @@ const formatLeagueLevel = (value: string): string =>
 const formatCurrency = (amount: number): string =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount);
 
+const projectedRoleLabel: Record<ProjectedRole, string> = {
+  BENCH: "Bench role",
+  ROTATION: "Rotation role",
+  SIXTH_MAN: "Sixth man role",
+  STARTER: "Starter role",
+  STAR: "Star role",
+};
+
+const getInterestStrengthLabel = (interestLevel: number): string => {
+  if (interestLevel >= 88) {
+    return "Locked In";
+  }
+  if (interestLevel >= 78) {
+    return "Hot";
+  }
+  if (interestLevel >= 68) {
+    return "Strong";
+  }
+  return "Warm";
+};
+
 export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const currentYear = useCareerStore((state) => state.currentYear);
   const currentWeek = useCareerStore((state) => state.currentWeek);
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
+  const scoutVisibility = useCareerStore((state) => state.scoutVisibility);
+  const schoolPath = useCareerStore((state) => state.schoolPath);
+  const teamInterestById = useCareerStore((state) => state.teamInterestById);
+  const offers = useCareerStore((state) => state.offers);
   const newsFeed = useCareerStore((state) => state.newsFeed);
   const weeklyLoop = useCareerStore((state) => state.weeklyLoop);
   const startNarrative = useCareerStore((state) => state.startNarrative);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
+  const respondToOffer = useCareerStore((state) => state.respondToOffer);
+  const showSchoolPathStatus = leagueLevel !== LeagueLevel.MIDDLE_SCHOOL;
+  const schoolPathProfile = showSchoolPathStatus ? getSchoolPathProfile(schoolPath) : null;
+  const visibleInterestEntries = Object.entries(teamInterestById)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4);
+  const availableOffers = offers.filter((offer) => offer.status === "AVAILABLE" && offer.phases.includes("HIGH_SCHOOL"));
+  const acceptedOffer = offers.find((offer) => offer.status === "ACCEPTED" && offer.phases.includes("HIGH_SCHOOL"));
   const canOpenEvent = !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
   const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
   const loopStatus = weeklyLoop.postgamePending
@@ -86,6 +124,21 @@ export function HomeScreen() {
                 <Text className="text-xs text-premium-muted">Bank</Text>
                 <Text className="mt-1 text-base font-semibold text-premium-accent">{formatCurrency(bankBalance)}</Text>
               </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Exposure</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{scoutVisibility}</Text>
+              </View>
+
+              {showSchoolPathStatus ? (
+                <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                  <Text className="text-xs text-premium-muted">School Path</Text>
+                  <Text className="mt-1 text-base font-semibold text-white">{formatSchoolPathLabel(schoolPath)}</Text>
+                  {schoolPathProfile ? (
+                    <Text className="mt-1 text-xs text-premium-muted">{schoolPathProfile.playingTimeLabel}</Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
 
             <View className="mt-3 rounded-lg bg-premium-bg p-3">
@@ -93,6 +146,95 @@ export function HomeScreen() {
               <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
             </View>
           </View>
+
+          {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+            <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Recruiting Interest</Text>
+              {visibleInterestEntries.length > 0 ? (
+                <View className="mt-3 gap-3">
+                  {visibleInterestEntries.map(([teamId, interest]) => {
+                    const label =
+                      availableOffers.find((offer) => offer.sourceTeamId === teamId)?.sourceLabel ??
+                      HIGH_SCHOOL_RECRUITING_PROGRAMS.find((program) => program.id === teamId)?.label ??
+                      teamId;
+                    return (
+                      <View key={teamId} className="rounded-lg bg-premium-bg p-3">
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-sm font-semibold text-white">{label}</Text>
+                          <Text className="text-sm font-semibold text-premium-accent">{interest}</Text>
+                        </View>
+                        <View className="mt-2 h-2 rounded-full bg-premium-surfaceAlt">
+                          <View className="h-2 rounded-full bg-emerald-400" style={{ width: `${interest}%` }} />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text className="mt-3 text-sm text-premium-muted">Recruiting buzz will build once your high school run begins.</Text>
+              )}
+            </View>
+          ) : null}
+
+          {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+            <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Offer Inbox</Text>
+              {acceptedOffer ? (
+                <View className="mt-3 rounded-lg bg-premium-bg p-3">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-sm font-semibold text-white">{acceptedOffer.sourceLabel}</Text>
+                    <Text className="text-xs font-semibold uppercase text-emerald-300">{acceptedOffer.type}</Text>
+                  </View>
+                  <Text className="mt-1 text-xs text-premium-muted">Committed offer</Text>
+                  <Text className="mt-2 text-sm text-white">{projectedRoleLabel[acceptedOffer.projectedRole]}</Text>
+                  <Text className="mt-1 text-xs text-premium-muted">
+                    {getInterestStrengthLabel(acceptedOffer.interestLevel)} interest | {acceptedOffer.exposureTier} exposure
+                  </Text>
+                  {acceptedOffer.scholarshipPercent !== undefined ? (
+                    <Text className="mt-1 text-xs text-premium-muted">Scholarship: {acceptedOffer.scholarshipPercent}%</Text>
+                  ) : null}
+                </View>
+              ) : availableOffers.length > 0 ? (
+                <View className="mt-3 gap-3">
+                  {availableOffers.map((offer) => (
+                    <View key={offer.id} className="rounded-lg bg-premium-bg p-3">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-sm font-semibold text-white">{offer.sourceLabel}</Text>
+                        <Text className="text-xs font-semibold uppercase text-emerald-300">{offer.type}</Text>
+                      </View>
+                      <Text className="mt-2 text-sm text-white">{projectedRoleLabel[offer.projectedRole]}</Text>
+                      <Text className="mt-1 text-xs text-premium-muted">
+                        {getInterestStrengthLabel(offer.interestLevel)} interest | {offer.exposureTier} exposure
+                      </Text>
+                      {offer.scholarshipPercent !== undefined ? (
+                        <Text className="mt-1 text-xs text-premium-muted">Scholarship: {offer.scholarshipPercent}%</Text>
+                      ) : null}
+                      <View className="mt-3 flex-row gap-2">
+                        <Pressable
+                          className="flex-1 items-center rounded-lg bg-emerald-600 px-3 py-2"
+                          onPress={() => {
+                            respondToOffer(offer.id, "ACCEPT");
+                          }}
+                        >
+                          <Text className="text-sm font-semibold text-white">Accept</Text>
+                        </Pressable>
+                        <Pressable
+                          className="flex-1 items-center rounded-lg bg-slate-700 px-3 py-2"
+                          onPress={() => {
+                            respondToOffer(offer.id, "DECLINE");
+                          }}
+                        >
+                          <Text className="text-sm font-semibold text-white">Decline</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text className="mt-3 text-sm text-premium-muted">No offers yet. Strong weeks will move the meters.</Text>
+              )}
+            </View>
+          ) : null}
 
           <Pressable
             className={`mt-6 items-center justify-center rounded-xl px-4 py-4 ${canPlayMatch ? "bg-sky-600" : "bg-slate-700"}`}
@@ -121,6 +263,8 @@ export function HomeScreen() {
       {view === "POSTGAME" ? <PostgameScreen /> : null}
 
       {view === "BACKSTORY" ? <BackstoryScreen /> : null}
+
+      {view === "SCHOOL_PATH_SELECT" ? <SchoolPathSelectionScreen /> : null}
     </SafeAreaView>
   );
 }

@@ -32,7 +32,7 @@ export enum CareerStatus {
 
 export type ExileStatus = Exclude<ExileMode, "NONE">;
 
-export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
+export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME" | "SCHOOL_PATH_SELECT";
 
 export interface LastMatchResult {
   homeScore: number;
@@ -64,6 +64,7 @@ export interface CareerState {
   teamId: string | null;
   teamInterestById: Record<string, number>;
   schoolPath: SchoolPath;
+  pendingSchoolPathSelection: boolean;
   offers: Offer[];
   seasonSchedule: SeasonSchedule;
   relationships: Record<string, RelationshipState>;
@@ -93,6 +94,9 @@ export interface CareerActions {
   updateStatus(status: CareerStatus): void;
   setCurrentWeek(week: number): void;
   setTeam(teamId: string | null): void;
+  applyTeamInterestDelta(targetId: string, amount: number): void;
+  respondToOffer(offerId: string, decision: "ACCEPT" | "DECLINE"): void;
+  selectSchoolPath(path: SchoolPath): void;
   setGoatPath(isGoatPath: boolean): void;
   setCurrentYear(year: number): void;
   startNarrative(fileName: string): void;

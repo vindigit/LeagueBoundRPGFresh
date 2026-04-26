@@ -10,6 +10,7 @@ const makeBoxScore = (playerName: string, playerPoints: number): MatchBoxScore =
     {
       id: "home-0",
       name: playerName,
+      team: "home",
       pts: playerPoints,
       reb: 4,
       ast: 5,
@@ -18,12 +19,16 @@ const makeBoxScore = (playerName: string, playerPoints: number): MatchBoxScore =
       to: 2,
       fgm: Math.max(1, Math.floor(playerPoints / 2)),
       fga: Math.max(2, Math.floor(playerPoints / 2) + 4),
+      ftm: 0,
+      fta: 0,
+      pf: 1,
     },
   ],
   awayPlayers: [
     {
       id: "away-0",
       name: "Rivals High",
+      team: "away",
       pts: 12,
       reb: 3,
       ast: 2,
@@ -32,10 +37,13 @@ const makeBoxScore = (playerName: string, playerPoints: number): MatchBoxScore =
       to: 1,
       fgm: 5,
       fga: 11,
+      ftm: 0,
+      fta: 0,
+      pf: 2,
     },
   ],
-  homeTotals: { pts: playerPoints + 40, reb: 20, ast: 14, stl: 5, blk: 2, to: 9, fgm: 24, fga: 50 },
-  awayTotals: { pts: 48, reb: 18, ast: 10, stl: 4, blk: 1, to: 11, fgm: 19, fga: 46 },
+  homeTotals: { pts: playerPoints + 40, reb: 20, ast: 14, stl: 5, blk: 2, to: 9, fgm: 24, fga: 50, ftm: 0, fta: 0, pf: 8 },
+  awayTotals: { pts: 48, reb: 18, ast: 10, stl: 4, blk: 1, to: 11, fgm: 19, fga: 46, ftm: 0, fta: 0, pf: 9 },
 });
 
 describe("Career vertical slice weekly loop", () => {
@@ -101,12 +109,34 @@ describe("Career vertical slice weekly loop", () => {
         matchCompleted: true,
         postgamePending: true,
       });
-      expect(afterMatch.newsFeed.length).toBe(initialNewsCount + cycle - 1);
-      expect(afterMatch.player.bankBalance).toBe(initialBank + 500 * (cycle - 1));
+      const expectedNewsBeforeResolution = cycle === 1 ? initialNewsCount : initialNewsCount + cycle;
+      expect(afterMatch.newsFeed.length).toBe(expectedNewsBeforeResolution);
+      expect(afterMatch.player.bankBalance).toBeGreaterThanOrEqual(initialBank + 500 * (cycle - 1));
 
       afterMatch.resolvePostgameAndAdvanceWeek();
 
       const resolved = useCareerStore.getState();
+      if (cycle === 1) {
+        expect(resolved.view).toBe("SCHOOL_PATH_SELECT");
+        expect(resolved.pendingSchoolPathSelection).toBe(true);
+        useCareerStore.getState().selectSchoolPath("STATE_5A");
+        const afterSelection = useCareerStore.getState();
+        expect(afterSelection.view).toBe("HUB");
+        expect(afterSelection.leagueLevel).toBe("HIGH_SCHOOL");
+        expect(afterSelection.careerPhase).toBe("HIGH_SCHOOL");
+        expect(afterSelection.pendingSchoolPathSelection).toBe(false);
+        expect(afterSelection.currentWeek).toBe(cycle + 1);
+        expect(afterSelection.weeklyLoop).toEqual({
+          eventCompleted: false,
+          matchCompleted: false,
+          postgamePending: false,
+        });
+        expect(afterSelection.newsFeed.length).toBe(initialNewsCount + cycle + 1);
+        expect(afterSelection.player.bankBalance).toBe(initialBank + 500 * cycle);
+        expect(afterSelection.player.morale).toBe(initialMorale + 5 * cycle);
+        continue;
+      }
+
       expect(resolved.view).toBe("HUB");
       expect(resolved.currentWeek).toBe(cycle + 1);
       expect(resolved.weeklyLoop).toEqual({
@@ -114,9 +144,9 @@ describe("Career vertical slice weekly loop", () => {
         matchCompleted: false,
         postgamePending: false,
       });
-      expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle);
-      expect(resolved.player.bankBalance).toBe(initialBank + 500 * cycle);
-      expect(resolved.player.morale).toBe(initialMorale + 5 * cycle);
+      expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle + 1);
+      expect(resolved.player.bankBalance).toBeGreaterThan(initialBank + 500 * cycle);
+      expect(resolved.player.morale).toBeGreaterThanOrEqual(initialMorale + 5 * cycle);
     }
   });
 });

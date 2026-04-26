@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
+import { getSchoolPathProfile } from "../../../constants/schoolPaths";
 import { LeagueLevel } from "../../../types/career";
+import type { SchoolPath } from "../../../types/careerProgression";
 import type { Player, PlayerAttributes, PlayerGameStats, PlayerArchetype, Position } from "../../../types/player";
 import type { Team } from "../../../types/team";
 import type { PossessionEventType } from "../../../matchEngine";
@@ -50,6 +52,14 @@ const withDelta = (attrs: PlayerAttributes, delta: AttributeDelta): PlayerAttrib
   stamina: clampRating(attrs.stamina + (delta.stamina ?? 0)),
 });
 
+const mergeDelta = (base: AttributeDelta, extra: AttributeDelta): AttributeDelta => {
+  const merged: AttributeDelta = { ...base };
+  for (const [key, value] of Object.entries(extra) as Array<[keyof PlayerAttributes, number]>) {
+    merged[key] = (merged[key] ?? 0) + value;
+  }
+  return merged;
+};
+
 const makePlayer = (
   id: string,
   name: string,
@@ -88,6 +98,8 @@ const buildRuntimeTeams = (
   userDisplayName: string,
   userArchetype: PlayerArchetype,
   userPosition: Position,
+  leagueLevel: LeagueLevel,
+  schoolPath: SchoolPath,
 ): {
   home: Team;
   away: Team;
@@ -95,12 +107,14 @@ const buildRuntimeTeams = (
   awayNames: string[];
   userPlayerId: string;
 } => {
+  const schoolPathProfile = leagueLevel === LeagueLevel.HIGH_SCHOOL ? getSchoolPathProfile(schoolPath) : null;
+  const userRuntimeAttributes = schoolPathProfile ? withDelta(userAttributes, schoolPathProfile.userRuntimeDelta) : userAttributes;
   let userPlayerId = "h1";
   const homeRoster = POSITIONS.map((position, index) => {
     const id = `h${index + 1}`;
     if (position === userPosition) {
       userPlayerId = id;
-      return makePlayer(id, userDisplayName, userArchetype, userPosition, userAttributes, {
+      return makePlayer(id, userDisplayName, userArchetype, userPosition, userRuntimeAttributes, {
         age: userPlayer.age,
         bankBalance: userPlayer.bankBalance,
         morale: userPlayer.morale,
@@ -111,7 +125,13 @@ const buildRuntimeTeams = (
     }
 
     const profile = teammateProfileByPosition[position];
-    return makePlayer(id, getHomeNameForPosition(position), profile.archetype, position, withDelta(userAttributes, profile.delta));
+    return makePlayer(
+      id,
+      getHomeNameForPosition(position),
+      profile.archetype,
+      position,
+      withDelta(userAttributes, schoolPathProfile ? mergeDelta(profile.delta, schoolPathProfile.teammateRuntimeDelta) : profile.delta),
+    );
   }) as Team["roster"];
 
   const awayBase: PlayerAttributes = {
@@ -133,12 +153,13 @@ const buildRuntimeTeams = (
     stamina: 72,
   };
 
+  const adjustedAwayBase = schoolPathProfile ? withDelta(awayBase, schoolPathProfile.opponentRuntimeDelta) : awayBase;
   const awayRoster = [
-    makePlayer("a1", "Away PG", "Playmaker", "PG", withDelta(awayBase, { passing: 7, handle: 6, perimeterDefense: -3 })),
-    makePlayer("a2", "Away SG", "Sharpshooter", "SG", withDelta(awayBase, { threePoint: 9, shortRange: -4 })),
-    makePlayer("a3", "Away SF", "Lockdown Defender", "SF", withDelta(awayBase, { perimeterDefense: 10, speed: 4, threePoint: -4 })),
-    makePlayer("a4", "Away PF", "Stretch Big", "PF", withDelta(awayBase, { defRebounding: 8, threePoint: 5, handle: -12 })),
-    makePlayer("a5", "Away C", "Paint Beast", "C", withDelta(awayBase, { shortRange: 9, defRebounding: 12, interiorDefense: 8, threePoint: -12, handle: -16 })),
+    makePlayer("a1", "Away PG", "Playmaker", "PG", withDelta(adjustedAwayBase, { passing: 7, handle: 6, perimeterDefense: -3 })),
+    makePlayer("a2", "Away SG", "Sharpshooter", "SG", withDelta(adjustedAwayBase, { threePoint: 9, shortRange: -4 })),
+    makePlayer("a3", "Away SF", "Lockdown Defender", "SF", withDelta(adjustedAwayBase, { perimeterDefense: 10, speed: 4, threePoint: -4 })),
+    makePlayer("a4", "Away PF", "Stretch Big", "PF", withDelta(adjustedAwayBase, { defRebounding: 8, threePoint: 5, handle: -12 })),
+    makePlayer("a5", "Away C", "Paint Beast", "C", withDelta(adjustedAwayBase, { shortRange: 9, defRebounding: 12, interiorDefense: 8, threePoint: -12, handle: -16 })),
   ] as Team["roster"];
 
   return {
@@ -230,6 +251,8 @@ export const useMatchLoop = (): void => {
   const playerArchetype = useCareerStore((state) => state.player.archetype);
   const playerPosition = useCareerStore((state) => state.player.position);
   const playerAttributes = useCareerStore((state) => state.player.attributes);
+  const leagueLevel = useCareerStore((state) => state.leagueLevel);
+  const schoolPath = useCareerStore((state) => state.schoolPath);
 
   const runtimeTeams = useMemo(
     () =>
@@ -239,9 +262,12 @@ export const useMatchLoop = (): void => {
         playerName.trim().length > 0 ? playerName : "My Player",
         playerArchetype,
         playerPosition,
+        leagueLevel,
+        schoolPath,
       ),
     [
       careerPlayer,
+      leagueLevel,
       playerArchetype,
       playerAttributes.blocking,
       playerAttributes.defRebounding,
@@ -261,6 +287,7 @@ export const useMatchLoop = (): void => {
       playerAttributes.vision,
       playerName,
       playerPosition,
+      schoolPath,
     ],
   );
 

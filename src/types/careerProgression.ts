@@ -15,6 +15,7 @@ export interface Offer {
   id: string;
   sourceTeamId: string;
   sourceLabel: string;
+  exposureTier: string;
   type: OfferType;
   phases: CareerPhase[];
   projectedRole: ProjectedRole;

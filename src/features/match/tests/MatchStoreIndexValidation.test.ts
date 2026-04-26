@@ -106,4 +106,30 @@ describe("Match store index validation", () => {
     expect(player.fga).toBe(1);
     expect(player.fgm).toBe(1);
   });
+
+  it("records free throws and personal fouls without inflating field goals", () => {
+    useMatchStore.getState().recordBoxScoreEvent({
+      scoringTeam: "home",
+      shooterIndex: 0,
+      points: 1,
+      freeThrowMade: 1,
+      freeThrowAttempted: 2,
+      foulOnTeam: "away",
+      foulOnPlayerIndex: 2,
+    });
+
+    const shooter = getHomePlayer(0);
+    const fouler = useMatchStore.getState().matchBoxScore.awayPlayers[2];
+    const totals = useMatchStore.getState().matchBoxScore;
+
+    expect(shooter.pts).toBe(1);
+    expect(shooter.ftm).toBe(1);
+    expect(shooter.fta).toBe(2);
+    expect(shooter.fga).toBe(0);
+    expect(shooter.fgm).toBe(0);
+    expect(fouler.pf).toBe(1);
+    expect(totals.homeTotals.ftm).toBe(1);
+    expect(totals.homeTotals.fta).toBe(2);
+    expect(totals.awayTotals.pf).toBe(1);
+  });
 });

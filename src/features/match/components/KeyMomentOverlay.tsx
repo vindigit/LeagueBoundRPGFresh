@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { KeyMomentPending, KeyMomentResolutionInput } from "../../../match/keyMoments/types";
+import type { KeyMomentPending, KeyMomentResolutionInput, MinigameSpec } from "../../../match/keyMoments/types";
 
 export interface KeyMomentContextSummary {
   score: string;
@@ -19,6 +19,25 @@ interface KeyMomentOverlayProps {
   onResolve: (input: KeyMomentResolutionInput) => void;
 }
 
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+const MINIGAME_TICK_MS = 16;
+
+export const scoreTimingRelease = (progress: number, minigame: MinigameSpec): number => {
+  if (minigame.type !== "timing_release") {
+    return 0;
+  }
+
+  const safeProgress = clamp01(progress);
+  const distance = Math.abs(safeProgress - minigame.targetCenter);
+  const normalizedDistance = distance / Math.max(minigame.targetRadius, 0.001);
+
+  if (normalizedDistance <= 1) {
+    return clamp01(0.72 + (1 - normalizedDistance) * 0.27);
+  }
+
+  return clamp01(0.72 - (normalizedDistance - 1) * 0.5);
+};
+
 const ContextChip = ({ label, value }: { label: string; value: string }) => (
   <View className="min-w-[46%] rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2">
     <Text className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</Text>
@@ -28,15 +47,36 @@ const ContextChip = ({ label, value }: { label: string; value: string }) => (
 
 export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve }: KeyMomentOverlayProps) => {
   const [submitting, setSubmitting] = useState(false);
+  const [timingProgress, setTimingProgress] = useState(0);
   const startedAtRef = useRef<number>(Date.now());
   const resolvedRef = useRef(false);
   const showMinigamePlaceholder = useMemo(() => Boolean(pending), [pending]);
 
   useEffect(() => {
     setSubmitting(false);
+    setTimingProgress(0);
     startedAtRef.current = Date.now();
     resolvedRef.current = false;
   }, [pending?.id]);
+
+  useEffect(() => {
+    if (!pending?.minigame || pending.minigame.type !== "timing_release" || submitting || resolvedRef.current) {
+      return;
+    }
+
+    const updateProgress = () => {
+      const elapsed = Date.now() - startedAtRef.current;
+      const duration = Math.max(pending.minigame?.durationMs ?? 1, 1);
+      setTimingProgress(clamp01(elapsed / duration));
+    };
+
+    updateProgress();
+    const intervalId = setInterval(updateProgress, MINIGAME_TICK_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [pending?.id, pending?.minigame, submitting]);
 
   if (feedback && !pending) {
     return (
@@ -55,6 +95,38 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
   if (!pending) {
     return null;
   }
+
+  const getLiveTimingProgress = (): number => {
+    if (!pending.minigame || pending.minigame.type !== "timing_release") {
+      return timingProgress;
+    }
+
+    const duration = Math.max(pending.minigame.durationMs, 1);
+    return clamp01((Date.now() - startedAtRef.current) / duration);
+  };
+
+  const submitTimingRelease = () => {
+    if (
+      submitting ||
+      resolvedRef.current ||
+      !pending.minigame ||
+      pending.minigame.type !== "timing_release"
+    ) {
+      return;
+    }
+
+    const liveProgress = getLiveTimingProgress();
+    resolvedRef.current = true;
+    setSubmitting(true);
+    setTimingProgress(liveProgress);
+    onResolve({
+      pendingId: pending.id,
+      executionQuality: {
+        normalizedScore: scoreTimingRelease(liveProgress, pending.minigame),
+        source: "minigame",
+      },
+    });
+  };
 
   return (
     <View className="absolute inset-0 items-center justify-center bg-black/80 px-5">
@@ -118,41 +190,47 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
             </Pressable>
           </View>
         ) : (
-          <View className="mt-4 rounded-xl border border-dashed border-slate-600 bg-slate-800/70 px-4 py-5">
-            <Text className="text-sm font-semibold text-white">Minigame Shell Placeholder</Text>
-            <Text className="mt-2 text-xs text-slate-300">
-              Future playable minigame UI will live here. For now, use a simple quality submit to exercise the engine contract without adding view-side simulation logic.
-            </Text>
-            <View className="mt-4 gap-2">
-              {[
-                { label: "Rough Attempt", score: 0.35 },
-                { label: "Solid Attempt", score: 0.62 },
-                { label: "Clean Attempt", score: 0.84 },
-              ].map((attempt) => (
+          <View className="mt-4 rounded-xl border border-emerald-400/30 bg-slate-800/70 px-4 py-5">
+            <Text className="text-sm font-semibold text-white">Timing Release</Text>
+            <Text className="mt-2 text-xs text-slate-300">Tap when the marker hits the window.</Text>
+            {pending.minigame?.type === "timing_release" ? (
+              <>
+                <View className="mt-4 rounded-2xl border border-slate-700 bg-slate-950/80 px-3 py-4">
+                  <View className="h-4 rounded-full bg-slate-700" testID="timing-release-lane">
+                    <View
+                      testID="timing-release-target"
+                      className="absolute h-4 rounded-full bg-amber-400/80"
+                      style={{
+                        left: `${clamp01(pending.minigame.targetCenter - pending.minigame.targetRadius) * 100}%`,
+                        width: `${Math.min(100, pending.minigame.targetRadius * 200)}%`,
+                      }}
+                    />
+                    <View
+                      testID="timing-release-marker"
+                      className="absolute -top-1 h-6 w-2 rounded-full bg-cyan-300"
+                      style={{ left: `${timingProgress * 100}%` }}
+                    />
+                  </View>
+                  <Text className="mt-3 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Meter {Math.round(timingProgress * 100)}%
+                  </Text>
+                </View>
                 <Pressable
-                  key={attempt.label}
+                  testID="timing-release-button"
                   disabled={submitting}
-                  className={`rounded-xl border px-3 py-3 ${submitting ? "border-slate-700 bg-slate-800" : "border-emerald-400/40 bg-emerald-400/10"}`}
-                  onPress={() => {
-                    if (submitting || resolvedRef.current) {
-                      return;
-                    }
-                    resolvedRef.current = true;
-                    setSubmitting(true);
-                    onResolve({
-                      pendingId: pending.id,
-                      executionQuality: {
-                        normalizedScore: attempt.score,
-                        source: "minigame",
-                      },
-                    });
-                  }}
+                  className={`mt-4 items-center justify-center rounded-xl border py-3 ${
+                    submitting ? "border-slate-700 bg-slate-800" : "border-emerald-400/40 bg-emerald-400/10"
+                  }`}
+                  onPress={submitTimingRelease}
                 >
-                  <Text className="text-sm font-semibold text-emerald-200">{attempt.label}</Text>
-                  <Text className="mt-1 text-xs text-slate-300">Submit placeholder minigame quality: {attempt.score.toFixed(2)}</Text>
+                  <Text className={`text-sm font-semibold ${submitting ? "text-slate-300" : "text-emerald-200"}`}>
+                    {submitting ? "Release Locked" : "Tap to Release"}
+                  </Text>
                 </Pressable>
-              ))}
-            </View>
+              </>
+            ) : (
+              <Text className="mt-3 text-xs text-slate-300">This minigame type is not available yet.</Text>
+            )}
             <Pressable
               disabled={submitting}
               className={`mt-4 items-center justify-center rounded-xl py-3 ${submitting ? "bg-slate-700" : "bg-amber-400"}`}

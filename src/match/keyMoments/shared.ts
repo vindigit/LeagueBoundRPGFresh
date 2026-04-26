@@ -1,4 +1,4 @@
-import { getNextMomentumStreaks, type MatchContext, type PossessionAction, type PossessionEventType, type PossessionResult, type PossessionState, type ShotZone } from "../../matchEngine";
+import { getNextMomentumStreaks, type FreeThrowSequence, type MatchContext, type PossessionAction, type PossessionEventType, type PossessionResult, type PossessionState, type ShotZone } from "../../matchEngine";
 import type { Player } from "../../types/player";
 import type {
   KeyMomentBuildArgs,
@@ -88,8 +88,11 @@ export const buildBaselineQuality = (args: {
 }): number => {
   const skill = getWeightedSkill(args.player, args.ratings) / 99;
   const pressurePenalty = getPressure(args.pendingLike) * 0.12;
-  const fatiguePenalty = getFatigue(args.possessionState, args.pendingLike) * 0.1;
-  return clamp01(0.38 + skill * 0.42 - pressurePenalty - fatiguePenalty + (args.riskBias ?? 0));
+  const fatigueAmplifier = 1 + Math.max(0, args.pendingLike.context.workRate - 50) / 100;
+  const fatiguePenalty = getFatigue(args.possessionState, args.pendingLike) * 0.1 * fatigueAmplifier;
+  const focusBonus = ((args.pendingLike.context.focus - 50) / 50) * 0.12;
+  const workRateBonus = ((args.pendingLike.context.workRate - 50) / 50) * 0.04;
+  return clamp01(0.38 + skill * 0.42 - pressurePenalty - fatiguePenalty + focusBonus + workRateBonus + (args.riskBias ?? 0));
 };
 
 export const choiceQuality = (pending: KeyMomentPending, input: KeyMomentResolutionInput): number =>
@@ -133,7 +136,7 @@ export const makeOption = (
 
 export const buildNextState = (
   possessionState: PossessionState,
-  points: 0 | 2 | 3,
+  points: 0 | 1 | 2 | 3,
   madeShot: boolean,
   turnoverLikeFailure: boolean,
   nextBallHandlerIndex: number,
@@ -168,17 +171,20 @@ export const buildResolution = (args: {
   action: PossessionAction;
   eventType: PossessionEventType;
   shotZone: ShotZone;
-  points: 0 | 2 | 3;
+  points: 0 | 1 | 2 | 3;
   madeShot: boolean;
   turnoverLikeFailure: boolean;
   success: boolean;
   resultSummaryText: string;
   defenderInvolved?: boolean;
+  shooterIndexOverride?: number;
+  defenderIndexOverride?: number;
+  freeThrows?: FreeThrowSequence;
 }): KeyMomentResolutionOutput => {
   const offenseIsHome = args.possessionState.offenseKey === "home";
   const userIndex = args.pending.context.userPlayerIndex;
-  const shooterIndex = offenseIsHome ? userIndex : (userIndex + 1) % 5;
-  const defenderIndex = args.defenderInvolved ? userIndex : undefined;
+  const shooterIndex = args.shooterIndexOverride ?? (offenseIsHome ? userIndex : (userIndex + 1) % 5);
+  const defenderIndex = args.defenderIndexOverride ?? (args.defenderInvolved ? userIndex : undefined);
   const nextState = buildNextState(
     args.possessionState,
     args.points,
@@ -205,6 +211,7 @@ export const buildResolution = (args: {
     },
     offensiveRebound: false,
     putbackAttempted: false,
+    freeThrows: args.freeThrows,
     trace: ["INIT_POSSESSION", "END_POSSESSION"],
   };
 

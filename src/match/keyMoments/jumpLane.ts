@@ -1,5 +1,6 @@
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
-import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
+import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
+import { buildContextualJumpLaneOptions } from "./contextualOptions";
 
 const PROMPT = "Key Moment: Read the pass and decide whether to jump the lane.";
 
@@ -14,11 +15,7 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
     context: args.context,
     promptText: PROMPT,
     mode: "choice",
-    options: [
-      makeOption("shoot_gap", "Shoot the Gap", "Attack the passing lane for a steal.", 0.12),
-      makeOption("stunt_recover", "Stunt and Recover", "Show help, then snap back to the pass.", 0.02),
-      makeOption("stay_home", "Stay Home", "Protect against the blow-by but give up pressure.", -0.06),
-    ],
+    options: buildContextualJumpLaneOptions(args),
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,

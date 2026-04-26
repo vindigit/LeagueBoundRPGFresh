@@ -1,7 +1,7 @@
-import type { MatchScore, MatchContext, PossessionResult, PossessionState } from "../../matchEngine";
+import type { MatchScore, MatchContext, PossessionResult, PossessionState, UserMatchState } from "../../matchEngine";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
-export type KeyMomentType = "create_shot" | "make_the_read" | "on_ball_stop" | "jump_lane";
+export type KeyMomentType = "create_shot" | "make_the_read" | "on_ball_stop" | "jump_lane" | "foul_pressure";
 
 export interface KeyMomentContext {
   id: string;
@@ -15,6 +15,8 @@ export interface KeyMomentContext {
   userPlayerIndex: number;
   possessionIndex: number;
   score: MatchScore;
+  workRate: number;
+  focus: number;
 }
 
 export interface KeyMomentOption {
@@ -44,6 +46,9 @@ export interface KeyMomentPending {
   mode: "choice" | "minigame";
   options: KeyMomentOption[];
   minigame?: MinigameSpec;
+  foulType?: "shooting" | "bonus";
+  freeThrowMode?: "one_and_one" | "two_shots";
+  defenderTeamFoulsInSegment?: number;
   simBaselineQuality: number;
   seedValue?: number;
   autoResolveAt?: number;
@@ -71,12 +76,20 @@ export interface KeyMomentBuildArgs {
   context: KeyMomentContext;
   matchContext?: MatchContext;
   possessionState: PossessionState;
+  userMatchState?: UserMatchState;
   seedValue: number;
+  defenderTeamFoulsInSegment?: number;
 }
 
 export interface KeyMomentSchedulerInput {
   context: KeyMomentContext;
   periodTotalSeconds: number;
+  matchContext?: MatchContext;
+  possessionState?: PossessionState;
+  userMatchState?: UserMatchState;
+  defenderTeamFoulsInSegment?: number;
+  forceTrigger?: boolean;
+  pendingId?: string;
 }
 
 export interface KeyMomentSchedulerOutput {

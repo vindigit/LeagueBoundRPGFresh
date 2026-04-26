@@ -19,7 +19,8 @@ export type PossessionEventType =
   | "off_reb"
   | "def_reb"
   | "putback_make"
-  | "putback_miss";
+  | "putback_miss"
+  | "free_throws";
 
 export type MarkovStateNode =
   | "INIT_POSSESSION"
@@ -44,6 +45,15 @@ export interface MatchScore {
   away: number;
 }
 
+export interface FreeThrowSequence {
+  mode: "one_and_one" | "two_shots";
+  attempted: number;
+  made: number;
+  shooterIndex: number;
+  foulOnTeam: "home" | "away";
+  foulOnPlayerIndex?: number;
+}
+
 export interface PossessionState {
   possessionIndex: number;
   secondsRemaining: number;
@@ -65,10 +75,25 @@ export interface SimMetrics {
   turnoverLikeFailures: number;
 }
 
+export interface UserMatchState {
+  baseWorkRate: number;
+  baseFocus: number;
+  workRate: number;
+  focus: number;
+}
+
+export interface PossessionSimulationOptions {
+  userControl?: {
+    teamKey: "home" | "away";
+    playerIndex: number;
+    matchState: UserMatchState;
+  };
+}
+
 export interface PossessionResult {
   action: PossessionAction;
   madeShot: boolean;
-  points: 0 | 2 | 3;
+  points: 0 | 1 | 2 | 3;
   assisted: boolean;
   turnoverLikeFailure: boolean;
   nextState: PossessionState;
@@ -81,6 +106,7 @@ export interface PossessionResult {
   defensivePlay: DefensivePlay;
   offensiveRebound: boolean;
   putbackAttempted: boolean;
+  freeThrows?: FreeThrowSequence;
   trace: MarkovStateNode[];
 }
 
@@ -169,7 +195,7 @@ const getConsistency = (player: Player): number => {
   return clamp(Math.round(attrs.vision * 0.45 + attrs.handle * 0.3 + attrs.stamina * 0.25), 0, 99);
 };
 
-const getPressure = (state: PossessionState): number => {
+export const getPressure = (state: PossessionState): number => {
   const timePressure = clamp((180 - state.secondsRemaining) / 180, 0, 1);
   const marginPressure = clamp((10 - Math.abs(getScoreDiff(state))) / 10, 0, 1);
   return clamp(timePressure * marginPressure, 0, 1);
@@ -203,7 +229,7 @@ const getElapsedByEvent = (eventType: PossessionEventType, rng: () => number): n
   return Math.max(1, elapsedSeconds);
 };
 
-const addPoints = (score: MatchScore, offenseKey: "home" | "away", points: 2 | 3): MatchScore =>
+const addPoints = (score: MatchScore, offenseKey: "home" | "away", points: 1 | 2 | 3): MatchScore =>
   offenseKey === "home"
     ? { ...score, home: score.home + points }
     : { ...score, away: score.away + points };
@@ -225,9 +251,9 @@ export const getPlayerOvr = (player: Player): number =>
 export const calculateTeamOvr = (team: Team): number =>
   Math.round(average(team.roster.map(getPlayerOvr)));
 
-const getFatigueMultiplier = (stamina: number, touchCount: number): number =>
+const getFatigueMultiplier = (stamina: number, touchCount: number, fatigueLoadMultiplier = 1): number =>
   clamp(
-    1 - touchCount * tuning.fatigueTouchScale * 1.35 * (1 - stamina / 100),
+    1 - touchCount * fatigueLoadMultiplier * tuning.fatigueTouchScale * 1.35 * (1 - stamina / 100),
     tuning.fatigueMinMultiplier,
     tuning.fatigueMaxMultiplier,
   );
@@ -238,11 +264,12 @@ const getPlayerImpact = (
   playerIndex: number,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
+  fatigueLoadMultiplier = 1,
 ): PlayerImpact => {
   const consistency = getScaledAttribute(getConsistency(player), leagueLevel);
   const discipline = getScaledAttribute(getDiscipline(player), leagueLevel);
   const stamina = getScaledAttribute(player.attributes.stamina, leagueLevel);
-  const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex]);
+  const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex], fatigueLoadMultiplier);
   const scaledAttrs = {
     vision: getScaledAttribute(player.attributes.vision, leagueLevel),
     passing: getScaledAttribute(player.attributes.passing, leagueLevel),
@@ -351,6 +378,7 @@ export const chooseAction = (
   ballHandlerImpact: PlayerImpact,
   state: PossessionState,
   rng: () => number,
+  focusComposureBonus = 0,
 ): PossessionAction => {
   const pressure = getPressure(state);
   const baseWeights: Record<PossessionAction, number> = tuning.baseActionWeights;
@@ -366,7 +394,7 @@ export const chooseAction = (
       tuning.lowPressureAdjustments.dribble +
       (tuning.highPressureAdjustments.dribble - tuning.lowPressureAdjustments.dribble) * pressure,
   };
-  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline, pressure);
+  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline + focusComposureBonus, pressure);
   const composureAdjustment = (composureMultiplier - 1) * 20;
   const shootingProfile = average([
     ballHandlerImpact.threePoint,
@@ -548,6 +576,7 @@ const getTurnoverProbability = (
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   state: PossessionState,
+  focusComposureBonus = 0,
 ): number => {
   const defenderPressure = average(defenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
@@ -555,7 +584,7 @@ const getTurnoverProbability = (
   }));
   const ballSecurity = ballHandlerImpact.handle * 0.65 + ballHandlerImpact.vision * 0.35;
   const pressure = getPressure(state);
-  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline, pressure);
+  const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline + focusComposureBonus, pressure);
 
   return clamp(
     (tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor) / composureMultiplier,
@@ -637,6 +666,7 @@ const getShotMakeProbability = (
   offenseKey: TeamSide,
   rng: () => number,
   rimAttemptType?: RimAttemptType,
+  focusComposureBonus = 0,
 ): number => {
   const zoneBase =
     shotZone === "three"
@@ -656,7 +686,7 @@ const getShotMakeProbability = (
 
   const defenseValue = getContestValue(shotZone, defenderImpact);
   const pressure = getPressure(state);
-  const composureMultiplier = getComposureMultiplier(shooterImpact.discipline, pressure);
+  const composureMultiplier = getComposureMultiplier(shooterImpact.discipline + focusComposureBonus, pressure);
   const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 4;
   const attemptBonus =
     shotZone === "rim" ? (rimAttemptType === "dunk" ? tuning.dunkMakeBonus : tuning.layupMakeBonus) : 0;
@@ -752,6 +782,7 @@ export const simulatePossession = (
   state: PossessionState,
   leagueLevel: LeagueLevel,
   rng: () => number,
+  options?: PossessionSimulationOptions,
 ): PossessionResult => {
   const trace: MarkovStateNode[] = [];
   pushTrace(trace, "INIT_POSSESSION");
@@ -765,14 +796,32 @@ export const simulatePossession = (
   const incrementTouch = (teamKey: TeamSide, index: number): void => {
     touchCounts[teamKey][index as 0 | 1 | 2 | 3 | 4] += 1;
   };
+  const isUserControlledPlayer = (teamKey: TeamSide, playerIndex: number): boolean =>
+    options?.userControl?.teamKey === teamKey && options.userControl.playerIndex === playerIndex;
+  const userFatigueLoadMultiplier =
+    options?.userControl
+      ? 1 + Math.max(0, options.userControl.matchState.workRate - 50) / 75
+      : 1;
+  const userFocusComposureBonus =
+    options?.userControl
+      ? (options.userControl.matchState.focus - 50) * 0.3
+      : 0;
 
   const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng);
   incrementTouch(state.offenseKey, ballHandlerIndex);
   const ballHandler = getPlayerByIndex(offenseTeam, ballHandlerIndex);
-  const ballHandlerImpact = getPlayerImpact(ballHandler, state.offenseKey, ballHandlerIndex, touchCounts, leagueLevel);
+  const ballHandlerIsUser = isUserControlledPlayer(state.offenseKey, ballHandlerIndex);
+  const ballHandlerImpact = getPlayerImpact(
+    ballHandler,
+    state.offenseKey,
+    ballHandlerIndex,
+    touchCounts,
+    leagueLevel,
+    ballHandlerIsUser ? userFatigueLoadMultiplier : 1,
+  );
 
   pushTrace(trace, "DECIDE_ACTION");
-  const action = chooseAction(ballHandler, ballHandlerImpact, state, rng);
+  const action = chooseAction(ballHandler, ballHandlerImpact, state, rng, ballHandlerIsUser ? userFocusComposureBonus : 0);
 
   pushTrace(trace, "RESOLVE_TURNOVER_PRESSURE");
   const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "turnover", rng);
@@ -784,10 +833,19 @@ export const simulatePossession = (
     primaryDefenderIndex,
     touchCounts,
     leagueLevel,
+    isUserControlledPlayer(state.defenseKey, primaryDefenderIndex) ? userFatigueLoadMultiplier : 1,
   );
 
   const turnoverProb = applyHomeCourtToProbability(
-    getTurnoverProbability(ballHandlerImpact, defenseTeam, state.defenseKey, touchCounts, leagueLevel, state),
+    getTurnoverProbability(
+      ballHandlerImpact,
+      defenseTeam,
+      state.defenseKey,
+      touchCounts,
+      leagueLevel,
+      state,
+      ballHandlerIsUser ? userFocusComposureBonus : 0,
+    ),
     state.offenseKey,
     "turnover",
   );
@@ -842,6 +900,7 @@ export const simulatePossession = (
       receiverIndex,
       touchCounts,
       leagueLevel,
+      isUserControlledPlayer(state.offenseKey, receiverIndex) ? userFatigueLoadMultiplier : 1,
     );
     const assistProb = getAssistProbability(ballHandlerImpact, receiverImpact);
     if (rng() <= assistProb) {
@@ -851,7 +910,15 @@ export const simulatePossession = (
 
   const shooter = getPlayerByIndex(offenseTeam, shooterIndex);
   incrementTouch(state.offenseKey, shooterIndex);
-  const shooterImpact = getPlayerImpact(shooter, state.offenseKey, shooterIndex, touchCounts, leagueLevel);
+  const shooterIsUser = isUserControlledPlayer(state.offenseKey, shooterIndex);
+  const shooterImpact = getPlayerImpact(
+    shooter,
+    state.offenseKey,
+    shooterIndex,
+    touchCounts,
+    leagueLevel,
+    shooterIsUser ? userFatigueLoadMultiplier : 1,
+  );
   const shotZone = pickShotZone(action, shooterImpact, rng);
   const rimAttemptType = shotZone === "rim" ? pickRimAttemptType(shooterImpact, rng) : undefined;
 
@@ -889,7 +956,16 @@ export const simulatePossession = (
 
   if (!blocked) {
     const makeProb = applyHomeCourtToProbability(
-      getShotMakeProbability(shotZone, shooterImpact, shotDefenderImpact, state, state.offenseKey, rng, rimAttemptType),
+      getShotMakeProbability(
+        shotZone,
+        shooterImpact,
+        shotDefenderImpact,
+        state,
+        state.offenseKey,
+        rng,
+        rimAttemptType,
+        shooterIsUser ? userFocusComposureBonus : 0,
+      ),
       state.offenseKey,
       "shot",
     );
@@ -934,6 +1010,7 @@ export const simulatePossession = (
         rebounderIndex,
         touchCounts,
         leagueLevel,
+        isUserControlledPlayer(state.offenseKey, rebounderIndex) ? userFatigueLoadMultiplier : 1,
       );
       const rimDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "rim", rng);
       incrementTouch(state.defenseKey, rimDefenderIndex);

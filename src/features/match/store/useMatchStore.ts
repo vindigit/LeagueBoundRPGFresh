@@ -23,6 +23,9 @@ export interface PlayerBoxScoreLine {
   to: number;
   fgm: number;
   fga: number;
+  ftm: number;
+  fta: number;
+  pf: number;
 }
 
 export interface TeamBoxScoreTotals {
@@ -34,6 +37,9 @@ export interface TeamBoxScoreTotals {
   to: number;
   fgm: number;
   fga: number;
+  ftm: number;
+  fta: number;
+  pf: number;
 }
 
 export interface MatchBoxScore {
@@ -88,6 +94,10 @@ interface MatchActions {
     blockDefenderIndex?: number;
     reboundTeam?: "home" | "away";
     rebounderIndex?: number;
+    freeThrowMade?: number;
+    freeThrowAttempted?: number;
+    foulOnTeam?: "home" | "away";
+    foulOnPlayerIndex?: number;
   }) => void;
   addLog: (log: PlayLog) => void;
 }
@@ -103,6 +113,9 @@ const emptyTeamTotals = (): TeamBoxScoreTotals => ({
   to: 0,
   fgm: 0,
   fga: 0,
+  ftm: 0,
+  fta: 0,
+  pf: 0,
 });
 
 const createPlayerLine = (id: string, name: string, team: "home" | "away"): PlayerBoxScoreLine => ({
@@ -117,6 +130,9 @@ const createPlayerLine = (id: string, name: string, team: "home" | "away"): Play
   to: 0,
   fgm: 0,
   fga: 0,
+  ftm: 0,
+  fta: 0,
+  pf: 0,
 });
 
 const DEFAULT_HOME_BOX_NAMES = ["My Player", "Home SG", "Home SF", "Home PF", "Home C"] as const;
@@ -147,6 +163,9 @@ const sumTeamTotals = (players: PlayerBoxScoreLine[]): TeamBoxScoreTotals =>
       to: totals.to + player.to,
       fgm: totals.fgm + player.fgm,
       fga: totals.fga + player.fga,
+      ftm: totals.ftm + player.ftm,
+      fta: totals.fta + player.fta,
+      pf: totals.pf + player.pf,
     }),
     emptyTeamTotals(),
   );
@@ -154,7 +173,7 @@ const sumTeamTotals = (players: PlayerBoxScoreLine[]): TeamBoxScoreTotals =>
 const withPlayerStatDelta = (
   players: PlayerBoxScoreLine[],
   index: number | undefined,
-  delta: Partial<Pick<PlayerBoxScoreLine, "pts" | "reb" | "ast" | "stl" | "blk" | "to" | "fgm" | "fga">>,
+  delta: Partial<Pick<PlayerBoxScoreLine, "pts" | "reb" | "ast" | "stl" | "blk" | "to" | "fgm" | "fga" | "ftm" | "fta" | "pf">>,
 ): PlayerBoxScoreLine[] => {
   if (index === undefined || !Number.isInteger(index) || index < 0 || index >= players.length) {
     return players;
@@ -175,6 +194,9 @@ const withPlayerStatDelta = (
       to: player.to + (delta.to ?? 0),
       fgm: player.fgm + (delta.fgm ?? 0),
       fga: player.fga + (delta.fga ?? 0),
+      ftm: player.ftm + (delta.ftm ?? 0),
+      fta: player.fta + (delta.fta ?? 0),
+      pf: player.pf + (delta.pf ?? 0),
     };
   });
 };
@@ -257,6 +279,8 @@ export const useMatchStore = create<MatchStore>((set) => ({
           pts: event.points ?? 0,
           fga: event.shotAttempted ? 1 : 0,
           fgm: event.shotMade ? 1 : 0,
+          ftm: event.freeThrowMade ?? 0,
+          fta: event.freeThrowAttempted ?? 0,
         });
         homePlayers = withPlayerStatDelta(homePlayers, event.assisterIndex, {
           ast: event.assisterIndex !== undefined && (event.points ?? 0) > 0 ? 1 : 0,
@@ -268,6 +292,8 @@ export const useMatchStore = create<MatchStore>((set) => ({
           pts: event.points ?? 0,
           fga: event.shotAttempted ? 1 : 0,
           fgm: event.shotMade ? 1 : 0,
+          ftm: event.freeThrowMade ?? 0,
+          fta: event.freeThrowAttempted ?? 0,
         });
         awayPlayers = withPlayerStatDelta(awayPlayers, event.assisterIndex, {
           ast: event.assisterIndex !== undefined && (event.points ?? 0) > 0 ? 1 : 0,
@@ -295,6 +321,13 @@ export const useMatchStore = create<MatchStore>((set) => ({
       }
       if (event.reboundTeam === "away") {
         awayPlayers = withPlayerStatDelta(awayPlayers, event.rebounderIndex, { reb: event.rebounderIndex !== undefined ? 1 : 0 });
+      }
+
+      if (event.foulOnTeam === "home") {
+        homePlayers = withPlayerStatDelta(homePlayers, event.foulOnPlayerIndex, { pf: event.foulOnPlayerIndex !== undefined ? 1 : 0 });
+      }
+      if (event.foulOnTeam === "away") {
+        awayPlayers = withPlayerStatDelta(awayPlayers, event.foulOnPlayerIndex, { pf: event.foulOnPlayerIndex !== undefined ? 1 : 0 });
       }
 
       return {

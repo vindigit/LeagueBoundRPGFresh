@@ -1,4 +1,5 @@
 import { buildCreateShotPending, resolveCreateShot } from "./createShot";
+import { buildFoulPressurePending, resolveFoulPressure } from "./foulPressure";
 import { buildJumpLanePending, resolveJumpLane } from "./jumpLane";
 import { buildMakeTheReadPending, resolveMakeTheRead } from "./makeTheRead";
 import { buildOnBallStopPending, resolveOnBallStop } from "./onBallStop";
@@ -12,6 +13,11 @@ export const KEY_MOMENT_DEFINITIONS: readonly KeyMomentDefinition[] = [
     type: "create_shot",
     buildPending: buildCreateShotPending,
     resolve: resolveCreateShot,
+  },
+  {
+    type: "foul_pressure",
+    buildPending: buildFoulPressurePending,
+    resolve: resolveFoulPressure,
   },
   {
     type: "make_the_read",

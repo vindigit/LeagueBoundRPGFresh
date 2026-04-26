@@ -1,5 +1,6 @@
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
-import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
+import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
+import { buildContextualOnBallStopOptions } from "./contextualOptions";
 
 const PROMPT = "Key Moment: Get the on-ball stop and force a bad shot.";
 
@@ -14,11 +15,7 @@ export const buildOnBallStopPending = (args: KeyMomentBuildArgs): KeyMomentPendi
     context: args.context,
     promptText: PROMPT,
     mode: "choice",
-    options: [
-      makeOption("shade_middle", "Shade Middle", "Angle the ball handler into traffic.", 0.08),
-      makeOption("crowd_handle", "Crowd Handle", "Sit on the dribble and contest hard.", 0.03),
-      makeOption("wall_up", "Wall Up", "Stay disciplined and absorb the drive.", -0.05),
-    ],
+    options: buildContextualOnBallStopOptions(args),
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,

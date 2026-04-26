@@ -1,5 +1,5 @@
-import { fireEvent, render } from "@testing-library/react-native";
-import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
+import { act, fireEvent, render } from "@testing-library/react-native";
+import { KeyMomentOverlay, scoreTimingRelease, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
 
 const contextSummary: KeyMomentContextSummary = {
@@ -26,6 +26,8 @@ const pendingChoice: KeyMomentPending = {
     userPlayerIndex: 0,
     possessionIndex: 4,
     score: { home: 42, away: 39 },
+    workRate: 80,
+    focus: 50,
   },
   promptText: "Key Moment: Make the read before the help defense closes.",
   mode: "choice",
@@ -41,10 +43,24 @@ const pendingPlaceholder: KeyMomentPending = {
   id: "pending-placeholder-1",
   type: "create_shot",
   mode: "minigame",
-  options: [],
+  options: [{ id: "timing_release_jump_shot", label: "Timing Release Jumper", description: "Create space and fire.", qualityDelta: 0 }],
+  minigame: {
+    type: "timing_release",
+    durationMs: 1000,
+    targetCenter: 0.72,
+    targetRadius: 0.1,
+  },
 };
 
 describe("KeyMomentOverlay", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("renders prompt, context, options, and sim-it action", () => {
     const onResolve = jest.fn();
     const screen = render(
@@ -85,22 +101,27 @@ describe("KeyMomentOverlay", () => {
     expect(onResolve).toHaveBeenCalledWith({ pendingId: "pending-choice-1", usedFallbackBaseline: true });
   });
 
-  it("renders a placeholder minigame shell and sim-it action", () => {
+  it("renders the timing-release minigame and submits real minigame quality", () => {
     const onResolve = jest.fn();
     const screen = render(
       <KeyMomentOverlay pending={pendingPlaceholder} contextSummary={contextSummary} onResolve={onResolve} />,
     );
 
-    expect(screen.getByText("Minigame Shell Placeholder")).toBeTruthy();
-    expect(screen.getByText("Rough Attempt")).toBeTruthy();
-    fireEvent.press(screen.getByText("Solid Attempt"));
+    expect(screen.getByText("Timing Release")).toBeTruthy();
+    expect(screen.queryByText("Minigame Shell Placeholder")).toBeNull();
+    act(() => {
+      jest.advanceTimersByTime(720);
+    });
+    fireEvent.press(screen.getByTestId("timing-release-button"));
     expect(onResolve).toHaveBeenCalledWith({
       pendingId: "pending-placeholder-1",
       executionQuality: {
-        normalizedScore: 0.62,
+        normalizedScore: expect.any(Number),
         source: "minigame",
       },
     });
+    const normalizedScore = onResolve.mock.calls[0][0].executionQuality.normalizedScore as number;
+    expect(normalizedScore).toBeGreaterThan(0.95);
   });
 
   it("still supports sim-it from the minigame placeholder", () => {
@@ -111,5 +132,29 @@ describe("KeyMomentOverlay", () => {
 
     fireEvent.press(screen.getByText("Sim It"));
     expect(onResolve).toHaveBeenCalledWith({ pendingId: "pending-placeholder-1", usedFallbackBaseline: true });
+  });
+
+  it("scores near-center timing releases higher than early ones", () => {
+    const nearCenter = scoreTimingRelease(0.72, pendingPlaceholder.minigame!);
+    const early = scoreTimingRelease(0.18, pendingPlaceholder.minigame!);
+
+    expect(nearCenter).toBeGreaterThan(early);
+    expect(nearCenter).toBeGreaterThan(0.95);
+    expect(early).toBeLessThan(0.3);
+  });
+
+  it("ignores repeat taps after the first minigame submission", () => {
+    const onResolve = jest.fn();
+    const screen = render(
+      <KeyMomentOverlay pending={pendingPlaceholder} contextSummary={contextSummary} onResolve={onResolve} />,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(720);
+    });
+    fireEvent.press(screen.getByTestId("timing-release-button"));
+    fireEvent.press(screen.getByTestId("timing-release-button"));
+
+    expect(onResolve).toHaveBeenCalledTimes(1);
   });
 });

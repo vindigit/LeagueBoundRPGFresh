@@ -7,7 +7,7 @@ import {
   type UserPlayerLocation,
 } from "./matchEngineAdapter";
 import type { KeyMomentPending, KeyMomentResolutionInput } from "./match/keyMoments/types";
-import type { MatchContext, PossessionResult, PossessionState, SimMetrics } from "./matchEngine";
+import type { MatchContext, PossessionResult, PossessionState, SimMetrics, UserMatchState } from "./matchEngine";
 
 export type AutoSaveReason = "week_advance" | "key_moment_resolution";
 export type MatchSimulationMode = "interactive" | "full_game";
@@ -38,6 +38,7 @@ export interface MatchEngineStoreState {
   matchContext?: MatchContext;
   userPlayerId?: string;
   userPlayerLocation?: UserPlayerLocation;
+  userMatchState?: UserMatchState;
   currentPossession?: PossessionState;
   keyMoment?: KeyMomentPending;
   pendingKeyMoment?: KeyMomentPending;
@@ -141,6 +142,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
       userPlayerId: adapterOptions.userPlayerId,
       userPlayerLocation: adapter.getUserPlayerLocation(),
       currentPossession: started.state,
+      userMatchState: started.userMatchState,
       keyMoment: undefined,
       pendingKeyMoment: started.pendingKeyMoment,
       pendingPossession: started.pendingPossession,
@@ -170,6 +172,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     return setState({
       ...state,
       currentPossession: step.state,
+      userMatchState: step.userMatchState,
       lastStep: step,
       lastTrace,
       pausedForKeyMoment: Boolean(step.pendingKeyMoment),
@@ -234,6 +237,7 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
         {
           ...state,
           currentPossession: resumed.state,
+          userMatchState: resumed.userMatchState,
           pausedForKeyMoment: false,
           pausedForPendingPossession: false,
           keyMoment: undefined,

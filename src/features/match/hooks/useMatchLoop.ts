@@ -319,10 +319,11 @@ export const useMatchLoop = (): void => {
       : trace.result.eventType === "def_reb"
         ? defenseTeam
         : undefined;
+    const freeThrowTeam = trace.result.freeThrows ? offenseTeam : undefined;
 
     recordBoxScoreEvent({
-      scoringTeam: shotAttempted ? offenseTeam : undefined,
-      shooterIndex: shotAttempted ? trace.result.shooterIndex : undefined,
+      scoringTeam: shotAttempted || freeThrowTeam ? offenseTeam : undefined,
+      shooterIndex: shotAttempted || freeThrowTeam ? trace.result.shooterIndex : undefined,
       points: trace.result.points ?? 0,
       shotAttempted,
       shotMade,
@@ -334,6 +335,10 @@ export const useMatchLoop = (): void => {
       blockDefenderIndex: trace.result.eventType === "block" ? trace.result.defensivePlay.defenderIndex : undefined,
       reboundTeam,
       rebounderIndex: reboundTeam ? trace.result.rebounderIndex : undefined,
+      freeThrowMade: trace.result.freeThrows?.made,
+      freeThrowAttempted: trace.result.freeThrows?.attempted,
+      foulOnTeam: trace.result.freeThrows?.foulOnTeam,
+      foulOnPlayerIndex: trace.result.freeThrows?.foulOnPlayerIndex,
     });
 
     const mappedLog = renderPossessionPlayByPlayLine({
@@ -354,7 +359,7 @@ export const useMatchLoop = (): void => {
     const isUserDefenseAction =
       Boolean(userLocation) &&
       defenseTeam === userLocation?.teamKey &&
-      (trace.result.eventType === "steal" || trace.result.eventType === "block") &&
+      (trace.result.eventType === "steal" || trace.result.eventType === "block" || trace.result.eventType === "free_throws") &&
       trace.result.defensivePlay.defenderIndex === userLocation?.playerIndex;
     const logText = trace.resolvedKeyMoment
       ? composeKeyMomentLogText(trace.resolvedKeyMoment.success, trace.resolvedKeyMoment.promptText, mappedLog.text)

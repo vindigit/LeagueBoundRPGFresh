@@ -43,6 +43,18 @@ export const renderPossessionPlayByPlayLine = (
       };
     case "putback_make":
       return { text: `${shooterName} converts the putback`, type: "score" };
+    case "free_throws": {
+      const attempted = result.freeThrows?.attempted ?? 0;
+      const made = result.freeThrows?.made ?? 0;
+      const foulerName = getPlayerName(context, result.freeThrows?.foulOnTeam ?? defense, result.freeThrows?.foulOnPlayerIndex);
+      const foulByDefense = result.freeThrows?.foulOnTeam === defense;
+      return {
+        text: foulByDefense
+          ? `${foulerName} fouls on the contest; ${shooterName} makes ${made} of ${attempted}`
+          : `${shooterName} draws contact and makes ${made} of ${attempted}`,
+        type: made > 0 ? "score" : "miss",
+      };
+    }
     case "steal":
       return { text: `${defenderName} strips ${handlerName}`, type: "turnover" };
     case "turnover":

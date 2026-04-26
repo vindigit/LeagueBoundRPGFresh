@@ -19,8 +19,8 @@ export interface KeyMomentSchedulerConfig {
   cooldownPossessions?: number;
 }
 
-const DEFAULT_TARGET_PER_PERIOD = 6;
-const DEFAULT_COOLDOWN_POSSESSIONS = 1;
+const clampInt = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, Math.round(value)));
 
 const getCurrentWindow = (
   contextSecondsRemaining: number,
@@ -53,15 +53,16 @@ const getPeriodState = (
 const pickScheduledPending = (input: KeyMomentSchedulerInput, seedValue: number): KeyMomentPending | undefined => {
   const eligible = KEY_MOMENT_DEFINITIONS.filter((definition) =>
     input.context.offense === input.context.userTeam
-      ? definition.type === "create_shot" || definition.type === "make_the_read"
-      : definition.type === "on_ball_stop" || definition.type === "jump_lane",
+      ? definition.type === "create_shot" || definition.type === "make_the_read" || definition.type === "foul_pressure"
+      : definition.type === "on_ball_stop" || definition.type === "jump_lane" || definition.type === "foul_pressure",
   );
   const pool = eligible.length > 0 ? eligible : KEY_MOMENT_DEFINITIONS;
   const definition = pool[Math.abs(Math.floor(seedValue)) % pool.length];
   const buildArgs: KeyMomentBuildArgs = {
-    id: `${definition.type}-${input.context.periodKey}-${input.context.possessionIndex}`,
+    id: input.pendingId ?? `${definition.type}-${input.context.periodKey}-${input.context.possessionIndex}`,
     context: input.context,
-    possessionState: {
+    matchContext: input.matchContext,
+    possessionState: input.possessionState ?? {
       possessionIndex: input.context.possessionIndex,
       secondsRemaining: input.context.timeRemaining,
       offenseKey: input.context.offense,
@@ -73,31 +74,44 @@ const pickScheduledPending = (input: KeyMomentSchedulerInput, seedValue: number)
       homeStreak: 0,
       awayStreak: 0,
     },
+    userMatchState: input.userMatchState,
     seedValue,
+    defenderTeamFoulsInSegment: input.defenderTeamFoulsInSegment,
   };
   return definition.buildPending(buildArgs);
 };
 
 export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}): KeyMomentScheduler => {
   const periodState = new Map<PeriodKey, SchedulerState>();
-  const targetPerPeriod = config.targetPerPeriod ?? DEFAULT_TARGET_PER_PERIOD;
-  const cooldownPossessions = config.cooldownPossessions ?? DEFAULT_COOLDOWN_POSSESSIONS;
 
   const onPossessionBoundary = (input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput => {
+    const dynamicTargetPerPeriod = config.targetPerPeriod ?? clampInt(4 + input.context.workRate / 25, 4, 8);
+    const dynamicCooldownPossessions =
+      config.cooldownPossessions ??
+      (input.context.workRate >= 67 ? 1 : input.context.workRate >= 34 ? 2 : 3);
     const state = getPeriodState(periodState, input.context.periodKey);
-    if (state.triggeredCount >= targetPerPeriod) {
-      return { trigger: false };
-    }
-
-    const currentWindow = getCurrentWindow(input.context.timeRemaining, input.periodTotalSeconds, targetPerPeriod);
+    const currentWindow = getCurrentWindow(input.context.timeRemaining, input.periodTotalSeconds, dynamicTargetPerPeriod);
     state.windowIndexReached = Math.max(state.windowIndexReached, currentWindow);
 
     const possessionsSinceLast = input.context.possessionIndex - state.lastTriggeredPossessionIndex;
-    const cooldownPassed = possessionsSinceLast > cooldownPossessions;
+    const cooldownPassed = possessionsSinceLast > dynamicCooldownPossessions;
+
+    if (input.forceTrigger && cooldownPassed) {
+      state.triggeredCount += 1;
+      state.lastTriggeredPossessionIndex = input.context.possessionIndex;
+
+      const seedValue = input.context.possessionIndex + currentWindow;
+      const pending = pickScheduledPending(input, seedValue);
+      return pending ? { trigger: true, pending } : { trigger: false };
+    }
+
+    if (state.triggeredCount >= dynamicTargetPerPeriod) {
+      return { trigger: false };
+    }
     const shouldPaceTrigger = cooldownPassed && currentWindow >= state.triggeredCount;
 
-    const remainingBudget = targetPerPeriod - state.triggeredCount;
-    const remainingWindows = targetPerPeriod - (currentWindow + 1);
+    const remainingBudget = dynamicTargetPerPeriod - state.triggeredCount;
+    const remainingWindows = dynamicTargetPerPeriod - (currentWindow + 1);
     const mustTriggerToGuarantee = cooldownPassed && remainingWindows < remainingBudget;
 
     if (!shouldPaceTrigger && !mustTriggerToGuarantee) {

@@ -1,5 +1,6 @@
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
-import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
+import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
+import { buildContextualMakeTheReadOptions } from "./contextualOptions";
 
 const PROMPT = "Key Moment: Make the read before the help defense closes.";
 
@@ -14,11 +15,7 @@ export const buildMakeTheReadPending = (args: KeyMomentBuildArgs): KeyMomentPend
     context: args.context,
     promptText: PROMPT,
     mode: "choice",
-    options: [
-      makeOption("kick_out", "Kick Out", "Trust the weak-side pass for the cleanest shot.", 0.1),
-      makeOption("attack_gap", "Attack Gap", "Turn the lane opening into a quick finish.", 0.02),
-      makeOption("reset_space", "Reset Space", "Pull it back and force a tougher late-clock shot.", -0.08),
-    ],
+    options: buildContextualMakeTheReadOptions(args),
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,

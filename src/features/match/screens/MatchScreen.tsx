@@ -8,6 +8,7 @@ import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
+import type { UserMatchState } from "../../../matchEngine";
 
 const AWAY_NAME = "Rivals High";
 
@@ -54,8 +55,7 @@ const buildKeyMomentContextSummary = (args: {
   timeRemaining: number;
   playerPosition: string;
   playerArchetype: string;
-  stamina: number;
-  morale: number;
+  userMatchState?: UserMatchState;
 }): KeyMomentContextSummary | undefined => {
   const { pending } = args;
   if (!pending) {
@@ -64,14 +64,16 @@ const buildKeyMomentContextSummary = (args: {
 
   const sideLabel = pending.context.offense === pending.context.userTeam ? "On offense" : "On defense";
   const opponentSide = pending.context.offense === pending.context.userTeam ? pending.context.defense : pending.context.offense;
+  const workRate = args.userMatchState?.workRate ?? pending.context.workRate;
+  const focus = args.userMatchState?.focus ?? pending.context.focus;
 
   return {
     score: `${args.homeScore} - ${args.awayScore}`,
     period: getPeriodLabel(args.quarter, args.isOvertime, args.overtimePeriod),
     clock: formatClock(args.timeRemaining),
     fatigue: deriveFatigueLabel(pending),
-    workRate: `${args.stamina} (${toBandLabel(args.stamina)})`,
-    focus: `${args.morale} (${toBandLabel(args.morale)})`,
+    workRate: `${workRate} (${toBandLabel(workRate)})`,
+    focus: `${focus} (${toBandLabel(focus)})`,
     matchup: `${args.playerPosition} ${args.playerArchetype} • ${sideLabel} vs ${opponentSide.toUpperCase()}`,
   };
 };
@@ -131,8 +133,6 @@ export function MatchScreen() {
   const playerName = useCareerStore((state) => state.player.name);
   const playerArchetype = useCareerStore((state) => state.player.archetype);
   const playerPosition = useCareerStore((state) => state.player.position);
-  const playerStamina = useCareerStore((state) => state.player.attributes.stamina);
-  const playerMorale = useCareerStore((state) => state.player.morale);
   const homeDisplayName = playerName.trim().length > 0 ? playerName : "My Player";
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
@@ -147,6 +147,7 @@ export function MatchScreen() {
   const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
   const simSpeed = useMatchStore((state) => state.simSpeed);
   const keyMomentPending = useMatchEngineStore((state) => state.snapshot.pendingKeyMoment);
+  const userMatchState = useMatchEngineStore((state) => state.snapshot.userMatchState);
   const resolveKeyMoment = useMatchEngineStore((state) => state.resolveKeyMoment);
   const keyMomentFeedback = useMatchStore((state) => state.keyMomentFeedback);
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
@@ -165,8 +166,7 @@ export function MatchScreen() {
     timeRemaining,
     playerPosition,
     playerArchetype,
-    stamina: playerStamina,
-    morale: playerMorale,
+    userMatchState,
   });
 
   useEffect(() => {

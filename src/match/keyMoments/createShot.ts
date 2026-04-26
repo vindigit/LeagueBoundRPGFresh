@@ -2,6 +2,10 @@ import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, Ke
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
 
 const PROMPT = "Key Moment: Create the shot and get to your spot.";
+const CREATE_SHOT_OPTION_ID = "timing_release_jump_shot";
+const TIMING_RELEASE_DURATION_MS = 1400;
+const TIMING_RELEASE_TARGET_CENTER = 0.72;
+const TIMING_RELEASE_TARGET_RADIUS = 0.1;
 
 export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPending | undefined => {
   if (args.context.offense !== args.context.userTeam) {
@@ -13,12 +17,21 @@ export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPendi
     type: "create_shot",
     context: args.context,
     promptText: PROMPT,
-    mode: "choice",
+    mode: "minigame",
     options: [
-      makeOption("step_back_three", "Step Back Three", "High-upside separation into a clean pull-up.", 0.12),
-      makeOption("turn_the_corner", "Turn the Corner", "Get downhill for a balanced finish at the rim.", 0.04),
-      makeOption("protect_ball", "Protect Ball", "Play it safer and settle for a lower-ceiling look.", -0.06),
+      makeOption(
+        CREATE_SHOT_OPTION_ID,
+        "Timing Release Jumper",
+        "Create space and time the release in rhythm.",
+        0,
+      ),
     ],
+    minigame: {
+      type: "timing_release",
+      durationMs: TIMING_RELEASE_DURATION_MS,
+      targetCenter: TIMING_RELEASE_TARGET_CENTER,
+      targetRadius: TIMING_RELEASE_TARGET_RADIUS,
+    },
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,
@@ -43,7 +56,7 @@ export const resolveCreateShot = (args: {
   const optionId = getResolvedChoiceId(args.pending, args.input);
   const quality = resolveEffectiveQuality(args.pending, args.input);
 
-  if (optionId === "step_back_three") {
+  if (optionId === CREATE_SHOT_OPTION_ID) {
     if (quality >= 0.66) {
       return buildResolution({
         pending: args.pending,

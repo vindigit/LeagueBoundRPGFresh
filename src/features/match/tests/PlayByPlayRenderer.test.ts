@@ -129,4 +129,34 @@ describe("PlayByPlayRenderer", () => {
     expect(line.type).toBe("turnover");
     expect(line.text).toContain("Away Three");
   });
+
+  it("renders foul/free-throw sequences with the fouler and make count", () => {
+    const line = renderPossessionPlayByPlayLine({
+      result: {
+        ...baseResult,
+        eventType: "free_throws",
+        madeShot: true,
+        points: 1,
+        shooterIndex: 0,
+        freeThrows: {
+          mode: "one_and_one",
+          attempted: 2,
+          made: 1,
+          shooterIndex: 0,
+          foulOnTeam: "away",
+          foulOnPlayerIndex: 2,
+        },
+        defensivePlay: { steal: false, block: false, defenderIndex: 2 },
+      },
+      context,
+      offense: "home",
+      defense: "away",
+      ballHandlerIndex: 0,
+    });
+
+    expect(line.type).toBe("score");
+    expect(line.text).toContain("Away Three");
+    expect(line.text).toContain("Home One");
+    expect(line.text).toContain("1 of 2");
+  });
 });

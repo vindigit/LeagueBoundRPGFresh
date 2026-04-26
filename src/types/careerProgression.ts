@@ -103,19 +103,35 @@ export interface EligibilityState {
   notes: string[];
 }
 
-export type InjuryStatus = "HEALTHY" | "DAY_TO_DAY" | "OUT" | "REHAB";
-export type InjuryBodyArea = "HEAD" | "SHOULDER" | "ARM" | "BACK" | "CORE" | "LEG" | "KNEE" | "ANKLE" | "FOOT" | "GENERAL";
-export type InjurySeverity = "MINOR" | "MODERATE" | "MAJOR";
+export type ActiveInjuryType = "ankle_sprain";
+export type ActiveInjurySeverity = "minor";
 
-export interface InjuryState {
-  status: InjuryStatus;
-  bodyArea?: InjuryBodyArea;
-  severity?: InjurySeverity;
-  diagnosis?: string;
-  recoveryWeeksRemaining: number;
-  lingeringRisk: number;
-  restrictions: string[];
+export interface ActiveInjury {
+  id: string;
+  type: ActiveInjuryType;
+  severity: ActiveInjurySeverity;
+  createdWeek: number;
+  weeksRemaining: number;
+  performanceMultiplier: number;
+  canPlayThrough: boolean;
 }
+
+export interface InjuryMatchConsequence {
+  kind: "injury";
+  injuryType: ActiveInjuryType;
+  severity: ActiveInjurySeverity;
+  weeksRemaining: number;
+  performanceMultiplier: number;
+  canPlayThrough: boolean;
+  wearTearDelta: number;
+}
+
+export interface WearTearMatchConsequence {
+  kind: "wear_tear";
+  wearTearDelta: number;
+}
+
+export type MatchConsequence = InjuryMatchConsequence | WearTearMatchConsequence;
 
 export interface FinanceLedgerTotals {
   nilEarnings: number;

@@ -4,6 +4,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 
 import { useCareerStore } from "../src/store/useCareerStore";
 import { LeagueLevel } from "../src/types/career";
+import type { MatchConsequence } from "../src/types/careerProgression";
 
 describe("Career progression domain model", () => {
   beforeEach(() => {
@@ -29,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(11);
+    expect(version).toBe(12);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -46,7 +47,8 @@ describe("Career progression domain model", () => {
     expect(Array.isArray(state.seasonSchedule.weeks)).toBe(true);
     expect(state.relationships).toEqual({});
     expect(state.eligibility.status).toBe("ELIGIBLE");
-    expect(state.injuryState.status).toBe("HEALTHY");
+    expect(state.injury).toBeNull();
+    expect(state.wearTear).toBe(0);
     expect(state.financeState.ledger.nilEarnings).toBe(0);
     expect(state.legacyPerks).toEqual([]);
     expect(state.exileState.currentMode).toBe("NONE");
@@ -93,7 +95,8 @@ describe("Career progression domain model", () => {
     expect(migrated.seasonSchedule.phase).toBe("COLLEGE");
     expect(migrated.relationships).toEqual({});
     expect(migrated.eligibility).toBeTruthy();
-    expect(migrated.injuryState.status).toBe("HEALTHY");
+    expect(migrated.injury).toBeNull();
+    expect(migrated.wearTear).toBe(0);
     expect(migrated.financeState).toBeTruthy();
     expect(migrated.legacyPerks).toEqual([]);
     expect(migrated.exileState.currentMode).toBe("OVERSEAS");
@@ -124,7 +127,8 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("seasonSchedule");
     expect(partial).toHaveProperty("relationships");
     expect(partial).toHaveProperty("eligibility");
-    expect(partial).toHaveProperty("injuryState");
+    expect(partial).toHaveProperty("injury");
+    expect(partial).toHaveProperty("wearTear");
     expect(partial).toHaveProperty("financeState");
     expect(partial).toHaveProperty("legacyPerks");
     expect(partial).toHaveProperty("exileState");
@@ -251,6 +255,69 @@ describe("Career progression domain model", () => {
     }) as ReturnType<typeof useCareerStore.getState>;
 
     expect(migrated.offers[0]?.exposureTier).toBe("Blue Blood");
+  });
+
+  it("creates, persists, and recovers a minor ankle sprain across week advancement", () => {
+    const consequences: MatchConsequence[] = [
+      {
+        kind: "injury",
+        injuryType: "ankle_sprain",
+        severity: "minor",
+        weeksRemaining: 2,
+        performanceMultiplier: 0.88,
+        canPlayThrough: true,
+        wearTearDelta: 10,
+      },
+    ];
+
+    useCareerStore.getState().completeMatch({
+      homeScore: 61,
+      awayScore: 55,
+      overtimePeriods: 0,
+      consequences,
+      boxScore: {
+        homePlayers: [],
+        awayPlayers: [],
+        homeTotals: { pts: 61, reb: 20, ast: 12, stl: 4, blk: 2, to: 9, fgm: 24, fga: 48, ftm: 6, fta: 8, pf: 8 },
+        awayTotals: { pts: 55, reb: 18, ast: 11, stl: 3, blk: 1, to: 10, fgm: 21, fga: 46, ftm: 7, fta: 9, pf: 9 },
+      },
+    });
+
+    const injured = useCareerStore.getState();
+    expect(injured.injury).toMatchObject({
+      type: "ankle_sprain",
+      severity: "minor",
+      createdWeek: injured.currentWeek,
+      weeksRemaining: 2,
+      performanceMultiplier: 0.88,
+      canPlayThrough: true,
+    });
+    expect(injured.wearTear).toBe(10);
+    expect(injured.lastMatchResult?.consequences).toEqual(consequences);
+
+    const partialize = (useCareerStore as unknown as { persist: { getOptions: () => { partialize?: (state: unknown) => unknown } } })
+      .persist
+      .getOptions().partialize;
+    const persisted = partialize?.(injured) as Record<string, unknown>;
+    expect(persisted.injury).toMatchObject({
+      type: "ankle_sprain",
+      weeksRemaining: 2,
+    });
+
+    useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+    const afterOneWeek = useCareerStore.getState();
+    expect(afterOneWeek.injury?.weeksRemaining).toBe(2);
+    expect(afterOneWeek.wearTear).toBe(5);
+
+    useCareerStore.getState().advanceWeek();
+    const afterTwoWeeks = useCareerStore.getState();
+    expect(afterTwoWeeks.injury?.weeksRemaining).toBe(1);
+    expect(afterTwoWeeks.wearTear).toBe(0);
+
+    useCareerStore.getState().advanceWeek();
+    const recovered = useCareerStore.getState();
+    expect(recovered.injury).toBeNull();
+    expect(recovered.wearTear).toBe(0);
   });
 });
 

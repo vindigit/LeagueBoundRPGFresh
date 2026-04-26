@@ -4,8 +4,11 @@ import { useCareerStore } from "../store/useCareerStore";
 import { getAllAttributesSorted } from "./playerCardUtils";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "./builderReview";
 
+const formatInjuryLabel = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} remaining`;
+
 export function PlayerCard() {
   const { name, archetype, attributes, identity, dna } = useCareerStore((state) => state.player);
+  const injury = useCareerStore((state) => state.injury);
   const allAttributes = getAllAttributesSorted(attributes);
   const hometownLabel = identity ? `${identity.hometown.city}, ${identity.hometown.state}` : "Unknown hometown";
   const builderReviewSummary = buildBuilderReviewSummary(dna);
@@ -23,6 +26,14 @@ export function PlayerCard() {
       {!builderReviewSummary ? <Text className="mt-1 text-sm font-medium text-premium-muted">{archetype}</Text> : null}
       <Text className="mt-1 text-xs font-medium text-slate-300">{hometownLabel}</Text>
       <Text className="mt-1 text-xs font-medium text-slate-300">{buildLabel}</Text>
+
+      {injury ? (
+        <View className="mt-3 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 self-start">
+          <Text className="text-[11px] font-semibold text-amber-200">
+            Minor ankle sprain • {formatInjuryLabel(injury.weeksRemaining)}
+          </Text>
+        </View>
+      ) : null}
 
       {dna?.publicTraits?.length ? (
         <View className="mt-3 flex-row flex-wrap gap-2">

@@ -1,4 +1,5 @@
 import type { MatchScore, MatchContext, PossessionResult, PossessionState, UserMatchState } from "../../matchEngine";
+import type { MatchConsequence } from "../../types/careerProgression";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
 export type KeyMomentType = "create_shot" | "make_the_read" | "on_ball_stop" | "jump_lane" | "foul_pressure";
@@ -68,6 +69,7 @@ export interface KeyMomentResolutionOutput {
   resultSummaryText: string;
   result: PossessionResult;
   outcomeText?: string;
+  consequences?: MatchConsequence[];
   isUserAction: true;
 }
 

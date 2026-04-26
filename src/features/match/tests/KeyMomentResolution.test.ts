@@ -254,6 +254,37 @@ describe("Key Moment resolution", () => {
     });
   });
 
+  it("emits a minor ankle sprain consequence on a low-quality go-strong finish", () => {
+    const pending = buildPending("foul_pressure", ["rip_through", "go_strong", "fade_away"], {
+      foulType: "shooting",
+      freeThrowMode: "two_shots",
+      defenderTeamFoulsInSegment: 3,
+    });
+
+    const resolved = resolveKeyMoment({
+      pending,
+      input: {
+        pendingId: pending.id,
+        choiceId: "go_strong",
+        executionQuality: { normalizedScore: 0.18, source: "choice" },
+      },
+      context,
+      possessionState,
+    });
+
+    expect(resolved.consequences).toEqual([
+      {
+        kind: "injury",
+        injuryType: "ankle_sprain",
+        severity: "minor",
+        weeksRemaining: 2,
+        performanceMultiplier: 0.88,
+        canPlayThrough: true,
+        wearTearDelta: 10,
+      },
+    ]);
+  });
+
   it("resolves defensive bonus foul pressure into a one-and-one", () => {
     const pending = buildPending("foul_pressure", ["wall_up", "swipe_down", "body_check"], {
       context: {

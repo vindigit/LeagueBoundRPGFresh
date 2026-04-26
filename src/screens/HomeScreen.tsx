@@ -21,6 +21,10 @@ const formatLeagueLevel = (value: string): string =>
 const formatCurrency = (amount: number): string =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount);
 
+const formatGpa = (value: number): string => value.toFixed(1);
+const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
+const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} left`;
+
 const projectedRoleLabel: Record<ProjectedRole, string> = {
   BENCH: "Bench role",
   ROTATION: "Rotation role",
@@ -49,27 +53,36 @@ export function HomeScreen() {
   const currentWeek = useCareerStore((state) => state.currentWeek);
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
   const scoutVisibility = useCareerStore((state) => state.scoutVisibility);
+  const gpa = useCareerStore((state) => state.gpa);
   const schoolPath = useCareerStore((state) => state.schoolPath);
+  const injury = useCareerStore((state) => state.injury);
+  const wearTear = useCareerStore((state) => state.wearTear);
   const teamInterestById = useCareerStore((state) => state.teamInterestById);
   const offers = useCareerStore((state) => state.offers);
   const newsFeed = useCareerStore((state) => state.newsFeed);
   const weeklyLoop = useCareerStore((state) => state.weeklyLoop);
   const startNarrative = useCareerStore((state) => state.startNarrative);
+  const completeStudyActivity = useCareerStore((state) => state.completeStudyActivity);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
   const respondToOffer = useCareerStore((state) => state.respondToOffer);
   const showSchoolPathStatus = leagueLevel !== LeagueLevel.MIDDLE_SCHOOL;
   const schoolPathProfile = showSchoolPathStatus ? getSchoolPathProfile(schoolPath) : null;
+  const academicallyEligible = leagueLevel === LeagueLevel.PRO || gpa >= 2;
   const visibleInterestEntries = Object.entries(teamInterestById)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4);
   const availableOffers = offers.filter((offer) => offer.status === "AVAILABLE" && offer.phases.includes("HIGH_SCHOOL"));
   const acceptedOffer = offers.find((offer) => offer.status === "ACCEPTED" && offer.phases.includes("HIGH_SCHOOL"));
   const canOpenEvent = !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
-  const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+  const canStudy = !weeklyLoop.studyCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+  const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending && academicallyEligible;
+  const isBlockedByGpa = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending && !academicallyEligible;
   const loopStatus = weeklyLoop.postgamePending
     ? "Finish postgame to resolve the week."
     : weeklyLoop.matchCompleted
       ? "Week complete. Advance from postgame."
+      : isBlockedByGpa
+        ? "Event complete. Raise GPA to 2.0 to unlock the match."
       : weeklyLoop.eventCompleted
         ? "Event complete. Match is unlocked."
         : "Start your weekly event to unlock the match.";
@@ -130,6 +143,13 @@ export function HomeScreen() {
                 <Text className="mt-1 text-base font-semibold text-white">{scoutVisibility}</Text>
               </View>
 
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">GPA</Text>
+                <Text className={`mt-1 text-base font-semibold ${academicallyEligible ? "text-white" : "text-amber-300"}`}>
+                  {formatGpa(gpa)}
+                </Text>
+              </View>
+
               {showSchoolPathStatus ? (
                 <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
                   <Text className="text-xs text-premium-muted">School Path</Text>
@@ -144,6 +164,21 @@ export function HomeScreen() {
             <View className="mt-3 rounded-lg bg-premium-bg p-3">
               <Text className="text-xs text-premium-muted">Loop Status</Text>
               <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
+            </View>
+
+            <View className="mt-3 rounded-lg bg-premium-bg p-3">
+              <Text className="text-xs text-premium-muted">Health</Text>
+              {injury ? (
+                <>
+                  <Text className="mt-1 text-sm font-semibold text-amber-200">Minor ankle sprain</Text>
+                  <Text className="mt-1 text-xs text-premium-muted">
+                    {formatWeeksRemaining(injury.weeksRemaining)} | {formatInjuryPenalty(injury.performanceMultiplier)}
+                  </Text>
+                </>
+              ) : (
+                <Text className="mt-1 text-sm font-medium text-white">Healthy</Text>
+              )}
+              <Text className="mt-2 text-xs text-premium-muted">Wear & Tear: {wearTear}</Text>
             </View>
           </View>
 
@@ -242,6 +277,18 @@ export function HomeScreen() {
             onPress={navigateToMatch}
           >
             <Text className="text-base font-semibold text-white">Play Match</Text>
+          </Pressable>
+
+          {isBlockedByGpa ? (
+            <Text className="mt-3 text-sm font-medium text-amber-300">Academically ineligible: raise GPA to 2.0 to play.</Text>
+          ) : null}
+
+          <Pressable
+            className={`mt-3 items-center justify-center rounded-xl px-4 py-4 ${canStudy ? "bg-emerald-600" : "bg-slate-700"}`}
+            disabled={!canStudy}
+            onPress={completeStudyActivity}
+          >
+            <Text className="text-base font-semibold text-white">{weeklyLoop.studyCompleted ? "Study Complete" : "Study"}</Text>
           </Pressable>
 
           <Pressable

@@ -2,6 +2,7 @@ import type { Team } from "./types/team";
 import type { InkPlayerState, LegacyPlayerStateInput, Player } from "./types/player";
 import { normalizePlayerStateForInk } from "./types/player";
 import { LeagueLevel } from "./types/career";
+import type { MatchConsequence } from "./types/careerProgression";
 import { createKeyMomentScheduler } from "./match/keyMoments/scheduler";
 import { tryResolveKeyMoment } from "./match/keyMoments/resolveKeyMoment";
 import type { KeyMomentPending, KeyMomentResolutionInput, PeriodKey } from "./match/keyMoments/types";
@@ -38,6 +39,7 @@ export interface ResolvedKeyMoment {
   success: boolean;
   promptText: string;
   resultSummaryText: string;
+  consequences: MatchConsequence[];
 }
 
 export interface AdapterStepOutput {
@@ -484,6 +486,7 @@ export const createMatchEngineAdapter = (
             success: resolution.success,
             promptText: pending.pending.promptText,
             resultSummaryText: resolution.resultSummaryText,
+            consequences: resolution.consequences ?? [],
           }
         : undefined,
     });

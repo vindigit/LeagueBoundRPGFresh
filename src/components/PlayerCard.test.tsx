@@ -26,6 +26,15 @@ const attributes: PlayerAttributes = {
 const mockClassification = classifyBuilderBuild(attributes, "PG");
 
 const mockCareerState = {
+  injury: {
+    id: "injury-1",
+    type: "ankle_sprain" as const,
+    severity: "minor" as const,
+    createdWeek: 3,
+    weeksRemaining: 2,
+    performanceMultiplier: 0.88,
+    canPlayThrough: true,
+  },
   player: {
     id: "player-1",
     name: "Jordan Rivers",
@@ -107,6 +116,7 @@ describe("PlayerCard", () => {
     expect(screen.getByText("Floor General Gold")).toBeTruthy();
     expect(screen.getByText("Growth Outlook")).toBeTruthy();
     expect(screen.getByText("Slow start, big upside later")).toBeTruthy();
+    expect(screen.getByText("Minor ankle sprain • 2 weeks remaining")).toBeTruthy();
     expect(screen.queryByText("Compatibility Archetype:")).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { getNextMomentumStreaks, type FreeThrowSequence, type MatchContext, type PossessionAction, type PossessionEventType, type PossessionResult, type PossessionState, type ShotZone } from "../../matchEngine";
 import type { Player } from "../../types/player";
+import type { MatchConsequence } from "../../types/careerProgression";
 import type {
   KeyMomentBuildArgs,
   KeyMomentExecutionQuality,
@@ -180,6 +181,7 @@ export const buildResolution = (args: {
   shooterIndexOverride?: number;
   defenderIndexOverride?: number;
   freeThrows?: FreeThrowSequence;
+  consequences?: MatchConsequence[];
 }): KeyMomentResolutionOutput => {
   const offenseIsHome = args.possessionState.offenseKey === "home";
   const userIndex = args.pending.context.userPlayerIndex;
@@ -220,6 +222,7 @@ export const buildResolution = (args: {
     success: args.success,
     resultSummaryText: args.resultSummaryText,
     result,
+    consequences: args.consequences,
     isUserAction: true,
   };
 };

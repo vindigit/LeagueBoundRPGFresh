@@ -2,13 +2,14 @@ import type { Player, PlayerAttributes } from "./player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 import type { AttributeGainSource, BackstoryInput, BuildBackstoryInput, CareerNewsItem } from "./backstory";
 import type {
+  ActiveInjury,
   CareerPhase,
   EligibilityState,
   ExileMode,
   ExileState,
   FinanceState,
-  InjuryState,
   LegacyPerk,
+  MatchConsequence,
   Offer,
   RelationshipState,
   SchoolPath,
@@ -43,12 +44,14 @@ export interface LastMatchResult {
   weekAfter: number;
   overtimePeriods: number;
   boxScore: MatchBoxScore;
+  consequences: MatchConsequence[];
 }
 
 export interface WeeklyLoopState {
   eventCompleted: boolean;
   matchCompleted: boolean;
   postgamePending: boolean;
+  studyCompleted: boolean;
 }
 
 export interface CareerState {
@@ -58,6 +61,7 @@ export interface CareerState {
   status: CareerStatus;
   starRating: StarRating;
   scoutVisibility: number;
+  gpa: number;
   currentYear: number;
   seasonNumber: number;
   currentWeek: number;
@@ -69,7 +73,8 @@ export interface CareerState {
   seasonSchedule: SeasonSchedule;
   relationships: Record<string, RelationshipState>;
   eligibility: EligibilityState;
-  injuryState: InjuryState;
+  injury: ActiveInjury | null;
+  wearTear: number;
   financeState: FinanceState;
   legacyPerks: LegacyPerk[];
   isGoatPath: boolean;
@@ -88,6 +93,7 @@ export interface CareerActions {
   applyAttributeGain(attr: keyof PlayerAttributes, amount: number, source?: AttributeGainSource): void;
   updateAttribute(attr: keyof PlayerAttributes, amount: number): void;
   updateBankBalance(amount: number): void;
+  adjustGpa(delta: number, source?: "STUDY" | "NARRATIVE" | "SYSTEM"): void;
   advanceWeek(): void;
   advanceSeason(): void;
   updateLeagueLevel(level: LeagueLevel): void;
@@ -100,11 +106,19 @@ export interface CareerActions {
   setGoatPath(isGoatPath: boolean): void;
   setCurrentYear(year: number): void;
   startNarrative(fileName: string): void;
+  completeStudyActivity(): void;
   completeNarrativeEvent(): void;
   closeNarrative(): void;
   navigateToMatch(): void;
   navigateToHub(): void;
-  completeMatch(result: { homeScore: number; awayScore: number; overtimePeriods?: number; boxScore: MatchBoxScore }): void;
+  applyMatchConsequences(consequences: MatchConsequence[]): void;
+  completeMatch(result: {
+    homeScore: number;
+    awayScore: number;
+    overtimePeriods?: number;
+    boxScore: MatchBoxScore;
+    consequences?: MatchConsequence[];
+  }): void;
   resolvePostgameAndAdvanceWeek(): void;
   hydrateCareer(state: CareerState): void;
   resetCareer(state: CareerState): void;

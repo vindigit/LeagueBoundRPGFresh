@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { MatchConsequence } from "../../../types/careerProgression";
 
 export interface PlayLog {
   id: string;
@@ -63,6 +64,7 @@ export interface MatchState {
   timeRemaining: number;
   possession: "home" | "away";
   keyMomentFeedback?: { id: string; success: boolean; text: string };
+  matchConsequences: MatchConsequence[];
   logs: PlayLog[];
   matchBoxScore: MatchBoxScore;
 }
@@ -77,6 +79,7 @@ interface MatchActions {
   setSimSpeed: (speed: number) => void;
   setKeyMomentFeedback: (feedback: MatchState["keyMomentFeedback"] | undefined) => void;
   clearKeyMomentFeedback: () => void;
+  addMatchConsequences: (consequences: MatchConsequence[]) => void;
   updateGame: (
     partialState: Partial<Pick<MatchState, "homeScore" | "awayScore" | "quarter" | "isOvertime" | "overtimePeriod" | "timeRemaining" | "possession">>,
   ) => void;
@@ -215,6 +218,7 @@ const initialMatchState: MatchState = {
   timeRemaining: 720,
   possession: "home",
   keyMomentFeedback: undefined,
+  matchConsequences: [],
   logs: [],
   matchBoxScore: createInitialBoxScore(),
 };
@@ -265,6 +269,15 @@ export const useMatchStore = create<MatchStore>((set) => ({
   },
   clearKeyMomentFeedback: () => {
     set(() => ({ keyMomentFeedback: undefined }));
+  },
+  addMatchConsequences: (consequences) => {
+    if (consequences.length === 0) {
+      return;
+    }
+
+    set((state) => ({
+      matchConsequences: [...state.matchConsequences, ...consequences],
+    }));
   },
   updateGame: (partialState) => {
     set(() => ({ ...partialState }));

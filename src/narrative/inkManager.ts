@@ -55,7 +55,12 @@ interface UpdateTeamInterestAction {
   amount: number;
 }
 
-type ParsedAction = UpdateAttributeAction | UpdateTeamInterestAction;
+interface UpdateGpaAction {
+  type: "updateGpa";
+  amount: number;
+}
+
+type ParsedAction = UpdateAttributeAction | UpdateTeamInterestAction | UpdateGpaAction;
 
 interface InkStoryLike {
   canContinue: boolean;
@@ -110,12 +115,28 @@ const parseActionTag = (tag: string): ParsedAction | null => {
     };
   }
 
+  if (actionType === "updateGpa") {
+    if (key.toLowerCase() !== "gpa") {
+      throw new Error(`Unknown GPA target "${key}" in tag "${tag}"`);
+    }
+
+    return {
+      type: "updateGpa",
+      amount,
+    };
+  }
+
   throw new Error(`Unsupported ACTION type "${actionType}" in tag "${tag}"`);
 };
 
 const applyAction = (action: ParsedAction): void => {
   if (action.type === "updateAttribute") {
     useCareerStore.getState().applyAttributeGain(action.attributeKey, action.amount, "NARRATIVE");
+    return;
+  }
+
+  if (action.type === "updateGpa") {
+    useCareerStore.getState().adjustGpa(action.amount, "NARRATIVE");
     return;
   }
 

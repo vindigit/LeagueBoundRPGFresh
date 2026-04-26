@@ -39,11 +39,12 @@ import {
   type WeeklyLoopState,
 } from "../types/career";
 import type {
+  ActiveInjury,
   CareerPhase,
   EligibilityState,
   ExileState,
   FinanceState,
-  InjuryState,
+  MatchConsequence,
   Offer,
   SchoolPath,
   SeasonSchedule,
@@ -55,10 +56,23 @@ import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
 
+interface LegacyPersistedInjuryState {
+  status?: string;
+  severity?: string;
+  diagnosis?: string;
+  recoveryWeeksRemaining?: number;
+}
+
 const NEWS_FEED_LIMIT = 100;
 const clampAttribute = (value: number): number => Math.min(99, Math.max(0, value));
 const clampMorale = (value: number): number => Math.min(100, Math.max(0, value));
 const clampVisibility = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
+const clampGpa = (value: number): number => Math.round(Math.min(4, Math.max(0, value)) * 10) / 10;
+
+const isAcademicPhase = (leagueLevel: LeagueLevel): boolean => leagueLevel !== LeagueLevel.PRO;
+
+const isAcademicallyEligible = (gpa: number, leagueLevel: LeagueLevel): boolean =>
+  !isAcademicPhase(leagueLevel) || clampGpa(gpa) >= 2;
 
 const defaultPlayer: Player = {
   id: "",
@@ -116,6 +130,20 @@ const careerPhaseFromLeagueLevel = (leagueLevel: LeagueLevel): CareerPhase => {
   }
 };
 
+const leagueLevelFromCareerPhase = (careerPhase: CareerPhase): LeagueLevel => {
+  switch (careerPhase) {
+    case "MIDDLE_SCHOOL_AAU":
+      return LeagueLevel.MIDDLE_SCHOOL;
+    case "HIGH_SCHOOL":
+      return LeagueLevel.HIGH_SCHOOL;
+    case "COLLEGE":
+      return LeagueLevel.COLLEGE;
+    case "PRO":
+    default:
+      return LeagueLevel.PRO;
+  }
+};
+
 const deriveLegacyExile = (exileState: ExileState): ExileStatus | null =>
   exileState.currentMode === "NONE" ? null : exileState.currentMode;
 
@@ -155,8 +183,8 @@ const deriveStarRating = (player: Player): StarRating => {
   return 1;
 };
 
-const createDefaultEligibilityState = (careerPhase: CareerPhase): EligibilityState => ({
-  status: "ELIGIBLE",
+const createDefaultEligibilityState = (careerPhase: CareerPhase, gpa = 2.5): EligibilityState => ({
+  status: isAcademicallyEligible(gpa, leagueLevelFromCareerPhase(careerPhase)) ? "ELIGIBLE" : "INELIGIBLE",
   amateurStanding: careerPhase !== "PRO",
   academicRisk: 0,
   complianceRisk: 0,
@@ -167,14 +195,13 @@ const createDefaultEligibilityState = (careerPhase: CareerPhase): EligibilitySta
   notes: [],
 });
 
-const createDefaultInjuryState = (): InjuryState => ({
-  status: "HEALTHY",
-  bodyArea: undefined,
-  severity: undefined,
-  diagnosis: undefined,
-  recoveryWeeksRemaining: 0,
-  lingeringRisk: 0,
-  restrictions: [],
+const syncEligibilityState = (
+  eligibility: EligibilityState,
+  careerPhase: CareerPhase,
+  gpa: number,
+): EligibilityState => ({
+  ...eligibility,
+  status: createDefaultEligibilityState(careerPhase, gpa).status,
 });
 
 const createDefaultFinanceState = (): FinanceState => ({
@@ -286,6 +313,7 @@ const createDefaultSeasonSchedule = (
 const createCareerProgressionState = (input: {
   player: Player;
   leagueLevel: LeagueLevel;
+  gpa: number;
   currentYear: number;
   seasonNumber: number;
   currentWeek: number;
@@ -313,8 +341,9 @@ const createCareerProgressionState = (input: {
     offers: [],
     seasonSchedule: createDefaultSeasonSchedule(input.currentYear, input.seasonNumber, careerPhase, input.currentWeek),
     relationships: {},
-    eligibility: createDefaultEligibilityState(careerPhase),
-    injuryState: createDefaultInjuryState(),
+    eligibility: createDefaultEligibilityState(careerPhase, input.gpa),
+    injury: null,
+    wearTear: 0,
     financeState: createDefaultFinanceState(),
     legacyPerks: [],
     exileState,
@@ -338,7 +367,95 @@ const createDefaultWeeklyLoopState = (input: Partial<WeeklyLoopState> = {}): Wee
   eventCompleted: input.eventCompleted ?? false,
   matchCompleted: input.matchCompleted ?? false,
   postgamePending: input.postgamePending ?? false,
+  studyCompleted: input.studyCompleted ?? false,
 });
+
+const buildActiveInjury = (
+  consequence: Extract<MatchConsequence, { kind: "injury" }>,
+  currentWeek: number,
+): ActiveInjury => ({
+  id: `injury-${consequence.injuryType}-${currentWeek}-${Date.now()}`,
+  type: consequence.injuryType,
+  severity: consequence.severity,
+  createdWeek: currentWeek,
+  weeksRemaining: consequence.weeksRemaining,
+  performanceMultiplier: consequence.performanceMultiplier,
+  canPlayThrough: consequence.canPlayThrough,
+});
+
+const applyMatchConsequencesToHealth = (input: {
+  injury: CareerState["injury"];
+  wearTear: number;
+  currentWeek: number;
+  consequences: MatchConsequence[];
+}): Pick<CareerState, "injury" | "wearTear"> => {
+  let nextInjury = input.injury;
+  let nextWearTear = input.wearTear;
+
+  for (const consequence of input.consequences) {
+    nextWearTear += consequence.wearTearDelta;
+
+    if (consequence.kind !== "injury") {
+      continue;
+    }
+
+    if (nextInjury?.type === consequence.injuryType && nextInjury.severity === consequence.severity) {
+      nextInjury = {
+        ...nextInjury,
+        weeksRemaining: Math.max(nextInjury.weeksRemaining, consequence.weeksRemaining),
+        performanceMultiplier: consequence.performanceMultiplier,
+        canPlayThrough: consequence.canPlayThrough,
+      };
+      continue;
+    }
+
+    nextInjury = buildActiveInjury(consequence, input.currentWeek);
+  }
+
+  return {
+    injury: nextInjury,
+    wearTear: Math.max(0, nextWearTear),
+  };
+};
+
+const advanceHealthState = (
+  input: Pick<CareerState, "injury" | "wearTear" | "currentWeek">,
+): Pick<CareerState, "injury" | "wearTear"> => {
+  const shouldReduceWeeksRemaining = Boolean(input.injury && input.injury.createdWeek < input.currentWeek);
+  const nextWeeksRemaining = input.injury
+    ? input.injury.weeksRemaining - (shouldReduceWeeksRemaining ? 1 : 0)
+    : 0;
+
+  return {
+    injury:
+      input.injury && nextWeeksRemaining > 0
+        ? {
+            ...input.injury,
+            weeksRemaining: nextWeeksRemaining,
+          }
+        : null,
+    wearTear: Math.max(0, input.wearTear - 5),
+  };
+};
+
+const migrateLegacyInjuryState = (
+  legacyInjuryState: LegacyPersistedInjuryState | undefined,
+  currentWeek: number,
+): CareerState["injury"] => {
+  if (!legacyInjuryState || legacyInjuryState.status === "HEALTHY" || (legacyInjuryState.recoveryWeeksRemaining ?? 0) <= 0) {
+    return null;
+  }
+
+  return {
+    id: `legacy-ankle-sprain-${currentWeek}`,
+    type: "ankle_sprain",
+    severity: "minor",
+    createdWeek: currentWeek,
+    weeksRemaining: legacyInjuryState.recoveryWeeksRemaining ?? 1,
+    performanceMultiplier: 0.88,
+    canPlayThrough: legacyInjuryState.status !== "OUT",
+  };
+};
 
 const recruitingProgramById = new Map(HIGH_SCHOOL_RECRUITING_PROGRAMS.map((program) => [program.id, program] as const));
 
@@ -352,6 +469,9 @@ const shouldPromptForSchoolPathSelection = (
 ): boolean => state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek >= 2 && state.pendingSchoolPathSelection;
 
 const canStartNarrative = (weeklyLoop: WeeklyLoopState): boolean => !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
+
+const canCompleteStudy = (weeklyLoop: WeeklyLoopState): boolean =>
+  !weeklyLoop.studyCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
 
 const canStartMatch = (weeklyLoop: WeeklyLoopState): boolean =>
   weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
@@ -414,6 +534,7 @@ const deriveMigratedWeeklyLoop = (input: {
     eventCompleted: input.persistedWeeklyLoop?.eventCompleted ?? fallback.eventCompleted,
     matchCompleted: input.persistedWeeklyLoop?.matchCompleted ?? fallback.matchCompleted,
     postgamePending: input.persistedWeeklyLoop?.postgamePending ?? fallback.postgamePending,
+    studyCompleted: input.persistedWeeklyLoop?.studyCompleted ?? fallback.studyCompleted,
   });
 };
 
@@ -424,6 +545,7 @@ const initialCareerState: CareerState = {
   status: CareerStatus.ACTIVE,
   starRating: 1,
   scoutVisibility: 20,
+  gpa: 2.5,
   currentYear: 2026,
   seasonNumber: 1,
   currentWeek: 1,
@@ -434,8 +556,9 @@ const initialCareerState: CareerState = {
   offers: [],
   seasonSchedule: createDefaultSeasonSchedule(2026, 1, "MIDDLE_SCHOOL_AAU", 1),
   relationships: {},
-  eligibility: createDefaultEligibilityState("MIDDLE_SCHOOL_AAU"),
-  injuryState: createDefaultInjuryState(),
+  eligibility: createDefaultEligibilityState("MIDDLE_SCHOOL_AAU", 2.5),
+  injury: null,
+  wearTear: 0,
   financeState: createDefaultFinanceState(),
   legacyPerks: [],
   isGoatPath: false,
@@ -479,6 +602,17 @@ const emptyBoxScore = (): MatchBoxScore => ({
     pf: 0,
   },
 });
+
+const normalizeLastMatchResult = (
+  result: CareerState["lastMatchResult"] | null | undefined,
+): CareerState["lastMatchResult"] | null =>
+  result
+    ? {
+        ...result,
+        boxScore: result.boxScore ?? emptyBoxScore(),
+        consequences: result.consequences ?? [],
+      }
+    : null;
 
 const normalizePersistedPlayer = (player: LegacyPlayerStateInput): Player => normalizePlayerStateForInk(player);
 
@@ -647,6 +781,7 @@ export const useCareerStore = create<CareerStore>()(
         const progressionState = createCareerProgressionState({
           player: initializedPlayer,
           leagueLevel: initialCareerState.leagueLevel,
+          gpa: initialCareerState.gpa,
           currentYear: initialCareerState.currentYear,
           seasonNumber: initialCareerState.seasonNumber,
           currentWeek: initialCareerState.currentWeek,
@@ -724,6 +859,15 @@ export const useCareerStore = create<CareerStore>()(
           };
         });
       },
+      adjustGpa: (delta) => {
+        set((state) => {
+          const nextGpa = clampGpa(state.gpa + delta);
+          return {
+            gpa: nextGpa,
+            eligibility: syncEligibilityState(state.eligibility, state.careerPhase, nextGpa),
+          };
+        });
+      },
       advanceWeek: () => {
         set((state) => {
           const nextState = resolveWeekAdvance({
@@ -733,11 +877,17 @@ export const useCareerStore = create<CareerStore>()(
             careerPhase: state.careerPhase,
             seasonSchedule: state.seasonSchedule,
           });
+          const nextHealthState = advanceHealthState({
+            injury: state.injury,
+            wearTear: state.wearTear,
+            currentWeek: state.currentWeek,
+          });
           return {
             currentWeek: nextState.currentWeek,
             currentYear: nextState.currentYear,
             seasonNumber: nextState.seasonNumber,
             seasonSchedule: nextState.seasonSchedule,
+            ...nextHealthState,
           };
         });
       },
@@ -766,7 +916,7 @@ export const useCareerStore = create<CareerStore>()(
               careerPhase,
               state.currentWeek,
             ),
-            eligibility: createDefaultEligibilityState(careerPhase),
+            eligibility: syncEligibilityState(state.eligibility, careerPhase, state.gpa),
             pendingSchoolPathSelection:
               level === LeagueLevel.HIGH_SCHOOL ? false : state.pendingSchoolPathSelection,
             exileState: state.exileState.enteredAtPhase ? { ...state.exileState, enteredAtPhase: careerPhase } : state.exileState,
@@ -865,7 +1015,7 @@ export const useCareerStore = create<CareerStore>()(
               careerPhase,
               state.currentWeek,
             ),
-            eligibility: createDefaultEligibilityState(careerPhase),
+            eligibility: syncEligibilityState(state.eligibility, careerPhase, state.gpa),
             relationships: {
               ...state.relationships,
               "fanbase-hometown": createSchoolPathFanbaseRelationship(path, state.player.identity.hometown.city),
@@ -898,6 +1048,23 @@ export const useCareerStore = create<CareerStore>()(
           };
         });
       },
+      completeStudyActivity: () => {
+        set((state) => {
+          if (!canCompleteStudy(state.weeklyLoop)) {
+            return state;
+          }
+
+          const nextGpa = clampGpa(state.gpa + 0.1);
+          return {
+            gpa: nextGpa,
+            eligibility: syncEligibilityState(state.eligibility, state.careerPhase, nextGpa),
+            weeklyLoop: {
+              ...state.weeklyLoop,
+              studyCompleted: true,
+            },
+          };
+        });
+      },
       completeNarrativeEvent: () => {
         set((state) => ({
           view: "HUB",
@@ -916,7 +1083,7 @@ export const useCareerStore = create<CareerStore>()(
       },
       navigateToMatch: () => {
         set((state) => {
-          if (!canStartMatch(state.weeklyLoop)) {
+          if (!canStartMatch(state.weeklyLoop) || !isAcademicallyEligible(state.gpa, state.leagueLevel)) {
             return state;
           }
 
@@ -932,7 +1099,19 @@ export const useCareerStore = create<CareerStore>()(
           lastMatchResult: null,
         }));
       },
-      completeMatch: ({ homeScore, awayScore, overtimePeriods, boxScore }) => {
+      applyMatchConsequences: (consequences) => {
+        if (consequences.length === 0) {
+          return;
+        }
+
+        set((state) => applyMatchConsequencesToHealth({
+          injury: state.injury,
+          wearTear: state.wearTear,
+          currentWeek: state.currentWeek,
+          consequences,
+        }));
+      },
+      completeMatch: ({ homeScore, awayScore, overtimePeriods, boxScore, consequences = [] }) => {
         set((state) => {
           const didWin = homeScore > awayScore;
           const schoolPathProfile = state.leagueLevel === LeagueLevel.HIGH_SCHOOL ? getSchoolPathProfile(state.schoolPath) : null;
@@ -954,10 +1133,18 @@ export const useCareerStore = create<CareerStore>()(
             weekAfter: nextState.currentWeek,
             overtimePeriods: overtimePeriods ?? 0,
             boxScore,
+            consequences,
           };
+          const nextHealthState = applyMatchConsequencesToHealth({
+            injury: state.injury,
+            wearTear: state.wearTear,
+            currentWeek: state.currentWeek,
+            consequences,
+          });
 
           return {
             view: "POSTGAME",
+            ...nextHealthState,
             lastMatchResult,
             weeklyLoop: {
               ...state.weeklyLoop,
@@ -970,8 +1157,14 @@ export const useCareerStore = create<CareerStore>()(
       resolvePostgameAndAdvanceWeek: () => {
         set((state) => {
           if (!state.lastMatchResult) {
+            const nextHealthState = advanceHealthState({
+              injury: state.injury,
+              wearTear: state.wearTear,
+              currentWeek: state.currentWeek,
+            });
             return {
               view: shouldPromptForSchoolPathSelection(state) ? "SCHOOL_PATH_SELECT" : "HUB",
+              ...nextHealthState,
               weeklyLoop: createDefaultWeeklyLoopState(),
             };
           }
@@ -1018,6 +1211,11 @@ export const useCareerStore = create<CareerStore>()(
                   teamInterestById: state.teamInterestById,
                   offers: state.offers,
                 };
+          const nextHealthState = advanceHealthState({
+            injury: state.injury,
+            wearTear: state.wearTear,
+            currentWeek: state.currentWeek,
+          });
 
           return {
             currentWeek: nextState.currentWeek,
@@ -1036,6 +1234,7 @@ export const useCareerStore = create<CareerStore>()(
             teamInterestById: recruitingState.teamInterestById,
             offers: recruitingState.offers,
             pendingSchoolPathSelection,
+            ...nextHealthState,
             weeklyLoop: createDefaultWeeklyLoopState(),
           };
         });
@@ -1049,23 +1248,28 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
           return persistedState;
         }
 
-        const typedState = persistedState as Partial<CareerStore> & { player?: LegacyPlayerStateInput };
+        const typedState = persistedState as Partial<CareerStore> & {
+          player?: LegacyPlayerStateInput;
+          injuryState?: LegacyPersistedInjuryState;
+        };
         if (!typedState.player) {
           const fallbackPlayer = defaultPlayer;
           const fallbackLeagueLevel = typedState.leagueLevel ?? LeagueLevel.MIDDLE_SCHOOL;
+          const fallbackGpa = clampGpa(typedState.gpa ?? initialCareerState.gpa);
           const fallbackCurrentYear = typedState.currentYear ?? initialCareerState.currentYear;
           const fallbackSeasonNumber = typedState.seasonNumber ?? initialCareerState.seasonNumber;
           const fallbackCurrentWeek = typedState.currentWeek ?? initialCareerState.currentWeek;
           const progressionState = createCareerProgressionState({
             player: fallbackPlayer,
             leagueLevel: fallbackLeagueLevel,
+            gpa: fallbackGpa,
             currentYear: fallbackCurrentYear,
             seasonNumber: fallbackSeasonNumber,
             currentWeek: fallbackCurrentWeek,
@@ -1074,6 +1278,7 @@ export const useCareerStore = create<CareerStore>()(
           return {
             ...typedState,
             leagueLevel: fallbackLeagueLevel,
+            gpa: fallbackGpa,
             currentYear: fallbackCurrentYear,
             seasonNumber: fallbackSeasonNumber,
             currentWeek: fallbackCurrentWeek,
@@ -1094,10 +1299,12 @@ export const useCareerStore = create<CareerStore>()(
         const currentYear = typedState.currentYear ?? initialCareerState.currentYear;
         const seasonNumber = typedState.seasonNumber ?? initialCareerState.seasonNumber;
         const currentWeek = typedState.currentWeek ?? initialCareerState.currentWeek;
+        const gpa = clampGpa(typedState.gpa ?? initialCareerState.gpa);
         const resolvedView = shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB";
         const progressionState = createCareerProgressionState({
           player: migratedPlayer,
           leagueLevel,
+          gpa,
           currentYear,
           seasonNumber,
           currentWeek,
@@ -1136,11 +1343,17 @@ export const useCareerStore = create<CareerStore>()(
         const migratedOffers = (highSchoolRecruitingState?.offers ?? typedState.offers ?? progressionState.offers).map(
           normalizeOfferExposureTier,
         );
+        const migratedInjury =
+          typedState.injury ??
+          migrateLegacyInjuryState(typedState.injuryState, currentWeek) ??
+          progressionState.injury;
+        const migratedWearTear = typedState.wearTear ?? 0;
 
         return {
           ...typedState,
           player: migratedPlayer,
           leagueLevel,
+          gpa,
           currentYear,
           seasonNumber,
           currentWeek,
@@ -1156,24 +1369,26 @@ export const useCareerStore = create<CareerStore>()(
           offers: migratedOffers,
           seasonSchedule: typedState.seasonSchedule ?? progressionState.seasonSchedule,
           relationships: typedState.relationships ?? progressionState.relationships,
-          eligibility: typedState.eligibility ?? progressionState.eligibility,
-          injuryState: typedState.injuryState ?? progressionState.injuryState,
+          gpa,
+          eligibility: syncEligibilityState(
+            typedState.eligibility ?? progressionState.eligibility,
+            typedState.careerPhase ?? progressionState.careerPhase,
+            gpa,
+          ),
+          injury: migratedInjury,
+          wearTear: migratedWearTear,
           financeState: typedState.financeState ?? progressionState.financeState,
           legacyPerks: typedState.legacyPerks ?? progressionState.legacyPerks,
           ovrBudget: typedState.ovrBudget ?? 60,
           exileState: existingExileState,
           exile: typedState.exile ?? deriveLegacyExile(existingExileState),
-          lastMatchResult: typedState.lastMatchResult
-            ? {
-                ...typedState.lastMatchResult,
-                boxScore: typedState.lastMatchResult.boxScore ?? emptyBoxScore(),
-              }
-            : null,
+          lastMatchResult: normalizeLastMatchResult(typedState.lastMatchResult),
         };
       },
       partialize: (state) => ({
         player: state.player,
         leagueLevel: state.leagueLevel,
+        gpa: state.gpa,
         status: state.status,
         currentYear: state.currentYear,
         seasonNumber: state.seasonNumber,
@@ -1189,18 +1404,14 @@ export const useCareerStore = create<CareerStore>()(
         seasonSchedule: state.seasonSchedule,
         relationships: state.relationships,
         eligibility: state.eligibility,
-        injuryState: state.injuryState,
+        injury: state.injury,
+        wearTear: state.wearTear,
         financeState: state.financeState,
         legacyPerks: state.legacyPerks,
         isGoatPath: state.isGoatPath,
         view: state.view,
         currentNarrativeFile: state.currentNarrativeFile,
-        lastMatchResult: state.lastMatchResult
-          ? {
-              ...state.lastMatchResult,
-              boxScore: state.lastMatchResult.boxScore ?? emptyBoxScore(),
-            }
-          : null,
+        lastMatchResult: normalizeLastMatchResult(state.lastMatchResult),
         newsFeed: state.newsFeed,
         weeklyLoop: state.weeklyLoop,
         ovrBudget: state.ovrBudget,

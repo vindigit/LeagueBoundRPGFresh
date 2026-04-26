@@ -13,6 +13,8 @@ const formatCurrencyDelta = (amount: number): string => {
 
 const formatMoraleDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}${amount}`;
 const formatFg = (fgm: number, fga: number): string => `${fgm}-${fga}`;
+const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} remaining`;
+const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
 
 const renderTeamTotals = (label: string, totals: TeamBoxScoreTotals) => (
   <View className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
@@ -48,6 +50,7 @@ const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => 
 
 export function PostgameScreen() {
   const result = useCareerStore((state) => state.lastMatchResult);
+  const injury = useCareerStore((state) => state.injury);
   const playerIdentity = useCareerStore((state) => state.player.identity);
   const resolvePostgameAndAdvanceWeek = useCareerStore((state) => state.resolvePostgameAndAdvanceWeek);
   const localHeadline = result && playerIdentity ? createPostgameNewsItem(playerIdentity, result).headline : undefined;
@@ -68,6 +71,7 @@ export function PostgameScreen() {
   const selectedLabel = isHomeSelected ? "My Player (Home)" : "Rivals High (Away)";
   const selectedPlayers = isHomeSelected ? result.boxScore.homePlayers : result.boxScore.awayPlayers;
   const selectedTotals = isHomeSelected ? result.boxScore.homeTotals : result.boxScore.awayTotals;
+  const injuryConsequence = result.consequences.find((consequence) => consequence.kind === "injury");
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
@@ -151,6 +155,21 @@ export function PostgameScreen() {
             <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2">
               <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hometown Buzz</Text>
               <Text className="mt-1 text-sm text-slate-100">{localHeadline}</Text>
+            </View>
+          ) : null}
+
+          {injury ? (
+            <View className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-amber-200">
+                {injuryConsequence ? "Injury Update" : "Active Injury"}
+              </Text>
+              <Text className="mt-1 text-sm font-semibold text-white">Minor ankle sprain</Text>
+              <Text className="mt-1 text-xs text-slate-200">
+                {formatWeeksRemaining(injury.weeksRemaining)} | {formatInjuryPenalty(injury.performanceMultiplier)}
+              </Text>
+              <Text className="mt-1 text-xs text-slate-300">
+                {injuryConsequence ? "You finished through contact and came out of the game banged up." : "The sprain will keep affecting your next matchups until it heals."}
+              </Text>
             </View>
           ) : null}
         </View>

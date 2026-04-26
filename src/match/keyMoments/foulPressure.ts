@@ -1,10 +1,13 @@
 import type { FreeThrowSequence } from "../../matchEngine";
+import type { MatchConsequence } from "../../types/careerProgression";
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
 import { buildContextualFoulPressureOptions } from "./contextualOptions";
 
 const OFFENSE_PROMPT = "Key Moment: Put pressure on the rim and force the whistle.";
 const DEFENSE_PROMPT = "Key Moment: Contest the drive without bailing the offense out.";
+const GO_STRONG_WEAR_TEAR_DELTA = 10;
+const MINOR_ANKLE_SPRAIN_MULTIPLIER = 0.88;
 
 const buildFreeThrowSequence = (
   mode: "one_and_one" | "two_shots",
@@ -46,6 +49,29 @@ const buildFreeThrowSummary = (
 ): string => {
   const prefix = offenseIsUser ? "You forced contact" : "You sent the shooter to the line";
   return `${prefix} and ${sequence.made === sequence.attempted ? "converted" : sequence.made > 0 ? "split" : "missed"} ${sequence.made} of ${sequence.attempted}.`;
+};
+
+const buildGoStrongConsequences = (quality: number): MatchConsequence[] => {
+  if (quality < 0.4) {
+    return [
+      {
+        kind: "injury",
+        injuryType: "ankle_sprain",
+        severity: "minor",
+        weeksRemaining: quality < 0.2 ? 2 : 1,
+        performanceMultiplier: MINOR_ANKLE_SPRAIN_MULTIPLIER,
+        canPlayThrough: true,
+        wearTearDelta: GO_STRONG_WEAR_TEAR_DELTA,
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: "wear_tear",
+      wearTearDelta: GO_STRONG_WEAR_TEAR_DELTA,
+    },
+  ];
 };
 
 export const buildFoulPressurePending = (args: KeyMomentBuildArgs): KeyMomentPending | undefined => {
@@ -132,6 +158,10 @@ export const resolveFoulPressure = (args: {
     foulOnTeam,
     foulOnPlayerIndex,
   );
+  const consequences =
+    offenseIsUser && optionId === "go_strong"
+      ? buildGoStrongConsequences(quality)
+      : undefined;
 
   return buildResolution({
     pending: args.pending,
@@ -148,5 +178,6 @@ export const resolveFoulPressure = (args: {
     shooterIndexOverride: shooterIndex,
     defenderIndexOverride: foulOnPlayerIndex,
     freeThrows: sequence,
+    consequences,
   });
 };

@@ -145,6 +145,7 @@ export function MatchScreen() {
   const timeRemaining = useMatchStore((state) => state.timeRemaining);
   const logs = useMatchStore((state) => state.logs);
   const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
+  const matchConsequences = useMatchStore((state) => state.matchConsequences);
   const simSpeed = useMatchStore((state) => state.simSpeed);
   const keyMomentPending = useMatchEngineStore((state) => state.snapshot.pendingKeyMoment);
   const userMatchState = useMatchEngineStore((state) => state.snapshot.userMatchState);
@@ -186,8 +187,8 @@ export function MatchScreen() {
         `[boxscore-integrity] score mismatch at game end: scoreboard ${homeScore}-${awayScore}, boxscore ${homeTotals.pts}-${awayTotals.pts}`,
       );
     }
-    completeMatch({ homeScore, awayScore, overtimePeriods: overtimePeriod, boxScore: matchBoxScore });
-  }, [awayScore, completeMatch, gameFinished, homeScore, matchBoxScore, overtimePeriod]);
+    completeMatch({ homeScore, awayScore, overtimePeriods: overtimePeriod, boxScore: matchBoxScore, consequences: matchConsequences });
+  }, [awayScore, completeMatch, gameFinished, homeScore, matchBoxScore, matchConsequences, overtimePeriod]);
 
   useEffect(() => {
     if (!keyMomentFeedback) {

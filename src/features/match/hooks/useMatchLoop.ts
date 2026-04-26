@@ -33,6 +33,25 @@ type AttributeDelta = Partial<Record<keyof PlayerAttributes, number>>;
 const clampRating = (value: number): PlayerAttributes["shortRange"] =>
   Math.max(0, Math.min(99, Math.round(value))) as PlayerAttributes["shortRange"];
 
+const scaleAttributes = (attrs: PlayerAttributes, multiplier: number): PlayerAttributes => ({
+  shortRange: clampRating(attrs.shortRange * multiplier),
+  dunking: clampRating(attrs.dunking * multiplier),
+  midrange: clampRating(attrs.midrange * multiplier),
+  threePoint: clampRating(attrs.threePoint * multiplier),
+  handle: clampRating(attrs.handle * multiplier),
+  passing: clampRating(attrs.passing * multiplier),
+  vision: clampRating(attrs.vision * multiplier),
+  perimeterDefense: clampRating(attrs.perimeterDefense * multiplier),
+  interiorDefense: clampRating(attrs.interiorDefense * multiplier),
+  stealing: clampRating(attrs.stealing * multiplier),
+  blocking: clampRating(attrs.blocking * multiplier),
+  offRebounding: clampRating(attrs.offRebounding * multiplier),
+  defRebounding: clampRating(attrs.defRebounding * multiplier),
+  speed: clampRating(attrs.speed * multiplier),
+  strength: clampRating(attrs.strength * multiplier),
+  stamina: clampRating(attrs.stamina * multiplier),
+});
+
 const withDelta = (attrs: PlayerAttributes, delta: AttributeDelta): PlayerAttributes => ({
   shortRange: clampRating(attrs.shortRange + (delta.shortRange ?? 0)),
   dunking: clampRating(attrs.dunking + (delta.dunking ?? 0)),
@@ -100,6 +119,7 @@ const buildRuntimeTeams = (
   userPosition: Position,
   leagueLevel: LeagueLevel,
   schoolPath: SchoolPath,
+  performanceMultiplier: number,
 ): {
   home: Team;
   away: Team;
@@ -108,7 +128,8 @@ const buildRuntimeTeams = (
   userPlayerId: string;
 } => {
   const schoolPathProfile = leagueLevel === LeagueLevel.HIGH_SCHOOL ? getSchoolPathProfile(schoolPath) : null;
-  const userRuntimeAttributes = schoolPathProfile ? withDelta(userAttributes, schoolPathProfile.userRuntimeDelta) : userAttributes;
+  const adjustedUserAttributes = schoolPathProfile ? withDelta(userAttributes, schoolPathProfile.userRuntimeDelta) : userAttributes;
+  const userRuntimeAttributes = scaleAttributes(adjustedUserAttributes, performanceMultiplier);
   let userPlayerId = "h1";
   const homeRoster = POSITIONS.map((position, index) => {
     const id = `h${index + 1}`;
@@ -253,6 +274,8 @@ export const useMatchLoop = (): void => {
   const playerAttributes = useCareerStore((state) => state.player.attributes);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const schoolPath = useCareerStore((state) => state.schoolPath);
+  const injury = useCareerStore((state) => state.injury);
+  const addMatchConsequences = useMatchStore((state) => state.addMatchConsequences);
 
   const runtimeTeams = useMemo(
     () =>
@@ -264,9 +287,11 @@ export const useMatchLoop = (): void => {
         playerPosition,
         leagueLevel,
         schoolPath,
+        injury?.performanceMultiplier ?? 1,
       ),
     [
       careerPlayer,
+      injury?.performanceMultiplier,
       leagueLevel,
       playerArchetype,
       playerAttributes.blocking,
@@ -417,6 +442,7 @@ export const useMatchLoop = (): void => {
     });
 
     if (trace.resolvedKeyMoment) {
+      addMatchConsequences(trace.resolvedKeyMoment.consequences);
       setKeyMomentFeedback({
         id: trace.resolvedKeyMoment.pendingId,
         success: trace.resolvedKeyMoment.success,
@@ -445,7 +471,7 @@ export const useMatchLoop = (): void => {
     return () => {
       unsubscribe();
     };
-  }, [addLog, endMatch, pauseMatch, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
+  }, [addLog, addMatchConsequences, endMatch, pauseMatch, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
 
   useEffect(() => {
     const matchState = useMatchStore.getState();

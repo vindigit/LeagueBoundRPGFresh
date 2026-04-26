@@ -24,6 +24,14 @@ describe("Career progression domain model", () => {
     });
   });
 
+  it("pins the persisted store version for the expanded progression schema", () => {
+    const version = (useCareerStore as unknown as { persist: { getOptions: () => { version?: number } } })
+      .persist
+      .getOptions().version;
+
+    expect(version).toBe(9);
+  });
+
   it("seeds initializeCareer with the new progression state", () => {
     const state = useCareerStore.getState();
 
@@ -42,6 +50,11 @@ describe("Career progression domain model", () => {
     expect(state.legacyPerks).toEqual([]);
     expect(state.exileState.currentMode).toBe("NONE");
     expect(state.exile).toBeNull();
+    expect(state.weeklyLoop).toEqual({
+      eventCompleted: false,
+      matchCompleted: false,
+      postgamePending: false,
+    });
   });
 
   it("migrates a v7-style save into the richer progression model", () => {
@@ -85,6 +98,11 @@ describe("Career progression domain model", () => {
     expect(migrated.exileState.triggerReason).toBe("LEGACY_MIGRATION");
     expect(migrated.exile).toBe("OVERSEAS");
     expect(migrated.ovrBudget).toBe(77);
+    expect(migrated.weeklyLoop).toEqual({
+      eventCompleted: true,
+      matchCompleted: false,
+      postgamePending: false,
+    });
   });
 
   it("includes the new progression fields in persisted partialize output", () => {
@@ -107,5 +125,6 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("financeState");
     expect(partial).toHaveProperty("legacyPerks");
     expect(partial).toHaveProperty("exileState");
+    expect(partial).toHaveProperty("weeklyLoop");
   });
 });

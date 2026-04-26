@@ -45,6 +45,12 @@ export interface LastMatchResult {
   boxScore: MatchBoxScore;
 }
 
+export interface WeeklyLoopState {
+  eventCompleted: boolean;
+  matchCompleted: boolean;
+  postgamePending: boolean;
+}
+
 export interface CareerState {
   player: Player;
   leagueLevel: LeagueLevel;
@@ -70,6 +76,7 @@ export interface CareerState {
   currentNarrativeFile: string;
   lastMatchResult: LastMatchResult | null;
   newsFeed: CareerNewsItem[];
+  weeklyLoop: WeeklyLoopState;
   ovrBudget: number;
   exile: ExileStatus | null;
   exileState: ExileState;
@@ -89,9 +96,12 @@ export interface CareerActions {
   setGoatPath(isGoatPath: boolean): void;
   setCurrentYear(year: number): void;
   startNarrative(fileName: string): void;
+  completeNarrativeEvent(): void;
+  closeNarrative(): void;
   navigateToMatch(): void;
   navigateToHub(): void;
   completeMatch(result: { homeScore: number; awayScore: number; overtimePeriods?: number; boxScore: MatchBoxScore }): void;
+  resolvePostgameAndAdvanceWeek(): void;
   hydrateCareer(state: CareerState): void;
   resetCareer(state: CareerState): void;
 }

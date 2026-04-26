@@ -24,6 +24,7 @@ import {
   type CareerActions,
   type CareerState,
   type ExileStatus,
+  type WeeklyLoopState,
 } from "../types/career";
 import type {
   CareerPhase,
@@ -320,6 +321,78 @@ const syncSeasonScheduleWeek = (seasonSchedule: SeasonSchedule, currentWeek: num
   })),
 });
 
+const createDefaultWeeklyLoopState = (input: Partial<WeeklyLoopState> = {}): WeeklyLoopState => ({
+  eventCompleted: input.eventCompleted ?? false,
+  matchCompleted: input.matchCompleted ?? false,
+  postgamePending: input.postgamePending ?? false,
+});
+
+const canStartNarrative = (weeklyLoop: WeeklyLoopState): boolean => !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
+
+const canStartMatch = (weeklyLoop: WeeklyLoopState): boolean =>
+  weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+
+const resolveWeekAdvance = (input: {
+  currentWeek: number;
+  currentYear: number;
+  seasonNumber: number;
+  careerPhase: CareerPhase;
+  seasonSchedule: SeasonSchedule;
+}) => {
+  const totalWeeks = input.seasonSchedule.weeks.length;
+  if (input.currentWeek >= totalWeeks) {
+    return {
+      currentWeek: 1,
+      currentYear: input.currentYear,
+      seasonNumber: input.seasonNumber + 1,
+      seasonSchedule: createDefaultSeasonSchedule(input.currentYear, input.seasonNumber + 1, input.careerPhase, 1),
+    };
+  }
+
+  const nextWeek = input.currentWeek + 1;
+  return {
+    currentWeek: nextWeek,
+    currentYear: input.currentYear,
+    seasonNumber: input.seasonNumber,
+    seasonSchedule: syncSeasonScheduleWeek(input.seasonSchedule, nextWeek),
+  };
+};
+
+const deriveMigratedWeeklyLoop = (input: {
+  persistedWeeklyLoop?: Partial<WeeklyLoopState>;
+  view?: CareerState["view"];
+  lastMatchResult?: CareerState["lastMatchResult"];
+  initializedPlayer: boolean;
+}): WeeklyLoopState => {
+  const fallback = (() => {
+    if (!input.initializedPlayer || input.view === "BACKSTORY") {
+      return createDefaultWeeklyLoopState();
+    }
+    if (input.view === "POSTGAME" && input.lastMatchResult) {
+      return createDefaultWeeklyLoopState({
+        eventCompleted: true,
+        matchCompleted: true,
+        postgamePending: true,
+      });
+    }
+    if (input.view === "NARRATIVE") {
+      return createDefaultWeeklyLoopState();
+    }
+    if (input.view === "HUB" || input.view === "MATCH") {
+      return createDefaultWeeklyLoopState({
+        eventCompleted: true,
+      });
+    }
+    return createDefaultWeeklyLoopState();
+  })();
+
+  return createDefaultWeeklyLoopState({
+    eventCompleted: input.persistedWeeklyLoop?.eventCompleted ?? fallback.eventCompleted,
+    matchCompleted: input.persistedWeeklyLoop?.matchCompleted ?? fallback.matchCompleted,
+    postgamePending: input.persistedWeeklyLoop?.postgamePending ?? fallback.postgamePending,
+  });
+};
+
 const initialCareerState: CareerState = {
   player: defaultPlayer,
   leagueLevel: LeagueLevel.MIDDLE_SCHOOL,
@@ -345,6 +418,7 @@ const initialCareerState: CareerState = {
   currentNarrativeFile: "",
   lastMatchResult: null,
   newsFeed: [],
+  weeklyLoop: createDefaultWeeklyLoopState(),
   ovrBudget: 60,
   exile: null,
   exileState: createDefaultExileState(),
@@ -385,6 +459,7 @@ const isInitializedPlayer = (player: Player): boolean =>
 
 const appendNewsItem = (existingNews: CareerState["newsFeed"], item: CareerState["newsFeed"][number]): CareerState["newsFeed"] =>
   [item, ...existingNews].slice(0, NEWS_FEED_LIMIT);
+
 
 const normalizePlayerIdentityHometown = (player: Player): Player => {
   if (!player.identity) {
@@ -513,6 +588,7 @@ export const useCareerStore = create<CareerStore>()(
           player: initializedPlayer,
           view: "HUB",
           newsFeed: [creationNews],
+          weeklyLoop: createDefaultWeeklyLoopState(),
         }));
       },
       applyAttributeGain: (attr, amount, source = "SYSTEM") => {
@@ -578,10 +654,18 @@ export const useCareerStore = create<CareerStore>()(
       },
       advanceWeek: () => {
         set((state) => {
-          const nextWeek = state.currentWeek + 1;
+          const nextState = resolveWeekAdvance({
+            currentWeek: state.currentWeek,
+            currentYear: state.currentYear,
+            seasonNumber: state.seasonNumber,
+            careerPhase: state.careerPhase,
+            seasonSchedule: state.seasonSchedule,
+          });
           return {
-            currentWeek: nextWeek,
-            seasonSchedule: syncSeasonScheduleWeek(state.seasonSchedule, nextWeek),
+            currentWeek: nextState.currentWeek,
+            currentYear: nextState.currentYear,
+            seasonNumber: nextState.seasonNumber,
+            seasonSchedule: nextState.seasonSchedule,
           };
         });
       },
@@ -631,16 +715,44 @@ export const useCareerStore = create<CareerStore>()(
         set(() => ({ currentYear: year }));
       },
       startNarrative: (fileName) => {
+        set((state) => {
+          if (!canStartNarrative(state.weeklyLoop)) {
+            return state;
+          }
+
+          return {
+            view: "NARRATIVE",
+            currentNarrativeFile: fileName,
+          };
+        });
+      },
+      completeNarrativeEvent: () => {
+        set((state) => ({
+          view: "HUB",
+          currentNarrativeFile: "",
+          weeklyLoop: {
+            ...state.weeklyLoop,
+            eventCompleted: true,
+          },
+        }));
+      },
+      closeNarrative: () => {
         set(() => ({
-          view: "NARRATIVE",
-          currentNarrativeFile: fileName,
+          view: "HUB",
+          currentNarrativeFile: "",
         }));
       },
       navigateToMatch: () => {
-        set(() => ({
-          view: "MATCH",
-          lastMatchResult: null,
-        }));
+        set((state) => {
+          if (!canStartMatch(state.weeklyLoop)) {
+            return state;
+          }
+
+          return {
+            view: "MATCH",
+            lastMatchResult: null,
+          };
+        });
       },
       navigateToHub: () => {
         set(() => ({
@@ -653,34 +765,71 @@ export const useCareerStore = create<CareerStore>()(
           const didWin = homeScore > awayScore;
           const bankDelta = didWin ? 500 : 300;
           const moraleDelta = didWin ? 5 : -3;
-          const nextMorale = clampMorale(state.player.morale + moraleDelta);
-          const nextWeek = state.currentWeek + 1;
+          const nextState = resolveWeekAdvance({
+            currentWeek: state.currentWeek,
+            currentYear: state.currentYear,
+            seasonNumber: state.seasonNumber,
+            careerPhase: state.careerPhase,
+            seasonSchedule: state.seasonSchedule,
+          });
           const lastMatchResult = {
             homeScore,
             awayScore,
             didWin,
             bankDelta,
             moraleDelta,
-            weekAfter: nextWeek,
+            weekAfter: nextState.currentWeek,
             overtimePeriods: overtimePeriods ?? 0,
             boxScore,
           };
 
+          return {
+            view: "POSTGAME",
+            lastMatchResult,
+            weeklyLoop: {
+              ...state.weeklyLoop,
+              matchCompleted: true,
+              postgamePending: true,
+            },
+          };
+        });
+      },
+      resolvePostgameAndAdvanceWeek: () => {
+        set((state) => {
+          if (!state.lastMatchResult) {
+            return {
+              view: "HUB",
+              weeklyLoop: createDefaultWeeklyLoopState(),
+            };
+          }
+
+          const nextState = resolveWeekAdvance({
+            currentWeek: state.currentWeek,
+            currentYear: state.currentYear,
+            seasonNumber: state.seasonNumber,
+            careerPhase: state.careerPhase,
+            seasonSchedule: state.seasonSchedule,
+          });
+          const nextMorale = clampMorale(state.player.morale + state.lastMatchResult.moraleDelta);
           const newsFeed =
             state.player.identity
-              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, lastMatchResult))
+              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, state.lastMatchResult))
               : state.newsFeed;
 
           return {
-            currentWeek: nextWeek,
-            view: "POSTGAME",
+            currentWeek: nextState.currentWeek,
+            currentYear: nextState.currentYear,
+            seasonNumber: nextState.seasonNumber,
+            seasonSchedule: nextState.seasonSchedule,
+            view: "HUB",
             player: {
               ...state.player,
-              bankBalance: state.player.bankBalance + bankDelta,
+              bankBalance: state.player.bankBalance + state.lastMatchResult.bankDelta,
               morale: nextMorale,
             },
-            lastMatchResult,
+            lastMatchResult: null,
             newsFeed,
+            weeklyLoop: createDefaultWeeklyLoopState(),
           };
         });
       },
@@ -693,7 +842,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -723,6 +872,7 @@ export const useCareerStore = create<CareerStore>()(
             currentWeek: fallbackCurrentWeek,
             view: getInitialCareerView(),
             newsFeed: [],
+            weeklyLoop: createDefaultWeeklyLoopState(),
             ovrBudget: typedState.ovrBudget ?? 60,
             ...progressionState,
           };
@@ -736,6 +886,7 @@ export const useCareerStore = create<CareerStore>()(
         const currentYear = typedState.currentYear ?? initialCareerState.currentYear;
         const seasonNumber = typedState.seasonNumber ?? initialCareerState.seasonNumber;
         const currentWeek = typedState.currentWeek ?? initialCareerState.currentWeek;
+        const resolvedView = shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB";
         const progressionState = createCareerProgressionState({
           player: migratedPlayer,
           leagueLevel,
@@ -754,6 +905,12 @@ export const useCareerStore = create<CareerStore>()(
               notes: typedState.exileState.notes ?? progressionState.exileState.notes,
             }
           : progressionState.exileState;
+        const weeklyLoop = deriveMigratedWeeklyLoop({
+          persistedWeeklyLoop: typedState.weeklyLoop,
+          view: resolvedView,
+          lastMatchResult: typedState.lastMatchResult ?? null,
+          initializedPlayer: isInitializedPlayer(migratedPlayer),
+        });
 
         return {
           ...typedState,
@@ -763,8 +920,9 @@ export const useCareerStore = create<CareerStore>()(
           seasonNumber,
           currentWeek,
           careerPhase: typedState.careerPhase ?? progressionState.careerPhase,
-          view: shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB",
+          view: resolvedView,
           newsFeed,
+          weeklyLoop,
           starRating: typedState.starRating ?? progressionState.starRating,
           scoutVisibility: clampVisibility(typedState.scoutVisibility ?? progressionState.scoutVisibility),
           teamInterestById: typedState.teamInterestById ?? progressionState.teamInterestById,
@@ -817,6 +975,7 @@ export const useCareerStore = create<CareerStore>()(
             }
           : null,
         newsFeed: state.newsFeed,
+        weeklyLoop: state.weeklyLoop,
         ovrBudget: state.ovrBudget,
         exile: state.exile,
         exileState: state.exileState,

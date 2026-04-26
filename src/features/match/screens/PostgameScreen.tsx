@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { createPostgameNewsItem } from "../../backstory/news";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayerBoxScoreLine, TeamBoxScoreTotals } from "../store/useMatchStore";
 
@@ -47,15 +48,16 @@ const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => 
 
 export function PostgameScreen() {
   const result = useCareerStore((state) => state.lastMatchResult);
-  const navigateToHub = useCareerStore((state) => state.navigateToHub);
-  const localHeadline = useCareerStore((state) => state.newsFeed.find((item) => item.category === "POSTGAME_RECAP")?.headline);
+  const playerIdentity = useCareerStore((state) => state.player.identity);
+  const resolvePostgameAndAdvanceWeek = useCareerStore((state) => state.resolvePostgameAndAdvanceWeek);
+  const localHeadline = result && playerIdentity ? createPostgameNewsItem(playerIdentity, result).headline : undefined;
   const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home");
 
   if (!result) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-950 px-6">
         <Text className="text-lg font-semibold text-white">No recent match result.</Text>
-        <Pressable className="mt-4 items-center justify-center rounded-xl bg-slate-700 px-4 py-3" onPress={navigateToHub}>
+        <Pressable className="mt-4 items-center justify-center rounded-xl bg-slate-700 px-4 py-3" onPress={resolvePostgameAndAdvanceWeek}>
           <Text className="text-base font-semibold text-white">Return to Hub</Text>
         </Pressable>
       </SafeAreaView>
@@ -141,7 +143,7 @@ export function PostgameScreen() {
           </View>
 
           <View className="mt-2 flex-row items-center justify-between">
-            <Text className="text-sm text-slate-300">Current Week</Text>
+            <Text className="text-sm text-slate-300">Next Week</Text>
             <Text className="text-sm font-semibold text-white">{result.weekAfter}</Text>
           </View>
 
@@ -153,8 +155,8 @@ export function PostgameScreen() {
           ) : null}
         </View>
 
-        <Pressable className="mt-6 items-center justify-center rounded-xl bg-emerald-500 py-4" onPress={navigateToHub}>
-          <Text className="text-base font-semibold text-black">Continue to Hub</Text>
+        <Pressable className="mt-6 items-center justify-center rounded-xl bg-emerald-500 py-4" onPress={resolvePostgameAndAdvanceWeek}>
+          <Text className="text-base font-semibold text-black">Advance Week</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

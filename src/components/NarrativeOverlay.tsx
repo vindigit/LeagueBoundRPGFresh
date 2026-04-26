@@ -15,15 +15,13 @@ const hasSceneCompleteTag = (tags: string[]): boolean =>
 
 export function NarrativeOverlay() {
   const currentNarrativeFile = useCareerStore((state) => state.currentNarrativeFile);
+  const completeNarrativeEvent = useCareerStore((state) => state.completeNarrativeEvent);
+  const closeNarrative = useCareerStore((state) => state.closeNarrative);
   const [storyState, setStoryState] = useState<InkStoryState>(EMPTY_STORY_STATE);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [manager, setManager] = useState<InkManager | null>(null);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const panelTranslateY = useRef(new Animated.Value(18)).current;
-
-  const closeNarrative = (): void => {
-    useCareerStore.setState({ view: "HUB", currentNarrativeFile: "" });
-  };
 
   useEffect(() => {
     Animated.parallel([
@@ -71,9 +69,9 @@ export function NarrativeOverlay() {
     setStoryState(nextState);
 
     if (hasSceneCompleteTag(nextState.tags)) {
-      closeNarrative();
+      completeNarrativeEvent();
     }
-  }, [manager]);
+  }, [completeNarrativeEvent, manager]);
 
   const handleChoicePress = (choiceIndex: number): void => {
     if (!manager) {
@@ -84,7 +82,7 @@ export function NarrativeOverlay() {
     setStoryState(nextState);
 
     if (hasSceneCompleteTag(nextState.tags)) {
-      closeNarrative();
+      completeNarrativeEvent();
     }
   };
 

@@ -20,10 +20,21 @@ export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const currentYear = useCareerStore((state) => state.currentYear);
+  const currentWeek = useCareerStore((state) => state.currentWeek);
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
   const newsFeed = useCareerStore((state) => state.newsFeed);
+  const weeklyLoop = useCareerStore((state) => state.weeklyLoop);
   const startNarrative = useCareerStore((state) => state.startNarrative);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
+  const canOpenEvent = !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
+  const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+  const loopStatus = weeklyLoop.postgamePending
+    ? "Finish postgame to resolve the week."
+    : weeklyLoop.matchCompleted
+      ? "Week complete. Advance from postgame."
+      : weeklyLoop.eventCompleted
+        ? "Event complete. Match is unlocked."
+        : "Start your weekly event to unlock the match.";
 
   return (
     <SafeAreaView className="relative flex-1 bg-premium-bg">
@@ -67,26 +78,38 @@ export function HomeScreen() {
               </View>
 
               <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Week</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{currentWeek}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
                 <Text className="text-xs text-premium-muted">Bank</Text>
                 <Text className="mt-1 text-base font-semibold text-premium-accent">{formatCurrency(bankBalance)}</Text>
               </View>
             </View>
+
+            <View className="mt-3 rounded-lg bg-premium-bg p-3">
+              <Text className="text-xs text-premium-muted">Loop Status</Text>
+              <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
+            </View>
           </View>
 
           <Pressable
-            className="mt-6 items-center justify-center rounded-xl bg-sky-600 px-4 py-4"
+            className={`mt-6 items-center justify-center rounded-xl px-4 py-4 ${canPlayMatch ? "bg-sky-600" : "bg-slate-700"}`}
+            disabled={!canPlayMatch}
             onPress={navigateToMatch}
           >
             <Text className="text-base font-semibold text-white">Play Match</Text>
           </Pressable>
 
           <Pressable
-            className="mt-3 items-center justify-center rounded-xl bg-premium-accent px-4 py-4"
+            className={`mt-3 items-center justify-center rounded-xl px-4 py-4 ${canOpenEvent ? "bg-premium-accent" : "bg-slate-700"}`}
+            disabled={!canOpenEvent}
             onPress={() => {
               startNarrative("practice_coach.ink");
             }}
           >
-            <Text className="text-base font-semibold text-black">Next Event</Text>
+            <Text className={`text-base font-semibold ${canOpenEvent ? "text-black" : "text-slate-200"}`}>Next Event</Text>
           </Pressable>
         </ScrollView>
       ) : null}

@@ -4,6 +4,7 @@ import { LEAGUE_MODIFIERS } from "./constants/leagueScaling";
 import { LeagueLevel } from "./types/career";
 import { computeOverall } from "./builder/derivedRatings";
 import type { BuilderBadgeId, BuilderBadgeTier } from "./builder/badges/catalog";
+import { BUILDER_BADGE_EFFECTS, type BuilderBadgeEffectModifier } from "./builder/badges/effects";
 import type { ResolvedBuilderBadge } from "./builder/badges/resolve";
 import tuning from "./matchEngineTuning.js";
 import { validateMatchEngineTuning } from "./matchEngineTuningValidation";
@@ -161,23 +162,7 @@ type PlayerImpact = {
   strength: number;
 };
 
-type BadgeModifierTotals = {
-  deepRangeThreeMake: number;
-  deepRangeThreeZoneWeight: number;
-  rimPressureRimMake: number;
-  rimPressurePutbackMake: number;
-  floorGeneralBallSecurity: number;
-  floorGeneralAssistProbability: number;
-  pointOfAttackDefenderPressure: number;
-  pointOfAttackStealProbability: number;
-  pointOfAttackPerimeterContest: number;
-  anchorOpponentRimMake: number;
-  anchorRimBlockProbability: number;
-  glassCleanerReboundWeight: number;
-  glassCleanerPutbackMake: number;
-  powerDriverRimBallSecurity: number;
-  powerDriverRimMake: number;
-};
+type BadgeModifierTotals = Record<BuilderBadgeEffectModifier, number>;
 
 type BadgeContext = {
   enabled: boolean;
@@ -193,30 +178,62 @@ export const BADGE_TIER_SCALE: Record<BuilderBadgeTier, number> = {
   GOLD: 2.5,
 };
 
-const createEmptyBadgeModifierTotals = (): BadgeModifierTotals => ({
-  deepRangeThreeMake: 0,
-  deepRangeThreeZoneWeight: 0,
-  rimPressureRimMake: 0,
-  rimPressurePutbackMake: 0,
-  floorGeneralBallSecurity: 0,
-  floorGeneralAssistProbability: 0,
-  pointOfAttackDefenderPressure: 0,
-  pointOfAttackStealProbability: 0,
-  pointOfAttackPerimeterContest: 0,
-  anchorOpponentRimMake: 0,
-  anchorRimBlockProbability: 0,
-  glassCleanerReboundWeight: 0,
-  glassCleanerPutbackMake: 0,
-  powerDriverRimBallSecurity: 0,
-  powerDriverRimMake: 0,
-});
+const BADGE_MODIFIER_KEYS: readonly BuilderBadgeEffectModifier[] = [
+  "deepRangeThreeMake",
+  "deepRangeThreeZoneWeight",
+  "rimPressureRimMake",
+  "rimPressurePutbackMake",
+  "floorGeneralBallSecurity",
+  "floorGeneralAssistProbability",
+  "pointOfAttackDefenderPressure",
+  "pointOfAttackStealProbability",
+  "pointOfAttackPerimeterContest",
+  "anchorOpponentRimMake",
+  "anchorRimBlockProbability",
+  "glassCleanerReboundWeight",
+  "glassCleanerPutbackMake",
+  "powerDriverRimBallSecurity",
+  "powerDriverRimMake",
+  "slitheryRimBallSecurity",
+  "slitheryLayupMake",
+  "posterizerDunkAttempt",
+  "posterizerDunkMake",
+  "posterizerDunkBlockResistance",
+  "midRangeMagicianMidrangeZoneWeight",
+  "midRangeMagicianMidrangeMake",
+  "catchAndShootAssistedJumperMake",
+  "needleThreaderPassBallSecurity",
+  "needleThreaderAssistProbability",
+  "quickFirstStepRimZoneWeight",
+  "quickFirstStepRimBallSecurity",
+  "pickpocketDefenderPressure",
+  "pickpocketStealProbability",
+  "helpDefenderRimContest",
+  "helpDefenderWeakSideBlock",
+  "chaseDownRimBlockProbability",
+  "chaseDownPutbackBlockProbability",
+  "boxOutBeastDefReboundWeight",
+  "boxOutBeastOffReboundSuppression",
+  "putbackBossOffReboundWeight",
+  "putbackBossPutbackMake",
+];
+
+const createEmptyBadgeModifierTotals = (): BadgeModifierTotals =>
+  Object.fromEntries(BADGE_MODIFIER_KEYS.map((key) => [key, 0])) as BadgeModifierTotals;
 
 const createBadgeContext = (enabled: boolean): BadgeContext => ({
   enabled,
   contributions: [],
 });
 
+const uniqueBadgeCache = new WeakMap<Player, ResolvedBuilderBadge[]>();
+const badgeModifierTotalsCache = new WeakMap<Player, BadgeModifierTotals>();
+
 export const getUniqueBadges = (player: Player): ResolvedBuilderBadge[] => {
+  const cached = uniqueBadgeCache.get(player);
+  if (cached) {
+    return cached;
+  }
   const badges = player.dna?.builderProfile?.badges ?? [];
   const seen = new Set<BuilderBadgeId>();
   const unique: ResolvedBuilderBadge[] = [];
@@ -227,45 +244,24 @@ export const getUniqueBadges = (player: Player): ResolvedBuilderBadge[] => {
     seen.add(badge.id);
     unique.push(badge);
   }
+  uniqueBadgeCache.set(player, unique);
   return unique;
 };
 
 export const buildBadgeModifierTotals = (player: Player): BadgeModifierTotals => {
+  const cached = badgeModifierTotalsCache.get(player);
+  if (cached) {
+    return cached;
+  }
   const totals = createEmptyBadgeModifierTotals();
   for (const badge of getUniqueBadges(player)) {
     const scale = BADGE_TIER_SCALE[badge.tier];
-    switch (badge.id) {
-      case "deep_range":
-        totals.deepRangeThreeMake += 0.015 * scale;
-        totals.deepRangeThreeZoneWeight += 4 * scale;
-        break;
-      case "rim_pressure":
-        totals.rimPressureRimMake += 0.012 * scale;
-        totals.rimPressurePutbackMake += 0.01 * scale;
-        break;
-      case "floor_general":
-        totals.floorGeneralBallSecurity += 4 * scale;
-        totals.floorGeneralAssistProbability += 0.01 * scale;
-        break;
-      case "point_of_attack":
-        totals.pointOfAttackDefenderPressure += 4 * scale;
-        totals.pointOfAttackStealProbability += 0.01 * scale;
-        totals.pointOfAttackPerimeterContest += 2 * scale;
-        break;
-      case "anchor":
-        totals.anchorOpponentRimMake -= 0.012 * scale;
-        totals.anchorRimBlockProbability += 0.008 * scale;
-        break;
-      case "glass_cleaner":
-        totals.glassCleanerReboundWeight += 5 * scale;
-        totals.glassCleanerPutbackMake += 0.008 * scale;
-        break;
-      case "power_driver":
-        totals.powerDriverRimBallSecurity += 3 * scale;
-        totals.powerDriverRimMake += 0.01 * scale;
-        break;
+    const effectProfile = BUILDER_BADGE_EFFECTS[badge.id];
+    for (const [modifierKey, baseValue] of Object.entries(effectProfile.modifiers) as Array<[BuilderBadgeEffectModifier, number]>) {
+      totals[modifierKey] += baseValue * scale;
     }
   }
+  badgeModifierTotalsCache.set(player, totals);
   return totals;
 };
 
@@ -673,8 +669,14 @@ const pickRebounderIndex = (
       key: index as 0 | 1 | 2 | 3 | 4,
       weight:
         reboundType === "offense"
-          ? impact.offRebounding * 0.85 + impact.strength * 0.15 + badgeModifiers.glassCleanerReboundWeight
-          : impact.defRebounding * 0.8 + impact.strength * 0.2 + badgeModifiers.glassCleanerReboundWeight,
+          ? impact.offRebounding * 0.85 +
+            impact.strength * 0.15 +
+            badgeModifiers.glassCleanerReboundWeight +
+            badgeModifiers.putbackBossOffReboundWeight
+          : impact.defRebounding * 0.8 +
+            impact.strength * 0.2 +
+            badgeModifiers.glassCleanerReboundWeight +
+            badgeModifiers.boxOutBeastDefReboundWeight,
     };
   });
   const rebounderIndex = weightedPick(weighted, rng);
@@ -685,7 +687,18 @@ const pickRebounderIndex = (
     rebounderIndex,
     teamKey,
     "rebound",
-    (badgeId, scale) => (badgeId === "glass_cleaner" ? 5 * scale : 0),
+    (badgeId, scale) => {
+      if (badgeId === "glass_cleaner") {
+        return 5 * scale;
+      }
+      if (badgeId === "putback_boss" && reboundType === "offense") {
+        return 5 * scale;
+      }
+      if (badgeId === "box_out_beast" && reboundType === "defense") {
+        return 5 * scale;
+      }
+      return 0;
+    },
   );
   return rebounderIndex;
 };
@@ -706,11 +719,14 @@ const pickShotZone = (
   const threeTilt =
     (shooterImpact.threePoint - 50) * tuning.shotZoneThreePointWeight * decisionTilt +
     badgeModifiers.deepRangeThreeZoneWeight;
-  const midrangeTilt = (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight * decisionTilt;
+  const midrangeTilt =
+    (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight * decisionTilt +
+    badgeModifiers.midRangeMagicianMidrangeZoneWeight;
   const rimTilt =
     ((shooterImpact.shortRange - 50) * tuning.shotZoneRimShortRangeWeight +
       (shooterImpact.dunking - 50) * tuning.shotZoneRimDunkingWeight) *
-    decisionTilt;
+      decisionTilt +
+    badgeModifiers.quickFirstStepRimZoneWeight;
   const fatigueTilt = (shooterImpact.fatigueMultiplier - 1) * 100 * tuning.shotZoneFatigueWeight;
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
@@ -736,7 +752,18 @@ const pickShotZone = (
     shooterIndex,
     offenseKey,
     "shot_zone",
-    (badgeId, scale) => (badgeId === "deep_range" ? 4 * scale : 0),
+    (badgeId, scale) => {
+      if (badgeId === "deep_range") {
+        return 4 * scale;
+      }
+      if (badgeId === "mid_range_magician") {
+        return 4 * scale;
+      }
+      if (badgeId === "quick_first_step") {
+        return 4 * scale;
+      }
+      return 0;
+    },
   );
 
   return weightedPick(entries, rng);
@@ -755,13 +782,15 @@ const getTurnoverShotZoneHint = (shooterImpact: PlayerImpact): ShotZone => {
   return "midrange";
 };
 
-const getDunkProbability = (shooterImpact: PlayerImpact): number => {
+const getDunkProbability = (shooterImpact: PlayerImpact, shooter?: Player): number => {
   if (shooterImpact.dunking < tuning.dunkAttemptThreshold) {
     return 0;
   }
 
+  const badgeModifiers = shooter ? buildBadgeModifierTotals(shooter) : createEmptyBadgeModifierTotals();
   return clamp(
     tuning.dunkAttemptBase +
+      badgeModifiers.posterizerDunkAttempt +
       (shooterImpact.dunking - tuning.dunkAttemptThreshold) * tuning.dunkAttemptDunkingWeight +
       shooterImpact.strength * tuning.dunkAttemptStrengthWeight +
       shooterImpact.speed * tuning.dunkAttemptSpeedWeight,
@@ -770,8 +799,8 @@ const getDunkProbability = (shooterImpact: PlayerImpact): number => {
   );
 };
 
-const pickRimAttemptType = (shooterImpact: PlayerImpact, rng: () => number): RimAttemptType =>
-  rng() <= getDunkProbability(shooterImpact) ? "dunk" : "layup";
+const pickRimAttemptType = (shooter: Player, shooterImpact: PlayerImpact, rng: () => number): RimAttemptType =>
+  rng() <= getDunkProbability(shooterImpact, shooter) ? "dunk" : "layup";
 
 const getTurnoverProbability = (
   ballHandler: Player,
@@ -783,6 +812,7 @@ const getTurnoverProbability = (
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   state: PossessionState,
+  action: PossessionAction,
   shotZoneHint: ShotZone | undefined,
   badgeContext: BadgeContext,
   focusComposureBonus = 0,
@@ -790,14 +820,26 @@ const getTurnoverProbability = (
   const ballHandlerBadgeModifiers = buildBadgeModifierTotals(ballHandler);
   const defenderPressure = average(defenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
-    return impact.stealing * 0.45 + impact.speed * 0.35 + impact.perimeterDefense * 0.2;
+    const badgeModifiers = buildBadgeModifierTotals(player);
+    return (
+      impact.stealing * 0.45 +
+      impact.speed * 0.35 +
+      impact.perimeterDefense * 0.2 +
+      badgeModifiers.pointOfAttackDefenderPressure +
+      badgeModifiers.pickpocketDefenderPressure
+    );
   }));
   const rimBallSecurityBonus =
-    shotZoneHint === "rim" ? ballHandlerBadgeModifiers.powerDriverRimBallSecurity : 0;
+    shotZoneHint === "rim"
+      ? ballHandlerBadgeModifiers.powerDriverRimBallSecurity +
+        ballHandlerBadgeModifiers.slitheryRimBallSecurity +
+        ballHandlerBadgeModifiers.quickFirstStepRimBallSecurity
+      : 0;
   const ballSecurity =
     ballHandlerImpact.handle * 0.65 +
     ballHandlerImpact.vision * 0.35 +
     ballHandlerBadgeModifiers.floorGeneralBallSecurity +
+    (action === "pass" ? ballHandlerBadgeModifiers.needleThreaderPassBallSecurity : 0) +
     rimBallSecurityBonus;
   const pressure = getPressure(state);
   const composureMultiplier = getComposureMultiplier(ballHandlerImpact.discipline + focusComposureBonus, pressure);
@@ -812,7 +854,16 @@ const getTurnoverProbability = (
       if (badgeId === "floor_general") {
         return -4 * scale;
       }
+      if (badgeId === "needle_threader" && action === "pass") {
+        return -4 * scale;
+      }
       if (badgeId === "power_driver" && shotZoneHint === "rim") {
+        return -(3 * scale);
+      }
+      if (badgeId === "slithery" && shotZoneHint === "rim") {
+        return -(3 * scale);
+      }
+      if (badgeId === "quick_first_step" && shotZoneHint === "rim") {
         return -(3 * scale);
       }
       return 0;
@@ -842,7 +893,12 @@ const getStealProbability = (
       defenderIndex,
       defenseKey,
       "turnover",
-      (badgeId, scale) => (badgeId === "point_of_attack" ? 4 * scale : 0),
+      (badgeId, scale) => {
+        if (badgeId === "point_of_attack" || badgeId === "pickpocket") {
+          return 4 * scale;
+        }
+        return 0;
+      },
     );
     recordBadgeStageContributions(
       badgeContext,
@@ -850,11 +906,17 @@ const getStealProbability = (
       defenderIndex,
       defenseKey,
       "turnover",
-      (badgeId, scale) => (badgeId === "point_of_attack" ? 0.01 * scale : 0),
+      (badgeId, scale) => {
+        if (badgeId === "point_of_attack" || badgeId === "pickpocket") {
+          return 0.01 * scale;
+        }
+        return 0;
+      },
     );
     return clamp(
       tuning.stealBase +
         badgeModifiers.pointOfAttackStealProbability +
+        badgeModifiers.pickpocketStealProbability +
         (defenderImpact.stealing * tuning.stealDefenseWeight +
           defenderImpact.speed * tuning.stealSpeedWeight -
           ballHandlerImpact.handle) /
@@ -876,6 +938,7 @@ const getAssistProbability = (
   const baseAssist =
     tuning.assistBase +
     badgeModifiers.floorGeneralAssistProbability +
+    badgeModifiers.needleThreaderAssistProbability +
     (passerImpact.vision * 0.5 +
       passerImpact.passing * 0.35 +
       passerImpact.handle * 0.15 -
@@ -887,7 +950,12 @@ const getAssistProbability = (
     passerIndex,
     offenseKey,
     "shot_make",
-    (badgeId, scale) => (badgeId === "floor_general" ? 0.01 * scale : 0),
+    (badgeId, scale) => {
+      if (badgeId === "floor_general" || badgeId === "needle_threader") {
+        return 0.01 * scale;
+      }
+      return 0;
+    },
   );
   return clamp(baseAssist, tuning.assistMin, tuning.assistMax);
 };
@@ -895,11 +963,14 @@ const getAssistProbability = (
 const getContestValue = (shotZone: ShotZone, defenderImpact: PlayerImpact, defender: Player): number => {
   const badgeModifiers = buildBadgeModifierTotals(defender);
   return shotZone === "rim"
-    ? defenderImpact.interiorDefense * 0.9 + defenderImpact.strength * 0.1
+    ? defenderImpact.interiorDefense * 0.9 + defenderImpact.strength * 0.1 + badgeModifiers.helpDefenderRimContest
     : defenderImpact.perimeterDefense * 0.9 + defenderImpact.speed * 0.1 + badgeModifiers.pointOfAttackPerimeterContest;
 };
 
 const getBlockProbability = (
+  shooter: Player,
+  shooterIndex: number,
+  offenseKey: TeamSide,
   defender: Player,
   defenderIndex: number,
   defenseKey: TeamSide,
@@ -921,14 +992,31 @@ const getBlockProbability = (
   const shooterResistance =
     shotZone === "rim"
       ? rimAttemptType === "dunk"
-        ? (shooterImpact.dunking * 0.55 + shooterImpact.strength * 0.3 + shooterImpact.speed * 0.15) *
-          tuning.dunkBlockResistance
+        ? ((shooterImpact.dunking * 0.55 +
+            shooterImpact.strength * 0.3 +
+            shooterImpact.speed * 0.15 +
+            buildBadgeModifierTotals(shooter).posterizerDunkBlockResistance) *
+            tuning.dunkBlockResistance)
         : (shooterImpact.shortRange * 0.6 + shooterImpact.speed * 0.25 + shooterImpact.strength * 0.15) *
           tuning.layupBlockResistance
       : shotZone === "midrange"
         ? shooterImpact.midrange * 0.7 + shooterImpact.speed * 0.15 + shooterImpact.handle * 0.15
         : shooterImpact.threePoint * 0.75 + shooterImpact.handle * 0.15 + shooterImpact.speed * 0.1;
-  const badgeBlockBonus = shotZone === "rim" ? badgeModifiers.anchorRimBlockProbability : 0;
+  const badgeBlockBonus =
+    shotZone === "rim"
+      ? badgeModifiers.anchorRimBlockProbability +
+        badgeModifiers.helpDefenderWeakSideBlock +
+        badgeModifiers.chaseDownRimBlockProbability
+      : 0;
+
+  recordBadgeStageContributions(
+    badgeContext,
+    shooter,
+    shooterIndex,
+    offenseKey,
+    "block",
+    (badgeId, scale) => (badgeId === "posterizer" && shotZone === "rim" && rimAttemptType === "dunk" ? -(4 * scale) : 0),
+  );
 
   recordBadgeStageContributions(
     badgeContext,
@@ -936,7 +1024,15 @@ const getBlockProbability = (
     defenderIndex,
     defenseKey,
     "block",
-    (badgeId, scale) => (badgeId === "anchor" && shotZone === "rim" ? 0.008 * scale : 0),
+    (badgeId, scale) => {
+      if (shotZone !== "rim") {
+        return 0;
+      }
+      if (badgeId === "anchor" || badgeId === "help_defender" || badgeId === "chase_down") {
+        return 0.008 * scale;
+      }
+      return 0;
+    },
   );
 
   return clamp(
@@ -957,6 +1053,7 @@ const getShotMakeProbability = (
   defenseKey: TeamSide,
   defenderImpact: PlayerImpact,
   state: PossessionState,
+  isAssisted: boolean,
   rng: () => number,
   badgeContext: BadgeContext,
   rimAttemptType?: RimAttemptType,
@@ -989,11 +1086,18 @@ const getShotMakeProbability = (
   const offenseEdge = (offenseValue - defenseValue) / tuning.shotOffenseDivisor;
   const badgeShotMakeBonus =
     (shotZone === "three" ? shooterBadgeModifiers.deepRangeThreeMake : 0) +
+    (shotZone === "midrange" ? shooterBadgeModifiers.midRangeMagicianMidrangeMake : 0) +
     (shotZone === "rim"
       ? shooterBadgeModifiers.rimPressureRimMake +
+        (rimAttemptType === "layup" ? shooterBadgeModifiers.slitheryLayupMake : 0) +
+        (rimAttemptType === "dunk" ? shooterBadgeModifiers.posterizerDunkMake : 0) +
         shooterBadgeModifiers.powerDriverRimMake +
         defenderBadgeModifiers.anchorOpponentRimMake
       : 0);
+  const assistedJumperBonus =
+    isAssisted && (shotZone === "three" || shotZone === "midrange")
+      ? shooterBadgeModifiers.catchAndShootAssistedJumperMake
+      : 0;
 
   recordBadgeStageContributions(
     badgeContext,
@@ -1005,11 +1109,23 @@ const getShotMakeProbability = (
       if (badgeId === "deep_range" && shotZone === "three") {
         return 0.015 * scale;
       }
+      if (badgeId === "mid_range_magician" && shotZone === "midrange") {
+        return 0.012 * scale;
+      }
       if (badgeId === "rim_pressure" && shotZone === "rim") {
+        return 0.012 * scale;
+      }
+      if (badgeId === "slithery" && shotZone === "rim" && rimAttemptType === "layup") {
+        return 0.01 * scale;
+      }
+      if (badgeId === "posterizer" && shotZone === "rim" && rimAttemptType === "dunk") {
         return 0.012 * scale;
       }
       if (badgeId === "power_driver" && shotZone === "rim") {
         return 0.01 * scale;
+      }
+      if (badgeId === "catch_and_shoot" && isAssisted && (shotZone === "three" || shotZone === "midrange")) {
+        return 0.012 * scale;
       }
       return 0;
     },
@@ -1024,7 +1140,7 @@ const getShotMakeProbability = (
   );
 
   const makeWithoutVariance = clamp(
-    zoneBase + tuning.shotMakeBase + attemptBonus + badgeShotMakeBonus + offenseEdge - defenseValue / tuning.shotContestDivisor - fatiguePenalty,
+    zoneBase + tuning.shotMakeBase + attemptBonus + badgeShotMakeBonus + assistedJumperBonus + offenseEdge - defenseValue / tuning.shotContestDivisor - fatiguePenalty,
     tuning.shotMakeMin,
     tuning.shotMakeMax,
   );
@@ -1050,21 +1166,36 @@ const getOffensiveReboundProbability = (
   const offenseReb = average(
     offenseTeam.roster.map((player, index) => {
       const impact = getPlayerImpact(player, offenseKey, index, touchCounts, leagueLevel);
-      return impact.offRebounding * 0.85 + impact.strength * 0.15 + buildBadgeModifierTotals(player).glassCleanerReboundWeight;
+      const badgeModifiers = buildBadgeModifierTotals(player);
+      return (
+        impact.offRebounding * 0.85 +
+        impact.strength * 0.15 +
+        badgeModifiers.glassCleanerReboundWeight +
+        badgeModifiers.putbackBossOffReboundWeight
+      );
     }),
   );
 
   const defenseReb = average(
     defenseTeam.roster.map((player, index) => {
       const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
-      return impact.defRebounding * 0.85 + impact.strength * 0.15 + buildBadgeModifierTotals(player).glassCleanerReboundWeight;
+      const badgeModifiers = buildBadgeModifierTotals(player);
+      return (
+        impact.defRebounding * 0.85 +
+        impact.strength * 0.15 +
+        badgeModifiers.glassCleanerReboundWeight +
+        badgeModifiers.boxOutBeastDefReboundWeight
+      );
     }),
   );
 
   const shotZoneBonus = shotZone === "three" ? tuning.longReboundThreeBonus : 0;
+  const suppression = average(
+    defenseTeam.roster.map((player) => buildBadgeModifierTotals(player).boxOutBeastOffReboundSuppression),
+  );
 
   return clamp(
-    tuning.offensiveReboundBase + (offenseReb - defenseReb) / tuning.offensiveReboundDivisor + shotZoneBonus,
+    tuning.offensiveReboundBase + (offenseReb - defenseReb) / tuning.offensiveReboundDivisor + shotZoneBonus - suppression,
     tuning.offensiveReboundMin,
     tuning.offensiveReboundMax,
   );
@@ -1090,6 +1221,7 @@ const getPutbackMakeProbability = (
   const badgePutbackBonus =
     shooterBadgeModifiers.rimPressurePutbackMake +
     shooterBadgeModifiers.glassCleanerPutbackMake +
+    shooterBadgeModifiers.putbackBossPutbackMake +
     defenderBadgeModifiers.anchorOpponentRimMake;
   recordBadgeStageContributions(
     badgeContext,
@@ -1104,6 +1236,9 @@ const getPutbackMakeProbability = (
       if (badgeId === "glass_cleaner") {
         return 0.008 * scale;
       }
+      if (badgeId === "putback_boss") {
+        return 0.01 * scale;
+      }
       return 0;
     },
   );
@@ -1113,10 +1248,21 @@ const getPutbackMakeProbability = (
     defenderIndex,
     defenseKey,
     "putback",
-    (badgeId, scale) => (badgeId === "anchor" ? -(0.012 * scale) : 0),
+    (badgeId, scale) => {
+      if (badgeId === "anchor") {
+        return -(0.012 * scale);
+      }
+      if (badgeId === "chase_down") {
+        return -(0.008 * scale);
+      }
+      return 0;
+    },
   );
   const makeWithoutVariance = clamp(
-    tuning.putbackBase + badgePutbackBonus + (offenseValue - defenseValue) / tuning.putbackDivisor,
+    tuning.putbackBase +
+      badgePutbackBonus -
+      defenderBadgeModifiers.chaseDownPutbackBlockProbability +
+      (offenseValue - defenseValue) / tuning.putbackDivisor,
     tuning.putbackMin,
     tuning.putbackMax,
   );
@@ -1217,6 +1363,7 @@ export const simulatePossession = (
       touchCounts,
       leagueLevel,
       state,
+      action,
       turnoverShotZoneHint,
       badgeContext,
       ballHandlerIsUser ? userFocusComposureBonus : 0,
@@ -1304,7 +1451,7 @@ export const simulatePossession = (
     shooterIsUser ? userFatigueLoadMultiplier : 1,
   );
   const shotZone = pickShotZone(shooter, shooterIndex, state.offenseKey, action, shooterImpact, badgeContext, rng);
-  const rimAttemptType = shotZone === "rim" ? pickRimAttemptType(shooterImpact, rng) : undefined;
+  const rimAttemptType = shotZone === "rim" ? pickRimAttemptType(shooter, shooterImpact, rng) : undefined;
 
   pushTrace(trace, "RESOLVE_SHOT_CONTEST");
   const shotDefenderIndex = pickDefenderIndex(
@@ -1326,6 +1473,9 @@ export const simulatePossession = (
   );
 
   const blockProb = getBlockProbability(
+    shooter,
+    shooterIndex,
+    state.offenseKey,
     shotDefender,
     shotDefenderIndex,
     state.defenseKey,
@@ -1360,6 +1510,7 @@ export const simulatePossession = (
         state.defenseKey,
         shotDefenderImpact,
         state,
+        pendingAssisterIndex !== undefined,
         rng,
         badgeContext,
         rimAttemptType,

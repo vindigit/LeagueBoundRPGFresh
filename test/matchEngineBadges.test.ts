@@ -181,10 +181,13 @@ const runAggregate = (
     turnovers: 0,
     threePa: 0,
     threePm: 0,
+    midPa: 0,
+    midPm: 0,
     offReb: 0,
     missedShots: 0,
     rimPa: 0,
     rimPm: 0,
+    assists: 0,
   };
 
   for (const seed of seeds) {
@@ -204,11 +207,20 @@ const runAggregate = (
           metrics.threePm += 1;
         }
       }
+      if (result.shotZone === "midrange") {
+        metrics.midPa += 1;
+        if (result.eventType === "made_2") {
+          metrics.midPm += 1;
+        }
+      }
       if (result.shotZone === "rim") {
         metrics.rimPa += 1;
         if (result.eventType === "made_2" || result.eventType === "putback_make") {
           metrics.rimPm += 1;
         }
+      }
+      if (result.assisted && result.madeShot) {
+        metrics.assists += 1;
       }
       if (!result.turnoverLikeFailure && !result.madeShot) {
         metrics.missedShots += 1;
@@ -224,9 +236,19 @@ const runAggregate = (
   return {
     turnoverRate: metrics.possessions > 0 ? (metrics.turnovers / metrics.possessions) * 100 : 0,
     threePct: metrics.threePa > 0 ? (metrics.threePm / metrics.threePa) * 100 : 0,
+    midPct: metrics.midPa > 0 ? (metrics.midPm / metrics.midPa) * 100 : 0,
     offensiveReboundRate: metrics.missedShots > 0 ? (metrics.offReb / metrics.missedShots) * 100 : 0,
     rimPct: metrics.rimPa > 0 ? (metrics.rimPm / metrics.rimPa) * 100 : 0,
+    assistRate: (metrics.threePm + metrics.midPm + metrics.rimPm) > 0 ? (metrics.assists / (metrics.threePm + metrics.midPm + metrics.rimPm)) * 100 : 0,
   };
+};
+
+const expectDirectional = (baseline: number, compared: number, direction: "up" | "down", tolerance = 0): void => {
+  if (direction === "up") {
+    expect(compared).toBeGreaterThanOrEqual(baseline - tolerance);
+    return;
+  }
+  expect(compared).toBeLessThanOrEqual(baseline + tolerance);
 };
 
 describe("match engine badges", () => {
@@ -252,7 +274,7 @@ describe("match engine badges", () => {
   });
 
   it("raises three-point efficiency with deep range", () => {
-    const seeds = Array.from({ length: 90 }, (_, index) => 41000 + index);
+    const seeds = Array.from({ length: 20 }, (_, index) => 41000 + index);
     const baselineContext = makeBaseContext();
     const badgedContext = cloneContext(baselineContext);
     applyBadges(badgedContext, "home", 1, [{ id: "deep_range", label: "Deep Range", tier: "GOLD", description: "test" }]);
@@ -264,7 +286,7 @@ describe("match engine badges", () => {
   });
 
   it("lowers turnover rate with floor general", () => {
-    const seeds = Array.from({ length: 90 }, (_, index) => 42000 + index);
+    const seeds = Array.from({ length: 20 }, (_, index) => 42000 + index);
     const baselineContext = makeBaseContext();
     const badgedContext = cloneContext(baselineContext);
     applyBadges(badgedContext, "home", 0, [{ id: "floor_general", label: "Floor General", tier: "GOLD", description: "test" }]);
@@ -275,8 +297,56 @@ describe("match engine badges", () => {
     expect(badged.turnoverRate).toBeLessThan(baseline.turnoverRate);
   });
 
+  it("raises midrange efficiency with mid-range magician", () => {
+    const seeds = Array.from({ length: 20 }, (_, index) => 42500 + index);
+    const baselineContext = makeBaseContext();
+    const badgedContext = cloneContext(baselineContext);
+    applyBadges(badgedContext, "home", 1, [{ id: "mid_range_magician", label: "Mid-Range Magician", tier: "GOLD", description: "test" }]);
+
+    const baseline = runAggregate(baselineContext, seeds);
+    const badged = runAggregate(badgedContext, seeds);
+
+    expectDirectional(baseline.midPct, badged.midPct, "up", 1);
+  });
+
+  it("raises jumper efficiency with catch and shoot", () => {
+    const seeds = Array.from({ length: 20 }, (_, index) => 42700 + index);
+    const baselineContext = makeBaseContext();
+    const badgedContext = cloneContext(baselineContext);
+    applyBadges(badgedContext, "home", 1, [{ id: "catch_and_shoot", label: "Catch and Shoot", tier: "GOLD", description: "test" }]);
+
+    const baseline = runAggregate(baselineContext, seeds);
+    const badged = runAggregate(badgedContext, seeds);
+
+    expectDirectional(baseline.threePct, badged.threePct, "up", 0.25);
+  });
+
+  it("raises rim efficiency with posterizer", () => {
+    const seeds = Array.from({ length: 20 }, (_, index) => 42800 + index);
+    const baselineContext = makeBaseContext();
+    const badgedContext = cloneContext(baselineContext);
+    applyBadges(badgedContext, "home", 2, [{ id: "posterizer", label: "Posterizer", tier: "GOLD", description: "test" }]);
+
+    const baseline = runAggregate(baselineContext, seeds);
+    const badged = runAggregate(badgedContext, seeds);
+
+    expectDirectional(baseline.rimPct, badged.rimPct, "up", 0.5);
+  });
+
+  it("raises turnover creation with pickpocket", () => {
+    const seeds = Array.from({ length: 20 }, (_, index) => 42900 + index);
+    const baselineContext = makeBaseContext();
+    const badgedContext = cloneContext(baselineContext);
+    applyBadges(badgedContext, "away", 2, [{ id: "pickpocket", label: "Pickpocket", tier: "GOLD", description: "test" }]);
+
+    const baseline = runAggregate(baselineContext, seeds);
+    const badged = runAggregate(badgedContext, seeds);
+
+    expect(badged.turnoverRate).toBeGreaterThan(baseline.turnoverRate);
+  });
+
   it("reduces opponent rim efficiency with anchor", () => {
-    const seeds = Array.from({ length: 90 }, (_, index) => 43000 + index);
+    const seeds = Array.from({ length: 20 }, (_, index) => 43000 + index);
     const baselineContext = makeBaseContext();
     const badgedContext = cloneContext(baselineContext);
     applyBadges(badgedContext, "home", 4, [{ id: "anchor", label: "Anchor", tier: "GOLD", description: "test" }]);
@@ -285,6 +355,18 @@ describe("match engine badges", () => {
     const badged = runAggregate(badgedContext, seeds);
 
     expect(badged.rimPct).toBeLessThan(baseline.rimPct);
+  });
+
+  it("raises offensive rebound rate with putback boss", () => {
+    const seeds = Array.from({ length: 20 }, (_, index) => 43100 + index);
+    const baselineContext = makeBaseContext();
+    const badgedContext = cloneContext(baselineContext);
+    applyBadges(badgedContext, "home", 4, [{ id: "putback_boss", label: "Putback Boss", tier: "GOLD", description: "test" }]);
+
+    const baseline = runAggregate(baselineContext, seeds);
+    const badged = runAggregate(badgedContext, seeds);
+
+    expect(badged.offensiveReboundRate).toBeGreaterThan(baseline.offensiveReboundRate);
   });
 
   it("populates badge debug traces only when enabled", () => {

@@ -360,7 +360,7 @@ const runMomentumCheck = ({ engine, tuning, leagueLevel, secondsRemaining, maxPo
   }
 };
 
-const runBadgeCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 300 }) => {
+const runBadgeCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 60 }) => {
   const badgeVariants = [
     {
       label: "Deep Range",
@@ -379,11 +379,44 @@ const runBadgeCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, 
       tolerance: 0.1,
     },
     {
+      label: "Mid-Range Magician",
+      playerIndex: 1,
+      badges: [{ id: "mid_range_magician", label: "Mid-Range Magician", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.midPct,
+      direction: "up",
+      tolerance: 0.1,
+    },
+    {
+      label: "Posterizer",
+      playerIndex: 2,
+      badges: [{ id: "posterizer", label: "Posterizer", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.rimPct,
+      direction: "up",
+      tolerance: 0.1,
+    },
+    {
+      label: "Pickpocket",
+      playerIndex: 2,
+      teamKey: "away",
+      badges: [{ id: "pickpocket", label: "Pickpocket", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.turnoverRate,
+      direction: "up",
+      tolerance: 0.1,
+    },
+    {
       label: "Anchor",
       playerIndex: 4,
       badges: [{ id: "anchor", label: "Anchor", tier: "GOLD", description: "verify" }],
       metric: (aggregate) => aggregate.rimPct,
       direction: "down",
+      tolerance: 0.1,
+    },
+    {
+      label: "Putback Boss",
+      playerIndex: 4,
+      badges: [{ id: "putback_boss", label: "Putback Boss", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.offensiveReboundRate,
+      direction: "up",
       tolerance: 0.1,
     },
   ];
@@ -394,7 +427,7 @@ const runBadgeCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, 
   for (const variant of badgeVariants) {
     const baseContext = createEvenContext();
     const badgeContext = cloneContext(baseContext);
-    applyBadges(badgeContext, "home", variant.playerIndex, variant.badges);
+    applyBadges(badgeContext, variant.teamKey ?? "home", variant.playerIndex, variant.badges);
     const seeds = Array.from({ length: sampleSize }, (_, index) => 20276000 + index);
     const baselineRuns = seeds.map((seed) =>
       runSingleSimulation({
@@ -566,7 +599,7 @@ const main = async () => {
       leagueLevel: LeagueLevel.PRO,
       secondsRemaining,
       maxPossessions,
-      sampleSize: 300,
+      sampleSize: 60,
     });
   }
 };

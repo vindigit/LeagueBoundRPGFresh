@@ -2,12 +2,13 @@
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
 import { applyAllocation } from "../../../builder/allocate";
 import { getTotalBuildCost } from "../../../builder/progression";
+import { BuilderReviewSection, buildBuilderReviewSummary } from "../../../components/builderReview";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { BuildBackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
 import type { PlayerAttributes, Position } from "../../../types/player";
 import { clampHeight, clampWeight } from "../constants/bodyMapping";
 import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
-import { createBuildBackstorySeed, generateBackstoryFromBuildInput, getBackstoryGrowthOutlook, getDefaultSecondaryPosition } from "../generator";
+import { createBuildBackstorySeed, generateBackstoryFromBuildInput, getDefaultSecondaryPosition } from "../generator";
 
 const POSITIONS: readonly Position[] = ["PG", "SG", "SF", "PF", "C"];
 const BODY_FRAMES: readonly BodyFrame[] = ["Lean", "Athletic", "Stocky"];
@@ -267,6 +268,7 @@ export function BackstoryScreen() {
 
   const previewSeed = useMemo(() => createBuildBackstorySeed(draftInput), [draftInput]);
   const preview = useMemo(() => generateBackstoryFromBuildInput(draftInput, { seedOverride: previewSeed }), [draftInput, previewSeed]);
+  const previewBuilderReview = useMemo(() => buildBuilderReviewSummary(preview.dna), [preview.dna]);
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
   const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
@@ -511,8 +513,6 @@ export function BackstoryScreen() {
           <Text className="mt-1 text-sm text-slate-300">
             {preview.identity.height.feet}'{preview.identity.height.inches}\" • {preview.identity.weightLbs} lbs
           </Text>
-          <Text className="mt-1 text-sm text-slate-300">Build: {preview.builderProfile.classification.taxonomy.label}</Text>
-          <Text className="mt-1 text-sm text-slate-300">Compatibility Archetype: {preview.identity.archetype}</Text>
 
           <View className="mt-4 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
             <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Traits</Text>
@@ -525,21 +525,7 @@ export function BackstoryScreen() {
             </View>
           </View>
 
-          <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Badges</Text>
-            <View className="mt-2 flex-row flex-wrap gap-2">
-              {preview.builderProfile.badges.length > 0 ? preview.builderProfile.badges.map((badge) => (
-                <View key={badge.id} className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-3 py-1">
-                  <Text className="text-xs font-semibold text-cyan-100">{badge.label} {badge.tier}</Text>
-                </View>
-              )) : <Text className="text-xs text-slate-300">No badges unlocked at the current build thresholds.</Text>}
-            </View>
-          </View>
-
-          <View className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Growth Range</Text>
-            <Text className="mt-1 text-sm font-semibold text-slate-100">{getBackstoryGrowthOutlook(preview.dna.growthCurve)}</Text>
-          </View>
+          <BuilderReviewSection summary={previewBuilderReview} variant="slate" className="mt-3" />
 
           <Pressable
             className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"

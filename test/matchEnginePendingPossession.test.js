@@ -177,4 +177,67 @@ describe("pending possession plumbing", () => {
     expect(resolved.lastStep.metrics.possessions).toBe(pendingMetrics + 1);
     expect(resolved.lastStep.result).toBeDefined();
   });
+
+  it("exposes authoritative possession snapshots and debug traces for normal and resolved steps", () => {
+    const context = createContext();
+    const store = createMatchEngineStore();
+    let snapshot = store.startMatch({
+      home: context.home,
+      away: context.away,
+      userPlayerId: "h1",
+      seed: 20260214,
+      keyMomentRngChance: 1,
+      totalSeconds: 48 * 60,
+    });
+
+    expect(snapshot.currentPossession).toEqual(snapshot.lastStep.state);
+    expect(snapshot.lastTrace.kind).toBe("start");
+    expect(snapshot.lastTrace.afterState).toEqual(snapshot.currentPossession);
+    expect(snapshot.totalSeconds).toBe(48 * 60);
+    expect(snapshot.matchContext.home.roster[0].name).toBeDefined();
+    expect(snapshot.userPlayerLocation).toEqual({ teamKey: "home", playerIndex: 0 });
+
+    do {
+      snapshot = store.stepPossession();
+    } while (!snapshot.pausedForPendingPossession);
+
+    expect(snapshot.lastTrace.kind).toBe("step");
+    expect(snapshot.lastTrace.pendingPossession).toBeDefined();
+    expect(snapshot.lastTrace.afterState).toEqual(snapshot.pendingPossession.state);
+    expect(snapshot.currentPossession).toEqual(snapshot.pendingPossession.state);
+
+    snapshot = store.resolveKeyMoment({
+      pendingId: snapshot.pendingKeyMoment.id,
+      choiceId: snapshot.pendingKeyMoment.options[0].id,
+    });
+
+    expect(snapshot.lastTrace.kind).toBe("resolved_key_moment");
+    expect(snapshot.lastTrace.result).toBeDefined();
+    expect(snapshot.lastTrace.resolvedKeyMoment).toBeDefined();
+    expect(snapshot.lastTrace.afterState).toEqual(snapshot.lastStep.result.nextState);
+    expect(snapshot.currentPossession).toEqual(snapshot.lastStep.state);
+  });
+
+  it("suppresses key moments at the store layer in full_game mode", () => {
+    const context = createContext();
+    const store = createMatchEngineStore();
+    let snapshot = store.startMatch({
+      home: context.home,
+      away: context.away,
+      userPlayerId: "h1",
+      seed: 20260214,
+      keyMomentRngChance: 1,
+      simulationMode: "full_game",
+    });
+
+    for (let i = 0; i < 40 && snapshot.currentPossession?.secondsRemaining > 0; i += 1) {
+      snapshot = store.stepPossession();
+      expect(snapshot.pausedForPendingPossession).toBe(false);
+      expect(snapshot.pendingKeyMoment).toBeUndefined();
+      expect(snapshot.pendingPossession).toBeUndefined();
+    }
+
+    expect(snapshot.simulationMode).toBe("full_game");
+    expect(snapshot.lastTrace.kind).toBe("step");
+  });
 });

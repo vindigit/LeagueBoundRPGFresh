@@ -17,12 +17,24 @@ import {
   synthesizeBackstoryInputFromLegacy,
 } from "../features/backstory/generator";
 import { createCareerCreationNewsItem, createPostgameNewsItem } from "../features/backstory/news";
+import { computeOverall } from "../builder/derivedRatings";
 import {
   CareerStatus,
   LeagueLevel,
   type CareerActions,
   type CareerState,
+  type ExileStatus,
 } from "../types/career";
+import type {
+  CareerPhase,
+  EligibilityState,
+  ExileState,
+  FinanceState,
+  InjuryState,
+  SchoolPath,
+  SeasonSchedule,
+  StarRating,
+} from "../types/careerProgression";
 import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
 import type { BackstoryInput, BuildBackstoryInput, GeneratedBadgeProfile, HeightPreset, WeightPreset } from "../types/backstory";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
@@ -32,6 +44,7 @@ type CareerStore = CareerState & CareerActions;
 const NEWS_FEED_LIMIT = 100;
 const clampAttribute = (value: number): number => Math.min(99, Math.max(0, value));
 const clampMorale = (value: number): number => Math.min(100, Math.max(0, value));
+const clampVisibility = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
 
 const defaultPlayer: Player = {
   id: "",
@@ -75,14 +88,258 @@ const defaultPlayer: Player = {
 
 const getInitialCareerView = (): CareerState["view"] => (BACKSTORY_V1_ENABLED ? "BACKSTORY" : "HUB");
 
+const careerPhaseFromLeagueLevel = (leagueLevel: LeagueLevel): CareerPhase => {
+  switch (leagueLevel) {
+    case LeagueLevel.MIDDLE_SCHOOL:
+      return "MIDDLE_SCHOOL_AAU";
+    case LeagueLevel.HIGH_SCHOOL:
+      return "HIGH_SCHOOL";
+    case LeagueLevel.COLLEGE:
+      return "COLLEGE";
+    case LeagueLevel.PRO:
+    default:
+      return "PRO";
+  }
+};
+
+const deriveLegacyExile = (exileState: ExileState): ExileStatus | null =>
+  exileState.currentMode === "NONE" ? null : exileState.currentMode;
+
+const defaultSchoolPathForPhase = (careerPhase: CareerPhase): SchoolPath =>
+  careerPhase === "HIGH_SCHOOL" ? "STATE_5A" : "LOCAL_3A";
+
+const defaultScoutVisibilityForPhase = (careerPhase: CareerPhase): number => {
+  switch (careerPhase) {
+    case "MIDDLE_SCHOOL_AAU":
+      return 20;
+    case "HIGH_SCHOOL":
+      return 45;
+    case "COLLEGE":
+      return 70;
+    case "PRO":
+    default:
+      return 90;
+  }
+};
+
+const deriveStarRating = (player: Player): StarRating => {
+  const overall = computeOverall(player.attributes, player.position);
+  const potential = player.dna?.potential ?? overall;
+  const composite = Math.round(overall * 0.7 + potential * 0.3);
+  if (composite >= 88) {
+    return 5;
+  }
+  if (composite >= 78) {
+    return 4;
+  }
+  if (composite >= 68) {
+    return 3;
+  }
+  if (composite >= 58) {
+    return 2;
+  }
+  return 1;
+};
+
+const createDefaultEligibilityState = (careerPhase: CareerPhase): EligibilityState => ({
+  status: "ELIGIBLE",
+  amateurStanding: careerPhase !== "PRO",
+  academicRisk: 0,
+  complianceRisk: 0,
+  suspendedGamesRemaining: 0,
+  probationEndsWeek: undefined,
+  seasonsRemaining: careerPhase === "PRO" ? 99 : careerPhase === "COLLEGE" ? 4 : 4,
+  yearsRemaining: careerPhase === "PRO" ? 99 : careerPhase === "COLLEGE" ? 4 : careerPhase === "HIGH_SCHOOL" ? 4 : 1,
+  notes: [],
+});
+
+const createDefaultInjuryState = (): InjuryState => ({
+  status: "HEALTHY",
+  bodyArea: undefined,
+  severity: undefined,
+  diagnosis: undefined,
+  recoveryWeeksRemaining: 0,
+  lingeringRisk: 0,
+  restrictions: [],
+});
+
+const createDefaultFinanceState = (): FinanceState => ({
+  ledger: {
+    nilEarnings: 0,
+    salaryEarnings: 0,
+    bonuses: 0,
+    fines: 0,
+    recurringExpenses: 0,
+    debt: 0,
+  },
+  recurringObligations: [],
+  lastNilWeek: undefined,
+  lastUpdatedAt: Date.now(),
+});
+
+const createDefaultExileState = (input: {
+  currentMode?: ExileState["currentMode"];
+  triggerReason?: ExileState["triggerReason"];
+  enteredAtPhase?: CareerPhase;
+  enteredAtWeek?: number;
+  minimumDurationWeeks?: number;
+  returnEligibleWeek?: number;
+} = {}): ExileState => ({
+  currentMode: input.currentMode ?? "NONE",
+  triggerReason: input.triggerReason ?? "NONE",
+  enteredAtPhase: input.enteredAtPhase,
+  enteredAtWeek: input.enteredAtWeek,
+  minimumDurationWeeks: input.minimumDurationWeeks ?? 0,
+  returnEligibleWeek: input.returnEligibleWeek,
+  appealUsed: false,
+  failedReturnAttempts: 0,
+  blockedDestinationIds: [],
+  notes: [],
+});
+
+const createDefaultSeasonSchedule = (
+  currentYear: number,
+  seasonNumber: number,
+  careerPhase: CareerPhase,
+  currentWeek: number,
+): SeasonSchedule => {
+  const seasonId = `${careerPhase}-${currentYear}-${seasonNumber}`;
+  const weeks = [
+    {
+      id: `${seasonId}-week-1`,
+      weekNumber: 1,
+      label: "Opening Week",
+      phase: careerPhase,
+      windows: [
+        { id: `${seasonId}-opening`, type: "REGULAR_SEASON", label: "Regular Season Opens", startWeek: 1, endWeek: 1, isActive: currentWeek === 1 },
+      ],
+      matchups: [],
+      notes: [],
+    },
+    {
+      id: `${seasonId}-week-2`,
+      weekNumber: 2,
+      label: "Recruiting Watch",
+      phase: careerPhase,
+      windows: [
+        { id: `${seasonId}-recruiting`, type: "RECRUITING", label: "Recruiting Window", startWeek: 2, endWeek: 2, isActive: currentWeek === 2 },
+      ],
+      matchups: [],
+      notes: [],
+    },
+    {
+      id: `${seasonId}-week-3`,
+      weekNumber: 3,
+      label: "Showcase Circuit",
+      phase: careerPhase,
+      windows: [
+        { id: `${seasonId}-showcase`, type: "SHOWCASE", label: "Showcase Events", startWeek: 3, endWeek: 3, isActive: currentWeek === 3 },
+      ],
+      matchups: [],
+      notes: [],
+    },
+    {
+      id: `${seasonId}-week-4`,
+      weekNumber: 4,
+      label: "Offseason Setup",
+      phase: careerPhase,
+      windows: [
+        { id: `${seasonId}-offseason`, type: "OFFSEASON", label: "Offseason Planning", startWeek: 4, endWeek: 4, isActive: currentWeek >= 4 },
+        {
+          id: `${seasonId}-portal`,
+          type: "TRANSFER_PORTAL",
+          label: "Transfer Portal",
+          startWeek: 4,
+          endWeek: 4,
+          isActive: currentWeek >= 4 && (careerPhase === "COLLEGE" || careerPhase === "PRO"),
+        },
+      ],
+      matchups: [],
+      notes: [],
+    },
+  ];
+
+  const currentWeekId = weeks.find((week) => week.weekNumber === currentWeek)?.id ?? weeks[0].id;
+  return {
+    seasonId,
+    seasonLabel: `${currentYear} Season ${seasonNumber}`,
+    phase: careerPhase,
+    currentWeekId,
+    weeks,
+  };
+};
+
+const createCareerProgressionState = (input: {
+  player: Player;
+  leagueLevel: LeagueLevel;
+  currentYear: number;
+  seasonNumber: number;
+  currentWeek: number;
+  exile?: ExileStatus | null;
+}) => {
+  const careerPhase = careerPhaseFromLeagueLevel(input.leagueLevel);
+  const exileState =
+    input.exile == null
+      ? createDefaultExileState()
+      : createDefaultExileState({
+          currentMode: input.exile,
+          triggerReason: "LEGACY_MIGRATION",
+          enteredAtPhase: careerPhase,
+          enteredAtWeek: input.currentWeek,
+          minimumDurationWeeks: 4,
+          returnEligibleWeek: input.currentWeek + 4,
+        });
+
+  return {
+    careerPhase,
+    starRating: deriveStarRating(input.player),
+    scoutVisibility: defaultScoutVisibilityForPhase(careerPhase),
+    teamInterestById: {},
+    schoolPath: defaultSchoolPathForPhase(careerPhase),
+    offers: [],
+    seasonSchedule: createDefaultSeasonSchedule(input.currentYear, input.seasonNumber, careerPhase, input.currentWeek),
+    relationships: {},
+    eligibility: createDefaultEligibilityState(careerPhase),
+    injuryState: createDefaultInjuryState(),
+    financeState: createDefaultFinanceState(),
+    legacyPerks: [],
+    exileState,
+    exile: deriveLegacyExile(exileState),
+  };
+};
+
+const syncSeasonScheduleWeek = (seasonSchedule: SeasonSchedule, currentWeek: number): SeasonSchedule => ({
+  ...seasonSchedule,
+  currentWeekId: seasonSchedule.weeks.find((week) => week.weekNumber === currentWeek)?.id ?? seasonSchedule.currentWeekId,
+  weeks: seasonSchedule.weeks.map((week) => ({
+    ...week,
+    windows: week.windows.map((window) => ({
+      ...window,
+      isActive: currentWeek >= window.startWeek && currentWeek <= window.endWeek,
+    })),
+  })),
+});
+
 const initialCareerState: CareerState = {
   player: defaultPlayer,
   leagueLevel: LeagueLevel.MIDDLE_SCHOOL,
+  careerPhase: "MIDDLE_SCHOOL_AAU",
   status: CareerStatus.ACTIVE,
+  starRating: 1,
+  scoutVisibility: 20,
   currentYear: 2026,
   seasonNumber: 1,
   currentWeek: 1,
   teamId: null,
+  teamInterestById: {},
+  schoolPath: "LOCAL_3A",
+  offers: [],
+  seasonSchedule: createDefaultSeasonSchedule(2026, 1, "MIDDLE_SCHOOL_AAU", 1),
+  relationships: {},
+  eligibility: createDefaultEligibilityState("MIDDLE_SCHOOL_AAU"),
+  injuryState: createDefaultInjuryState(),
+  financeState: createDefaultFinanceState(),
+  legacyPerks: [],
   isGoatPath: false,
   view: getInitialCareerView(),
   currentNarrativeFile: "",
@@ -90,6 +347,7 @@ const initialCareerState: CareerState = {
   newsFeed: [],
   ovrBudget: 60,
   exile: null,
+  exileState: createDefaultExileState(),
 };
 
 const emptyBoxScore = (): MatchBoxScore => ({
@@ -225,24 +483,34 @@ export const useCareerStore = create<CareerStore>()(
           ? generateBackstoryFromBuildInput(input, { seedOverride: seed })
           : generateBackstoryFromInput(input, { seedOverride: seed });
         const creationNews = createCareerCreationNewsItem(generated.identity, initialCareerState.currentWeek);
+        const initializedPlayer: Player = {
+          ...initialCareerState.player,
+          id: seed.toString(),
+          name: generated.identity.displayName,
+          age: 13,
+          position: generated.identity.primaryPosition,
+          secondaryPosition: generated.identity.secondaryPosition,
+          archetype: generated.identity.archetype,
+          identity: generated.identity,
+          dna: {
+            ...generated.dna,
+            builderProfile: generated.dna.builderProfile ?? generated.builderProfile,
+          },
+          attributes: generated.startingAttributes,
+        };
+        const progressionState = createCareerProgressionState({
+          player: initializedPlayer,
+          leagueLevel: initialCareerState.leagueLevel,
+          currentYear: initialCareerState.currentYear,
+          seasonNumber: initialCareerState.seasonNumber,
+          currentWeek: initialCareerState.currentWeek,
+          exile: null,
+        });
 
         set(() => ({
           ...initialCareerState,
-          player: {
-            ...initialCareerState.player,
-            id: seed.toString(),
-            name: generated.identity.displayName,
-            age: 13,
-            position: generated.identity.primaryPosition,
-            secondaryPosition: generated.identity.secondaryPosition,
-            archetype: generated.identity.archetype,
-            identity: generated.identity,
-            dna: {
-              ...generated.dna,
-              builderProfile: generated.dna.builderProfile ?? generated.builderProfile,
-            },
-            attributes: generated.startingAttributes,
-          },
+          ...progressionState,
+          player: initializedPlayer,
           view: "HUB",
           newsFeed: [creationNews],
         }));
@@ -309,16 +577,43 @@ export const useCareerStore = create<CareerStore>()(
         });
       },
       advanceWeek: () => {
-        set((state) => ({ currentWeek: state.currentWeek + 1 }));
+        set((state) => {
+          const nextWeek = state.currentWeek + 1;
+          return {
+            currentWeek: nextWeek,
+            seasonSchedule: syncSeasonScheduleWeek(state.seasonSchedule, nextWeek),
+          };
+        });
       },
       advanceSeason: () => {
         set((state) => ({
           seasonNumber: state.seasonNumber + 1,
           currentWeek: 1,
+          seasonSchedule: createDefaultSeasonSchedule(
+            state.currentYear,
+            state.seasonNumber + 1,
+            state.careerPhase,
+            1,
+          ),
         }));
       },
       updateLeagueLevel: (level) => {
-        set(() => ({ leagueLevel: level }));
+        set((state) => {
+          const careerPhase = careerPhaseFromLeagueLevel(level);
+          return {
+            leagueLevel: level,
+            careerPhase,
+            scoutVisibility: defaultScoutVisibilityForPhase(careerPhase),
+            seasonSchedule: createDefaultSeasonSchedule(
+              state.currentYear,
+              state.seasonNumber,
+              careerPhase,
+              state.currentWeek,
+            ),
+            eligibility: createDefaultEligibilityState(careerPhase),
+            exileState: state.exileState.enteredAtPhase ? { ...state.exileState, enteredAtPhase: careerPhase } : state.exileState,
+          };
+        });
       },
       updateStatus: (status) => {
         set(() => ({ status }));
@@ -398,7 +693,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -407,12 +702,29 @@ export const useCareerStore = create<CareerStore>()(
 
         const typedState = persistedState as Partial<CareerStore> & { player?: LegacyPlayerStateInput };
         if (!typedState.player) {
+          const fallbackPlayer = defaultPlayer;
+          const fallbackLeagueLevel = typedState.leagueLevel ?? LeagueLevel.MIDDLE_SCHOOL;
+          const fallbackCurrentYear = typedState.currentYear ?? initialCareerState.currentYear;
+          const fallbackSeasonNumber = typedState.seasonNumber ?? initialCareerState.seasonNumber;
+          const fallbackCurrentWeek = typedState.currentWeek ?? initialCareerState.currentWeek;
+          const progressionState = createCareerProgressionState({
+            player: fallbackPlayer,
+            leagueLevel: fallbackLeagueLevel,
+            currentYear: fallbackCurrentYear,
+            seasonNumber: fallbackSeasonNumber,
+            currentWeek: fallbackCurrentWeek,
+            exile: typedState.exile ?? null,
+          });
           return {
             ...typedState,
+            leagueLevel: fallbackLeagueLevel,
+            currentYear: fallbackCurrentYear,
+            seasonNumber: fallbackSeasonNumber,
+            currentWeek: fallbackCurrentWeek,
             view: getInitialCareerView(),
             newsFeed: [],
             ovrBudget: typedState.ovrBudget ?? 60,
-            exile: typedState.exile ?? null,
+            ...progressionState,
           };
         }
 
@@ -420,14 +732,53 @@ export const useCareerStore = create<CareerStore>()(
         const migratedPlayer = migratePlayerWithBackstory(normalizedPlayer);
         const newsFeed = Array.isArray(typedState.newsFeed) ? typedState.newsFeed : [];
         const shouldUseBackstoryView = !isInitializedPlayer(migratedPlayer) && BACKSTORY_V1_ENABLED;
+        const leagueLevel = typedState.leagueLevel ?? LeagueLevel.MIDDLE_SCHOOL;
+        const currentYear = typedState.currentYear ?? initialCareerState.currentYear;
+        const seasonNumber = typedState.seasonNumber ?? initialCareerState.seasonNumber;
+        const currentWeek = typedState.currentWeek ?? initialCareerState.currentWeek;
+        const progressionState = createCareerProgressionState({
+          player: migratedPlayer,
+          leagueLevel,
+          currentYear,
+          seasonNumber,
+          currentWeek,
+          exile: typedState.exile ?? null,
+        });
+        const existingExileState = typedState.exileState
+          ? {
+              ...progressionState.exileState,
+              ...typedState.exileState,
+              currentMode: typedState.exileState.currentMode ?? progressionState.exileState.currentMode,
+              triggerReason: typedState.exileState.triggerReason ?? progressionState.exileState.triggerReason,
+              blockedDestinationIds: typedState.exileState.blockedDestinationIds ?? progressionState.exileState.blockedDestinationIds,
+              notes: typedState.exileState.notes ?? progressionState.exileState.notes,
+            }
+          : progressionState.exileState;
 
         return {
           ...typedState,
           player: migratedPlayer,
+          leagueLevel,
+          currentYear,
+          seasonNumber,
+          currentWeek,
+          careerPhase: typedState.careerPhase ?? progressionState.careerPhase,
           view: shouldUseBackstoryView ? "BACKSTORY" : typedState.view ?? "HUB",
           newsFeed,
+          starRating: typedState.starRating ?? progressionState.starRating,
+          scoutVisibility: clampVisibility(typedState.scoutVisibility ?? progressionState.scoutVisibility),
+          teamInterestById: typedState.teamInterestById ?? progressionState.teamInterestById,
+          schoolPath: typedState.schoolPath ?? progressionState.schoolPath,
+          offers: typedState.offers ?? progressionState.offers,
+          seasonSchedule: typedState.seasonSchedule ?? progressionState.seasonSchedule,
+          relationships: typedState.relationships ?? progressionState.relationships,
+          eligibility: typedState.eligibility ?? progressionState.eligibility,
+          injuryState: typedState.injuryState ?? progressionState.injuryState,
+          financeState: typedState.financeState ?? progressionState.financeState,
+          legacyPerks: typedState.legacyPerks ?? progressionState.legacyPerks,
           ovrBudget: typedState.ovrBudget ?? 60,
-          exile: typedState.exile ?? null,
+          exileState: existingExileState,
+          exile: typedState.exile ?? deriveLegacyExile(existingExileState),
           lastMatchResult: typedState.lastMatchResult
             ? {
                 ...typedState.lastMatchResult,
@@ -444,6 +795,18 @@ export const useCareerStore = create<CareerStore>()(
         seasonNumber: state.seasonNumber,
         currentWeek: state.currentWeek,
         teamId: state.teamId,
+        careerPhase: state.careerPhase,
+        starRating: state.starRating,
+        scoutVisibility: state.scoutVisibility,
+        teamInterestById: state.teamInterestById,
+        schoolPath: state.schoolPath,
+        offers: state.offers,
+        seasonSchedule: state.seasonSchedule,
+        relationships: state.relationships,
+        eligibility: state.eligibility,
+        injuryState: state.injuryState,
+        financeState: state.financeState,
+        legacyPerks: state.legacyPerks,
         isGoatPath: state.isGoatPath,
         view: state.view,
         currentNarrativeFile: state.currentNarrativeFile,
@@ -456,6 +819,7 @@ export const useCareerStore = create<CareerStore>()(
         newsFeed: state.newsFeed,
         ovrBudget: state.ovrBudget,
         exile: state.exile,
+        exileState: state.exileState,
       }),
     },
   ),

@@ -1,5 +1,5 @@
 # LeagueBoundRPGFresh
-NEW Text Based RPG. I messed up the OG
+NEW Text Based RPG.
 
 ## Active App vs Archived Folder
 
@@ -15,6 +15,6 @@ NEW Text Based RPG. I messed up the OG
   - `homeCourt.enabled`
   - `homeCourt.shotMultiplier` (applies to shot make + putback make probability)
   - `homeCourt.turnoverMultiplier` (applies to turnover probability; home reduced, away inverse increased)
-- Intended magnitude is near-neutral: target roughly a `1.0-2.5%` home win-rate bump for evenly matched teams.
+- Intended magnitude is subtle: target roughly a `2-5%` home win-rate bump for evenly matched teams.
 - Validate home-court effect deterministically:
   - `npm run sim:avg10 -- --check-home-court`

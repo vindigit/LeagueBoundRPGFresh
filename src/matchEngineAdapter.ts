@@ -25,6 +25,19 @@ export interface PendingPossession {
   pending: KeyMomentPending;
 }
 
+export interface UserPlayerLocation {
+  teamKey: "home" | "away";
+  playerIndex: number;
+}
+
+export interface ResolvedKeyMoment {
+  pendingId: string;
+  type: KeyMomentPending["type"];
+  success: boolean;
+  promptText: string;
+  resultSummaryText: string;
+}
+
 export interface AdapterStepOutput {
   state: PossessionState;
   metrics: SimMetrics;
@@ -32,6 +45,7 @@ export interface AdapterStepOutput {
   keyMoment?: KeyMomentPending;
   pendingPossession?: PendingPossession;
   pendingKeyMoment?: KeyMomentPending;
+  resolvedKeyMoment?: ResolvedKeyMoment;
   userInkState?: { id: string } & InkPlayerState;
 }
 
@@ -48,6 +62,8 @@ export interface MatchEngineAdapter {
   stepPossession(): AdapterStepOutput;
   runPossessions(possessions: number): AdapterRunOutput;
   getState(): AdapterStepOutput;
+  getContext(): MatchContext;
+  getUserPlayerLocation(): UserPlayerLocation | undefined;
   updateUserInkState(next: InkPlayerState): AdapterStepOutput;
   resolvePendingKeyMoment(input: KeyMomentResolutionInput): AdapterStepOutput;
 }
@@ -60,6 +76,7 @@ export interface MatchEngineAdapterOptions {
   leagueLevel?: LeagueLevel;
   secondsRemaining?: number;
   keyMomentRngChance?: number;
+  enableKeyMoments?: boolean;
 }
 
 const normalizeTeamInput = (team: TeamInput): Team => {
@@ -156,6 +173,7 @@ export const createMatchEngineAdapter = (
   const rng = createSeededRng(options.seed);
   const leagueLevel = options.leagueLevel ?? LeagueLevel.PRO;
   const keyMomentRngChance = options.keyMomentRngChance ?? 0.08;
+  const enableKeyMoments = options.enableKeyMoments ?? true;
   const totalSeconds = options.secondsRemaining ?? 20 * 60;
   const userLocation = getPlayerLocation(context, options.userPlayerId);
   let state = initializePossession(context, leagueLevel, rng, totalSeconds);
@@ -207,6 +225,9 @@ export const createMatchEngineAdapter = (
   };
 
   const buildKeyMoment = (previousState: PossessionState): KeyMomentPending | undefined => {
+    if (!enableKeyMoments) {
+      return undefined;
+    }
     if (!userLocation) {
       return undefined;
     }
@@ -260,6 +281,7 @@ export const createMatchEngineAdapter = (
     metrics,
     pendingPossession,
     pendingKeyMoment,
+    resolvedKeyMoment: undefined,
     userInkState: getUserInkState(),
     ...overrides,
   });
@@ -347,6 +369,15 @@ export const createMatchEngineAdapter = (
 
     return buildStepOutput({
       result,
+      resolvedKeyMoment: resolution
+        ? {
+            pendingId: pending.pending.id,
+            type: pending.pending.type,
+            success: resolution.success,
+            promptText: pending.pending.promptText,
+            resultSummaryText: resolution.resultSummaryText,
+          }
+        : undefined,
     });
   };
 
@@ -355,6 +386,14 @@ export const createMatchEngineAdapter = (
     stepPossession,
     runPossessions,
     getState,
+    getContext: () => context,
+    getUserPlayerLocation: () =>
+      userLocation
+        ? {
+            teamKey: userLocation.teamKey,
+            playerIndex: userLocation.playerIndex,
+          }
+        : undefined,
     updateUserInkState,
     resolvePendingKeyMoment,
   };

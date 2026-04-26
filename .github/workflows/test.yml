@@ -2,11 +2,12 @@ name: test
 
 on:
   push:
-    branches: [main]
+    branches:
+      - "**"
   pull_request:
 
 jobs:
-  test:
+  builder-tests:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +18,43 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm test -- --runInBand
+      - run: npm run test:builder
+
+  career-store-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:career-store
+
+  match-engine-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:match-engine
+
+  key-moment-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:key-moments

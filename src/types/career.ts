@@ -1,6 +1,20 @@
 import type { Player, PlayerAttributes } from "./player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 import type { AttributeGainSource, BackstoryInput, BuildBackstoryInput, CareerNewsItem } from "./backstory";
+import type {
+  CareerPhase,
+  EligibilityState,
+  ExileMode,
+  ExileState,
+  FinanceState,
+  InjuryState,
+  LegacyPerk,
+  Offer,
+  RelationshipState,
+  SchoolPath,
+  SeasonSchedule,
+  StarRating,
+} from "./careerProgression";
 
 export enum LeagueLevel {
   MIDDLE_SCHOOL = "MIDDLE_SCHOOL",
@@ -16,7 +30,7 @@ export enum CareerStatus {
   AMATEUR_LOCKED = "AMATEUR_LOCKED",
 }
 
-export type ExileStatus = "G_LEAGUE" | "OVERSEAS" | "RETIRED";
+export type ExileStatus = Exclude<ExileMode, "NONE">;
 
 export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME";
 
@@ -34,11 +48,23 @@ export interface LastMatchResult {
 export interface CareerState {
   player: Player;
   leagueLevel: LeagueLevel;
+  careerPhase: CareerPhase;
   status: CareerStatus;
+  starRating: StarRating;
+  scoutVisibility: number;
   currentYear: number;
   seasonNumber: number;
   currentWeek: number;
   teamId: string | null;
+  teamInterestById: Record<string, number>;
+  schoolPath: SchoolPath;
+  offers: Offer[];
+  seasonSchedule: SeasonSchedule;
+  relationships: Record<string, RelationshipState>;
+  eligibility: EligibilityState;
+  injuryState: InjuryState;
+  financeState: FinanceState;
+  legacyPerks: LegacyPerk[];
   isGoatPath: boolean;
   view: CareerView;
   currentNarrativeFile: string;
@@ -46,6 +72,7 @@ export interface CareerState {
   newsFeed: CareerNewsItem[];
   ovrBudget: number;
   exile: ExileStatus | null;
+  exileState: ExileState;
 }
 
 export interface CareerActions {

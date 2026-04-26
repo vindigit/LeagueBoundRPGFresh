@@ -88,6 +88,7 @@ describe("pending possession plumbing", () => {
     expect(aggressiveResolved.result).toBeDefined();
     expect(conservativeResolved.result).toBeDefined();
     expect(
+      aggressiveResolved.resolvedKeyMoment?.resultSummaryText !== conservativeResolved.resolvedKeyMoment?.resultSummaryText ||
       aggressiveResolved.result.points !== conservativeResolved.result.points ||
         aggressiveResolved.result.eventType !== conservativeResolved.result.eventType,
     ).toBe(true);

@@ -84,6 +84,7 @@ export interface MatchEngineAdapterOptions {
   secondsRemaining?: number;
   keyMomentRngChance?: number;
   enableKeyMoments?: boolean;
+  debugBadges?: boolean;
 }
 
 const normalizeTeamInput = (team: TeamInput): Team => {
@@ -385,8 +386,9 @@ export const createMatchEngineAdapter = (
             playerIndex: userLocation.playerIndex,
             matchState: userMatchState,
           },
+          debugBadges: options.debugBadges,
         }
-      : undefined);
+      : { debugBadges: options.debugBadges });
 
     metrics = updateMetrics(metrics, result);
     state = result.nextState;
@@ -449,8 +451,9 @@ export const createMatchEngineAdapter = (
             playerIndex: userLocation.playerIndex,
             matchState: userMatchState,
           },
+          debugBadges: options.debugBadges,
         }
-      : undefined);
+      : { debugBadges: options.debugBadges });
 
     pendingPossession = undefined;
     pendingKeyMoment = undefined;

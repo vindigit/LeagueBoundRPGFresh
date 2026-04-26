@@ -19,6 +19,45 @@ const applyBoost = (context, teamKey, attrKey, boost) => {
   }));
 };
 
+const applyBadges = (context, teamKey, playerIndex, badges) => {
+  const team = context[teamKey];
+  team.roster = team.roster.map((player, index) => {
+    if (index !== playerIndex) {
+      return player;
+    }
+    return {
+      ...player,
+      dna: {
+        potential: 80,
+        potentialTier: "Gold",
+        growthCurve: "STEADY",
+        generationSeed: 1,
+        growthByLeague: {
+          MIDDLE_SCHOOL: 1,
+          HIGH_SCHOOL: 1,
+          COLLEGE: 1,
+          PRO: 1,
+        },
+        caps: { ...player.attributes },
+        growthResidue: {},
+        publicTraits: [],
+        builderProfile: {
+          classification: {
+            label: "Verification Build",
+            legacyArchetype: player.archetype,
+            taxonomy: {
+              family: "Creation",
+              positionFamily: "Guard",
+            },
+            topStrengths: [],
+          },
+          badges: badges.map((badge) => ({ ...badge })),
+        },
+      },
+    };
+  });
+};
+
 const classifyEventType = (eventType) => {
   if (eventType === "made_2" || eventType === "made_3" || eventType === "putback_make") {
     return "score";
@@ -321,6 +360,73 @@ const runMomentumCheck = ({ engine, tuning, leagueLevel, secondsRemaining, maxPo
   }
 };
 
+const runBadgeCheck = ({ engine, leagueLevel, secondsRemaining, maxPossessions, sampleSize = 300 }) => {
+  const badgeVariants = [
+    {
+      label: "Deep Range",
+      playerIndex: 1,
+      badges: [{ id: "deep_range", label: "Deep Range", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => (aggregate.avg.threePa > 0 ? (aggregate.avg.threePm / aggregate.avg.threePa) * 100 : 0),
+      direction: "up",
+      tolerance: 0.1,
+    },
+    {
+      label: "Floor General",
+      playerIndex: 0,
+      badges: [{ id: "floor_general", label: "Floor General", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.turnoverRate,
+      direction: "down",
+      tolerance: 0.1,
+    },
+    {
+      label: "Anchor",
+      playerIndex: 4,
+      badges: [{ id: "anchor", label: "Anchor", tier: "GOLD", description: "verify" }],
+      metric: (aggregate) => aggregate.rimPct,
+      direction: "down",
+      tolerance: 0.1,
+    },
+  ];
+
+  console.log("\n=== Badge Validation (A/B) ===");
+  console.log(`Runs per variant: ${sampleSize} | Possession cap: ${maxPossessions}`);
+
+  for (const variant of badgeVariants) {
+    const baseContext = createEvenContext();
+    const badgeContext = cloneContext(baseContext);
+    applyBadges(badgeContext, "home", variant.playerIndex, variant.badges);
+    const seeds = Array.from({ length: sampleSize }, (_, index) => 20276000 + index);
+    const baselineRuns = seeds.map((seed) =>
+      runSingleSimulation({
+        context: cloneContext(baseContext),
+        seed,
+        leagueLevel,
+        secondsRemaining,
+        maxPossessions,
+        engine,
+      }),
+    );
+    const badgedRuns = seeds.map((seed) =>
+      runSingleSimulation({
+        context: cloneContext(badgeContext),
+        seed,
+        leagueLevel,
+        secondsRemaining,
+        maxPossessions,
+        engine,
+      }),
+    );
+    const baseline = aggregateRuns(baselineRuns);
+    const badged = aggregateRuns(badgedRuns);
+    const baselineMetric = variant.metric(baseline);
+    const badgedMetric = variant.metric(badged);
+    assertDirectional(variant.label, baselineMetric, badgedMetric, variant.direction, variant.tolerance);
+    console.log(
+      `${variant.label}: baseline=${baselineMetric.toFixed(2)}, badged=${badgedMetric.toFixed(2)} (${variant.direction})`,
+    );
+  }
+};
+
 const main = async () => {
   const engine = require("./matchEngine.ts");
   const tuning = require("./matchEngineTuning.js");
@@ -329,6 +435,7 @@ const main = async () => {
   const checkAttributesEnabled = args.includes("--check-attributes");
   const checkHomeCourtEnabled = args.includes("--check-home-court");
   const checkMomentumEnabled = args.includes("--check-momentum");
+  const checkBadgesEnabled = args.includes("--check-badges");
 
   const seeds = [20260210, 20260211, 20260212, 20260213, 20260214, 20260215, 20260216, 20260217, 20260218, 20260219];
   const context = createBaseContext();
@@ -450,6 +557,16 @@ const main = async () => {
       secondsRemaining,
       maxPossessions,
       sampleSize: 600,
+    });
+  }
+
+  if (checkBadgesEnabled) {
+    runBadgeCheck({
+      engine,
+      leagueLevel: LeagueLevel.PRO,
+      secondsRemaining,
+      maxPossessions,
+      sampleSize: 300,
     });
   }
 };

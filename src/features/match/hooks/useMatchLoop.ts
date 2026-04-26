@@ -56,17 +56,18 @@ const makePlayer = (
   archetype: PlayerArchetype,
   position: Position,
   attributes: PlayerAttributes,
+  extras: Partial<Pick<Player, "identity" | "dna" | "secondaryPosition" | "bankBalance" | "morale" | "age">> = {},
 ): Player => ({
   id,
   name,
-  age: 18,
-  bankBalance: 0,
-  morale: 50,
+  age: extras.age ?? 18,
+  bankBalance: extras.bankBalance ?? 0,
+  morale: extras.morale ?? 50,
   position,
-  secondaryPosition: position,
+  secondaryPosition: extras.secondaryPosition ?? position,
   archetype,
-  identity: null,
-  dna: null,
+  identity: extras.identity ?? null,
+  dna: extras.dna ?? null,
   attributes,
   gameStats: { ...defaultGameStats },
 });
@@ -82,6 +83,7 @@ const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; 
 };
 
 const buildRuntimeTeams = (
+  userPlayer: Player,
   userAttributes: PlayerAttributes,
   userDisplayName: string,
   userArchetype: PlayerArchetype,
@@ -98,7 +100,14 @@ const buildRuntimeTeams = (
     const id = `h${index + 1}`;
     if (position === userPosition) {
       userPlayerId = id;
-      return makePlayer(id, userDisplayName, userArchetype, userPosition, userAttributes);
+      return makePlayer(id, userDisplayName, userArchetype, userPosition, userAttributes, {
+        age: userPlayer.age,
+        bankBalance: userPlayer.bankBalance,
+        morale: userPlayer.morale,
+        secondaryPosition: userPlayer.secondaryPosition,
+        identity: userPlayer.identity,
+        dna: userPlayer.dna,
+      });
     }
 
     const profile = teammateProfileByPosition[position];
@@ -216,6 +225,7 @@ export const useMatchLoop = (): void => {
   const stepPossession = useMatchEngineStore((state) => state.stepPossession);
 
   const playerId = useCareerStore((state) => state.player.id);
+  const careerPlayer = useCareerStore((state) => state.player);
   const playerName = useCareerStore((state) => state.player.name);
   const playerArchetype = useCareerStore((state) => state.player.archetype);
   const playerPosition = useCareerStore((state) => state.player.position);
@@ -224,12 +234,14 @@ export const useMatchLoop = (): void => {
   const runtimeTeams = useMemo(
     () =>
       buildRuntimeTeams(
+        careerPlayer,
         playerAttributes,
         playerName.trim().length > 0 ? playerName : "My Player",
         playerArchetype,
         playerPosition,
       ),
     [
+      careerPlayer,
       playerArchetype,
       playerAttributes.blocking,
       playerAttributes.defRebounding,

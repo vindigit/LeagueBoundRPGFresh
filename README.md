@@ -18,3 +18,5 @@ NEW Text Based RPG.
 - Intended magnitude is subtle: target roughly a `2-5%` home win-rate bump for evenly matched teams.
 - Validate home-court effect deterministically:
   - `npm run sim:avg10 -- --check-home-court`
+- Validate badge impact deterministically:
+  - `npm run sim:avg10 -- --check-badges`

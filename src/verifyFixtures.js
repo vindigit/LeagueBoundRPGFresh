@@ -235,6 +235,25 @@ const cloneContext = (context) => ({
     ...context.home,
     roster: context.home.roster.map((player) => ({
       ...player,
+      dna: player.dna
+        ? {
+            ...player.dna,
+            caps: { ...player.dna.caps },
+            growthResidue: { ...player.dna.growthResidue },
+            publicTraits: [...player.dna.publicTraits],
+            builderProfile: player.dna.builderProfile
+              ? {
+                  ...player.dna.builderProfile,
+                  classification: {
+                    ...player.dna.builderProfile.classification,
+                    taxonomy: { ...player.dna.builderProfile.classification.taxonomy },
+                    topStrengths: [...player.dna.builderProfile.classification.topStrengths],
+                  },
+                  badges: player.dna.builderProfile.badges.map((badge) => ({ ...badge })),
+                }
+              : player.dna.builderProfile,
+          }
+        : null,
       attributes: { ...player.attributes },
       gameStats: { ...player.gameStats },
     })),
@@ -243,6 +262,25 @@ const cloneContext = (context) => ({
     ...context.away,
     roster: context.away.roster.map((player) => ({
       ...player,
+      dna: player.dna
+        ? {
+            ...player.dna,
+            caps: { ...player.dna.caps },
+            growthResidue: { ...player.dna.growthResidue },
+            publicTraits: [...player.dna.publicTraits],
+            builderProfile: player.dna.builderProfile
+              ? {
+                  ...player.dna.builderProfile,
+                  classification: {
+                    ...player.dna.builderProfile.classification,
+                    taxonomy: { ...player.dna.builderProfile.classification.taxonomy },
+                    topStrengths: [...player.dna.builderProfile.classification.topStrengths],
+                  },
+                  badges: player.dna.builderProfile.badges.map((badge) => ({ ...badge })),
+                }
+              : player.dna.builderProfile,
+          }
+        : null,
       attributes: { ...player.attributes },
       gameStats: { ...player.gameStats },
     })),

@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { KeyMomentPending, KeyMomentResolutionInput } from "../../../match/keyMoments/types";
 
 export interface PlayLog {
   id: string;
@@ -57,8 +56,6 @@ export interface MatchState {
   simSpeed: number;
   timeRemaining: number;
   possession: "home" | "away";
-  keyMomentPending?: KeyMomentPending;
-  keyMomentResolutionInput?: KeyMomentResolutionInput;
   keyMomentFeedback?: { id: string; success: boolean; text: string };
   logs: PlayLog[];
   matchBoxScore: MatchBoxScore;
@@ -72,9 +69,6 @@ interface MatchActions {
   endMatch: () => void;
   setSimulationMode: (mode: MatchState["simulationMode"]) => void;
   setSimSpeed: (speed: number) => void;
-  setKeyMomentPending: (pending: KeyMomentPending | undefined) => void;
-  resolveKeyMoment: (input: KeyMomentResolutionInput) => void;
-  clearKeyMomentResolution: () => void;
   setKeyMomentFeedback: (feedback: MatchState["keyMomentFeedback"] | undefined) => void;
   clearKeyMomentFeedback: () => void;
   updateGame: (
@@ -198,8 +192,6 @@ const initialMatchState: MatchState = {
   simSpeed: 1,
   timeRemaining: 720,
   possession: "home",
-  keyMomentPending: undefined,
-  keyMomentResolutionInput: undefined,
   keyMomentFeedback: undefined,
   logs: [],
   matchBoxScore: createInitialBoxScore(),
@@ -245,27 +237,6 @@ export const useMatchStore = create<MatchStore>((set) => ({
   setSimSpeed: (speed) => {
     const clampedSpeed = Math.min(4, Math.max(0.5, speed));
     set(() => ({ simSpeed: clampedSpeed }));
-  },
-  setKeyMomentPending: (pending) => {
-    set(() => ({
-      keyMomentPending: pending,
-      keyMomentResolutionInput: undefined,
-    }));
-  },
-  resolveKeyMoment: (input) => {
-    set((state) => {
-      if (!state.keyMomentPending || state.keyMomentPending.id !== input.pendingId || state.keyMomentResolutionInput) {
-        return {};
-      }
-      return {
-        keyMomentResolutionInput: input,
-        isPlaying: true,
-        isPaused: false,
-      };
-    });
-  },
-  clearKeyMomentResolution: () => {
-    set(() => ({ keyMomentResolutionInput: undefined }));
   },
   setKeyMomentFeedback: (feedback) => {
     set(() => ({ keyMomentFeedback: feedback }));

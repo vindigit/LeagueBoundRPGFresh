@@ -4,6 +4,7 @@ import Slider from "@react-native-community/slider";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { PlayLog } from "../store/useMatchStore";
+import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
@@ -145,13 +146,13 @@ export function MatchScreen() {
   const logs = useMatchStore((state) => state.logs);
   const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
   const simSpeed = useMatchStore((state) => state.simSpeed);
-  const keyMomentPending = useMatchStore((state) => state.keyMomentPending);
+  const keyMomentPending = useMatchEngineStore((state) => state.snapshot.pendingKeyMoment);
+  const resolveKeyMoment = useMatchEngineStore((state) => state.resolveKeyMoment);
   const keyMomentFeedback = useMatchStore((state) => state.keyMomentFeedback);
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const setSimSpeed = useMatchStore((state) => state.setSimSpeed);
-  const resolveKeyMoment = useMatchStore((state) => state.resolveKeyMoment);
   const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
   const completeMatch = useCareerStore((state) => state.completeMatch);
   const keyMomentContextSummary = buildKeyMomentContextSummary({

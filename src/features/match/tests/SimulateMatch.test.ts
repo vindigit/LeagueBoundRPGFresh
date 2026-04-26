@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react-native";
+import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 
@@ -59,11 +60,15 @@ describe("Terminal Match Simulation", () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    useMatchEngineStore.getState().resetRuntime();
     useMatchStore.getState().initializeMatch("Terminal City", "Console United");
     useMatchStore.getState().setSimulationMode("full_game");
   });
 
   afterEach(() => {
+    act(() => {
+      useMatchEngineStore.getState().resetRuntime();
+    });
     jest.useRealTimers();
   });
 
@@ -165,7 +170,7 @@ describe("Terminal Match Simulation", () => {
     });
 
     const state = useMatchStore.getState();
-    expect(state.keyMomentPending).toBeUndefined();
+    expect(useMatchEngineStore.getState().snapshot.pendingKeyMoment).toBeUndefined();
     expect(state.logs.some((log) => log.text.includes("Key Moment"))).toBe(false);
   });
 });

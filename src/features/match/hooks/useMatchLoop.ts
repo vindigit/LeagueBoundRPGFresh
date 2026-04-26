@@ -5,12 +5,9 @@ import type { Team } from "../../../types/team";
 import type { PossessionEventType } from "../../../matchEngine";
 import { composeKeyMomentLogText } from "../../../match/keyMoments/logComposer";
 import { renderPossessionPlayByPlayLine } from "../../../match/playByPlay/renderer";
-import {
-  createMatchEngineStore,
-  type MatchEngineStore,
-  type MatchEngineStoreState,
-} from "../../../matchEngineStore";
+import type { MatchEngineStoreState } from "../../../matchEngineStore";
 import { useCareerStore } from "../../../store/useCareerStore";
+import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 
 const REAL_SECONDS_PER_TICK = 1;
@@ -194,28 +191,29 @@ const isShotAttempt = (eventType: PossessionEventType, putbackAttempted: boolean
   (eventType === "def_reb" && putbackAttempted);
 
 export const useMatchLoop = (): void => {
-  const runtimeStoreRef = useRef<MatchEngineStore | null>(null);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
   const possessionProgressRef = useRef(0);
   const lastAppliedTraceIdRef = useRef<number>(0);
   const finalLogAppliedRef = useRef(false);
+  const wasPausedForPendingPossessionRef = useRef(false);
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const isPaused = useMatchStore((state) => state.isPaused);
   const gameFinished = useMatchStore((state) => state.gameFinished);
   const simulationMode = useMatchStore((state) => state.simulationMode);
   const simSpeed = useMatchStore((state) => state.simSpeed);
-  const keyMomentResolutionInput = useMatchStore((state) => state.keyMomentResolutionInput);
+  const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const endMatch = useMatchStore((state) => state.endMatch);
   const initializeBoxScore = useMatchStore((state) => state.initializeBoxScore);
   const recordBoxScoreEvent = useMatchStore((state) => state.recordBoxScoreEvent);
   const updateGame = useMatchStore((state) => state.updateGame);
   const addLog = useMatchStore((state) => state.addLog);
-  const setKeyMomentPending = useMatchStore((state) => state.setKeyMomentPending);
-  const clearKeyMomentResolution = useMatchStore((state) => state.clearKeyMomentResolution);
   const setKeyMomentFeedback = useMatchStore((state) => state.setKeyMomentFeedback);
   const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
+  const engineStarted = useMatchEngineStore((state) => state.snapshot.started);
+  const initializeRuntime = useMatchEngineStore((state) => state.initializeRuntime);
+  const resetRuntime = useMatchEngineStore((state) => state.resetRuntime);
+  const stepPossession = useMatchEngineStore((state) => state.stepPossession);
 
   const playerId = useCareerStore((state) => state.player.id);
   const playerName = useCareerStore((state) => state.player.name);
@@ -231,7 +229,27 @@ export const useMatchLoop = (): void => {
         playerArchetype,
         playerPosition,
       ),
-    [playerArchetype, playerAttributes, playerName, playerPosition],
+    [
+      playerArchetype,
+      playerAttributes.blocking,
+      playerAttributes.defRebounding,
+      playerAttributes.dunking,
+      playerAttributes.handle,
+      playerAttributes.interiorDefense,
+      playerAttributes.midrange,
+      playerAttributes.offRebounding,
+      playerAttributes.passing,
+      playerAttributes.perimeterDefense,
+      playerAttributes.shortRange,
+      playerAttributes.speed,
+      playerAttributes.stamina,
+      playerAttributes.stealing,
+      playerAttributes.strength,
+      playerAttributes.threePoint,
+      playerAttributes.vision,
+      playerName,
+      playerPosition,
+    ],
   );
 
   const projectSnapshotToUi = (snapshot: MatchEngineStoreState, projectedSecondsRemaining?: number): void => {
@@ -252,12 +270,13 @@ export const useMatchLoop = (): void => {
       possession: currentPossession.offenseKey,
     });
 
-    setKeyMomentPending(snapshot.pendingKeyMoment);
-
     if (snapshot.pausedForPendingPossession) {
       possessionProgressRef.current = 0;
       pauseMatch();
+    } else if (wasPausedForPendingPossessionRef.current && useMatchStore.getState().isPaused && !useMatchStore.getState().gameFinished) {
+      startMatch();
     }
+    wasPausedForPendingPossessionRef.current = snapshot.pausedForPendingPossession;
 
     if (currentPossession.secondsRemaining <= 0 && !snapshot.pausedForPendingPossession && !finalLogAppliedRef.current) {
       finalLogAppliedRef.current = true;
@@ -364,10 +383,25 @@ export const useMatchLoop = (): void => {
 
   useEffect(() => {
     return () => {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
+      resetRuntime();
     };
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = useMatchEngineStore.subscribe((state) => {
+      const snapshot = state.snapshot;
+      if (!snapshot.started) {
+        return;
+      }
+
+      applyTraceToUi(snapshot);
+      projectSnapshotToUi(snapshot);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [addLog, endMatch, pauseMatch, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
 
   useEffect(() => {
     const matchState = useMatchStore.getState();
@@ -375,25 +409,14 @@ export const useMatchLoop = (): void => {
       return;
     }
 
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = null;
-    runtimeStoreRef.current = null;
+    resetRuntime();
     possessionProgressRef.current = 0;
     lastAppliedTraceIdRef.current = 0;
     finalLogAppliedRef.current = false;
-    clearKeyMomentResolution();
+    wasPausedForPendingPossessionRef.current = false;
     clearKeyMomentFeedback();
-    setKeyMomentPending(undefined);
     initializeBoxScore(runtimeTeams.homeNames, runtimeTeams.awayNames);
-
-    const runtimeStore = createMatchEngineStore();
-    runtimeStoreRef.current = runtimeStore;
-    const syncRuntime = (snapshot: MatchEngineStoreState): void => {
-      applyTraceToUi(snapshot);
-      projectSnapshotToUi(snapshot);
-    };
-
-    const initialSnapshot = runtimeStore.startMatch({
+    const initialSnapshot = initializeRuntime({
       home: runtimeTeams.home,
       away: runtimeTeams.away,
       userPlayerId: runtimeTeams.userPlayerId || playerId || "h1",
@@ -402,40 +425,25 @@ export const useMatchLoop = (): void => {
       simulationMode,
       totalSeconds: REGULATION_TOTAL_SECONDS,
     });
-    unsubscribeRef.current = runtimeStore.subscribe(syncRuntime);
-    syncRuntime(initialSnapshot);
+    applyTraceToUi(initialSnapshot);
+    projectSnapshotToUi(initialSnapshot);
   }, [
     clearKeyMomentFeedback,
-    clearKeyMomentResolution,
+    initializeRuntime,
     initializeBoxScore,
     playerId,
+    resetRuntime,
     runtimeTeams,
-    setKeyMomentPending,
     simulationMode,
   ]);
 
   useEffect(() => {
-    if (!keyMomentResolutionInput || !runtimeStoreRef.current) {
-      return;
-    }
-
-    possessionProgressRef.current = 0;
-    runtimeStoreRef.current.resolveKeyMoment(keyMomentResolutionInput);
-    clearKeyMomentResolution();
-  }, [clearKeyMomentResolution, keyMomentResolutionInput]);
-
-  useEffect(() => {
-    if (!isPlaying || isPaused || gameFinished || !runtimeStoreRef.current) {
+    if (!isPlaying || isPaused || gameFinished || !engineStarted) {
       return;
     }
 
     const intervalId = setInterval(() => {
-      const runtimeStore = runtimeStoreRef.current;
-      if (!runtimeStore) {
-        return;
-      }
-
-      const snapshot = runtimeStore.getState();
+      const snapshot = useMatchEngineStore.getState().snapshot;
       if (!snapshot.started || snapshot.pausedForPendingPossession || !snapshot.currentPossession) {
         possessionProgressRef.current = 0;
         return;
@@ -457,11 +465,11 @@ export const useMatchLoop = (): void => {
       }
 
       possessionProgressRef.current = 0;
-      runtimeStore.stepPossession();
+      stepPossession();
     }, (REAL_SECONDS_PER_TICK * 1000) / simSpeed);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [gameFinished, isPaused, isPlaying, simSpeed]);
+  }, [engineStarted, gameFinished, isPaused, isPlaying, simSpeed, stepPossession]);
 };

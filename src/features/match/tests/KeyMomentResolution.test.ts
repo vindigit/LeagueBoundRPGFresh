@@ -58,6 +58,16 @@ describe("Key Moment resolution", () => {
     useMatchStore.getState().initializeMatch("User", "Away");
   });
 
+  it("keeps key moment lifecycle out of useMatchStore", () => {
+    const state = useMatchStore.getState() as Record<string, unknown>;
+
+    expect("keyMomentPending" in state).toBe(false);
+    expect("keyMomentResolutionInput" in state).toBe(false);
+    expect("setKeyMomentPending" in state).toBe(false);
+    expect("resolveKeyMoment" in state).toBe(false);
+    expect("clearKeyMomentResolution" in state).toBe(false);
+  });
+
   it("resolves create_shot choices into different shot outcomes", () => {
     const pending = buildPending("create_shot", ["step_back_three", "turn_the_corner", "protect_ball"]);
 
@@ -180,19 +190,6 @@ describe("Key Moment resolution", () => {
 
     expect(resolved.result.shooterIndex).not.toBe(pending.context.userPlayerIndex);
     expect(resolved.result.defensivePlay.defenderIndex).toBe(pending.context.userPlayerIndex);
-  });
-
-  it("rejects second resolve attempt in store (one-and-done)", () => {
-    const pending = buildPending("make_the_read", ["kick_out", "attack_gap", "reset_space"]);
-
-    useMatchStore.getState().setKeyMomentPending(pending);
-    useMatchStore.getState().resolveKeyMoment({ pendingId: pending.id, choiceId: "kick_out" });
-    const first = useMatchStore.getState().keyMomentResolutionInput;
-    expect(first?.choiceId).toBe("kick_out");
-
-    useMatchStore.getState().resolveKeyMoment({ pendingId: pending.id, choiceId: "reset_space" });
-    const second = useMatchStore.getState().keyMomentResolutionInput;
-    expect(second?.choiceId).toBe("kick_out");
   });
 
   it("returns undefined from dispatcher when the type is unknown", () => {

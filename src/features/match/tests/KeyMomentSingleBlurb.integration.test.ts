@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react-native";
 import { useMatchLoop } from "../hooks/useMatchLoop";
+import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import type { CareerActions, CareerState } from "../../../types/career";
 import type { PlayerAttributes } from "../../../types/player";
@@ -54,11 +55,15 @@ jest.mock("../../../store/useCareerStore", () => ({
 describe("Key Moment single-blurb behavior", () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    useMatchEngineStore.getState().resetRuntime();
     useMatchStore.getState().initializeMatch("Test Player", "Rivals High");
     useMatchStore.getState().setSimulationMode("interactive");
   });
 
   afterEach(() => {
+    act(() => {
+      useMatchEngineStore.getState().resetRuntime();
+    });
     jest.useRealTimers();
   });
 
@@ -69,19 +74,19 @@ describe("Key Moment single-blurb behavior", () => {
     });
 
     let safety = 0;
-    while (!useMatchStore.getState().keyMomentPending && safety < 180) {
+    while (!useMatchEngineStore.getState().snapshot.pendingKeyMoment && safety < 180) {
       act(() => {
         jest.advanceTimersByTime(1000);
       });
       safety += 1;
     }
 
-    const pending = useMatchStore.getState().keyMomentPending;
+    const pending = useMatchEngineStore.getState().snapshot.pendingKeyMoment;
     expect(pending).toBeDefined();
     const beforeResolveCount = useMatchStore.getState().logs.filter((log) => log.text.includes("Key Moment (")).length;
 
     act(() => {
-      useMatchStore.getState().resolveKeyMoment({
+      useMatchEngineStore.getState().resolveKeyMoment({
         pendingId: pending!.id,
         choiceId: pending!.mode === "choice" ? pending!.options?.[0]?.id : undefined,
         minigameQuality: pending!.mode === "minigame" ? 0.9 : undefined,
@@ -89,7 +94,7 @@ describe("Key Moment single-blurb behavior", () => {
     });
 
     let resolveSafety = 0;
-    while (useMatchStore.getState().keyMomentPending && resolveSafety < 30) {
+    while (useMatchEngineStore.getState().snapshot.pendingKeyMoment && resolveSafety < 30) {
       act(() => {
         jest.advanceTimersByTime(1000);
       });
@@ -97,6 +102,7 @@ describe("Key Moment single-blurb behavior", () => {
     }
 
     const stateAfterResolve = useMatchStore.getState();
+    expect(useMatchEngineStore.getState().snapshot.pendingKeyMoment).toBeUndefined();
     const keyMomentLogs = stateAfterResolve.logs.filter((log) => log.text.includes("Key Moment"));
     expect(keyMomentLogs.length).toBe(beforeResolveCount + 1);
     expect(keyMomentLogs[0].text).toMatch(/Key Moment \((Success|Failed)\):/);

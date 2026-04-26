@@ -1,5 +1,6 @@
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { MatchScreen } from "../screens/MatchScreen";
+import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import type { CareerActions, CareerState } from "../../../types/career";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
@@ -81,12 +82,24 @@ const pendingChoice: KeyMomentPending = {
   simBaselineQuality: 0.55,
 };
 
+const originalResolveKeyMoment = useMatchEngineStore.getState().resolveKeyMoment;
+
 describe("MatchScreen key moment UI", () => {
   beforeEach(() => {
+    useMatchEngineStore.getState().resetRuntime();
+    useMatchEngineStore.setState(() => ({ resolveKeyMoment: originalResolveKeyMoment }));
     useMatchStore.getState().initializeMatch("Test Player", "Rivals High");
   });
 
+  afterEach(() => {
+    act(() => {
+      useMatchEngineStore.getState().resetRuntime();
+      useMatchEngineStore.setState(() => ({ resolveKeyMoment: originalResolveKeyMoment }));
+    });
+  });
+
   it("renders pending key moments and wires sim-it through the store", () => {
+    const resolveKeyMoment = jest.fn();
     const screen = render(<MatchScreen />);
 
     act(() => {
@@ -96,7 +109,13 @@ describe("MatchScreen key moment UI", () => {
         quarter: 2,
         timeRemaining: 185,
       });
-      useMatchStore.getState().setKeyMomentPending(pendingChoice);
+      useMatchEngineStore.setState((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          pendingKeyMoment: pendingChoice,
+        },
+        resolveKeyMoment,
+      }));
     });
 
     expect(screen.getByText(pendingChoice.promptText)).toBeTruthy();
@@ -105,7 +124,7 @@ describe("MatchScreen key moment UI", () => {
 
     fireEvent.press(screen.getByText("Sim It"));
 
-    expect(useMatchStore.getState().keyMomentResolutionInput).toEqual({
+    expect(resolveKeyMoment).toHaveBeenCalledWith({
       pendingId: "screen-pending-1",
       usedFallbackBaseline: true,
     });

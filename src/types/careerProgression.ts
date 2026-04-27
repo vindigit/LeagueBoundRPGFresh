@@ -149,6 +149,27 @@ export interface FinanceState {
   lastUpdatedAt: number;
 }
 
+export type FinanceLedgerEntryType = "income" | "expense";
+
+export interface FinanceLedgerEntry {
+  id: string;
+  week: number;
+  type: FinanceLedgerEntryType;
+  category: string;
+  amount: number;
+  description: string;
+  source: string;
+}
+
+export interface RecordFinanceTransactionInput {
+  type: FinanceLedgerEntryType;
+  category: string;
+  amount: number;
+  description: string;
+  source: string;
+  week?: number;
+}
+
 export type LegacyPerkType = "TRAINING" | "SOCIAL" | "RECRUITING" | "RECOVERY" | "FINANCIAL" | "STORY";
 
 export interface LegacyPerk {

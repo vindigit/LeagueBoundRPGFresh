@@ -113,15 +113,18 @@ describe("Career store migration smoke", () => {
     expect(state.player.position).toBe("SG");
     expect(state.careerPhase).toBe("HIGH_SCHOOL");
     expect(state.scoutVisibility).toBeGreaterThan(0);
+    expect(state.gpa).toBe(2.5);
     expect(state.pendingSchoolPathSelection).toBe(false);
     expect(Object.keys(state.teamInterestById).length).toBeGreaterThan(0);
     expect(state.seasonSchedule.phase).toBe("HIGH_SCHOOL");
     expect(state.eligibility.status).toBe("ELIGIBLE");
     expect(state.financeState.ledger.nilEarnings).toBe(0);
+    expect(state.financeLedger).toEqual([]);
     expect(state.weeklyLoop).toEqual({
       eventCompleted: true,
       matchCompleted: false,
       postgamePending: false,
+      studyCompleted: false,
     });
 
     const screen = render(<HomeScreen />);

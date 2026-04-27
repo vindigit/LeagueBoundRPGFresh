@@ -80,6 +80,7 @@ describe("Career vertical slice weekly loop", () => {
         eventCompleted: false,
         matchCompleted: false,
         postgamePending: false,
+        studyCompleted: false,
       });
 
       beforeCycle.applyAttributeGain("vision", 1, "NARRATIVE");
@@ -108,6 +109,7 @@ describe("Career vertical slice weekly loop", () => {
         eventCompleted: true,
         matchCompleted: true,
         postgamePending: true,
+        studyCompleted: false,
       });
       const expectedNewsBeforeResolution = cycle === 1 ? initialNewsCount : initialNewsCount + cycle;
       expect(afterMatch.newsFeed.length).toBe(expectedNewsBeforeResolution);
@@ -130,10 +132,17 @@ describe("Career vertical slice weekly loop", () => {
           eventCompleted: false,
           matchCompleted: false,
           postgamePending: false,
+          studyCompleted: false,
         });
         expect(afterSelection.newsFeed.length).toBe(initialNewsCount + cycle + 1);
         expect(afterSelection.player.bankBalance).toBe(initialBank + 500 * cycle);
         expect(afterSelection.player.morale).toBe(initialMorale + 5 * cycle);
+        expect(afterSelection.financeLedger).toHaveLength(cycle);
+        expect(afterSelection.financeLedger.at(-1)).toMatchObject({
+          type: "income",
+          category: "match_reward",
+          source: "match",
+        });
         continue;
       }
 
@@ -143,10 +152,18 @@ describe("Career vertical slice weekly loop", () => {
         eventCompleted: false,
         matchCompleted: false,
         postgamePending: false,
+        studyCompleted: false,
       });
       expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle + 1);
       expect(resolved.player.bankBalance).toBeGreaterThan(initialBank + 500 * cycle);
       expect(resolved.player.morale).toBeGreaterThanOrEqual(initialMorale + 5 * cycle);
+      expect(resolved.financeLedger).toHaveLength(cycle);
+      expect(resolved.financeLedger.at(-1)).toMatchObject({
+        type: "income",
+        category: "match_reward",
+        source: "match",
+      });
+      expect((resolved.financeLedger.at(-1)?.amount ?? 0)).toBeGreaterThan(0);
     }
   });
 });

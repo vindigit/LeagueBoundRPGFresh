@@ -30,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(12);
+    expect(version).toBe(13);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -40,6 +40,7 @@ describe("Career progression domain model", () => {
     expect(state.starRating).toBeGreaterThanOrEqual(1);
     expect(state.starRating).toBeLessThanOrEqual(5);
     expect(typeof state.scoutVisibility).toBe("number");
+    expect(state.gpa).toBe(2.5);
     expect(state.teamInterestById).toEqual({});
     expect(state.schoolPath).toBe("LOCAL_3A");
     expect(state.pendingSchoolPathSelection).toBe(false);
@@ -50,6 +51,7 @@ describe("Career progression domain model", () => {
     expect(state.injury).toBeNull();
     expect(state.wearTear).toBe(0);
     expect(state.financeState.ledger.nilEarnings).toBe(0);
+    expect(state.financeLedger).toEqual([]);
     expect(state.legacyPerks).toEqual([]);
     expect(state.exileState.currentMode).toBe("NONE");
     expect(state.exile).toBeNull();
@@ -57,6 +59,7 @@ describe("Career progression domain model", () => {
       eventCompleted: false,
       matchCompleted: false,
       postgamePending: false,
+      studyCompleted: false,
     });
   });
 
@@ -89,6 +92,7 @@ describe("Career progression domain model", () => {
     expect(migrated.starRating).toBeGreaterThanOrEqual(1);
     expect(migrated.starRating).toBeLessThanOrEqual(5);
     expect(migrated.scoutVisibility).toBeGreaterThan(0);
+    expect(migrated.gpa).toBe(2.5);
     expect(migrated.schoolPath).toBe("LOCAL_3A");
     expect(migrated.pendingSchoolPathSelection).toBe(false);
     expect(migrated.offers).toEqual([]);
@@ -98,6 +102,7 @@ describe("Career progression domain model", () => {
     expect(migrated.injury).toBeNull();
     expect(migrated.wearTear).toBe(0);
     expect(migrated.financeState).toBeTruthy();
+    expect(migrated.financeLedger).toEqual([]);
     expect(migrated.legacyPerks).toEqual([]);
     expect(migrated.exileState.currentMode).toBe("OVERSEAS");
     expect(migrated.exileState.triggerReason).toBe("LEGACY_MIGRATION");
@@ -107,6 +112,7 @@ describe("Career progression domain model", () => {
       eventCompleted: true,
       matchCompleted: false,
       postgamePending: false,
+      studyCompleted: false,
     });
   });
 
@@ -120,6 +126,7 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("careerPhase");
     expect(partial).toHaveProperty("starRating");
     expect(partial).toHaveProperty("scoutVisibility");
+    expect(partial).toHaveProperty("gpa");
     expect(partial).toHaveProperty("teamInterestById");
     expect(partial).toHaveProperty("schoolPath");
     expect(partial).toHaveProperty("pendingSchoolPathSelection");
@@ -130,9 +137,53 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("injury");
     expect(partial).toHaveProperty("wearTear");
     expect(partial).toHaveProperty("financeState");
+    expect(partial).toHaveProperty("financeLedger");
     expect(partial).toHaveProperty("legacyPerks");
     expect(partial).toHaveProperty("exileState");
     expect(partial).toHaveProperty("weeklyLoop");
+  });
+
+  it("lets the optional study action raise GPA once per week", () => {
+    const before = useCareerStore.getState();
+
+    before.completeStudyActivity();
+    const afterFirstStudy = useCareerStore.getState();
+    expect(afterFirstStudy.gpa).toBe(2.6);
+    expect(afterFirstStudy.weeklyLoop.studyCompleted).toBe(true);
+
+    afterFirstStudy.completeStudyActivity();
+    const afterSecondStudy = useCareerStore.getState();
+    expect(afterSecondStudy.gpa).toBe(2.6);
+  });
+
+  it("blocks match navigation below a 2.0 GPA during academic phases and restores it on recovery", () => {
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().adjustGpa(-0.6, "SYSTEM");
+
+    useCareerStore.getState().navigateToMatch();
+    const blockedState = useCareerStore.getState();
+    expect(blockedState.gpa).toBe(1.9);
+    expect(blockedState.eligibility.status).toBe("INELIGIBLE");
+    expect(blockedState.view).toBe("HUB");
+
+    useCareerStore.getState().adjustGpa(0.1, "SYSTEM");
+    useCareerStore.getState().navigateToMatch();
+    const recoveredState = useCareerStore.getState();
+    expect(recoveredState.gpa).toBe(2);
+    expect(recoveredState.eligibility.status).toBe("ELIGIBLE");
+    expect(recoveredState.view).toBe("MATCH");
+  });
+
+  it("does not apply the GPA gate in the pro phase", () => {
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().updateLeagueLevel(LeagueLevel.PRO);
+    useCareerStore.getState().adjustGpa(-0.7, "SYSTEM");
+
+    useCareerStore.getState().navigateToMatch();
+    const state = useCareerStore.getState();
+    expect(state.gpa).toBe(1.8);
+    expect(state.view).toBe("MATCH");
+    expect(state.eligibility.status).toBe("ELIGIBLE");
   });
 
   it("soft-commits one high-school offer and blocks future recruiting offers", () => {

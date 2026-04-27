@@ -43,9 +43,11 @@ import type {
   CareerPhase,
   EligibilityState,
   ExileState,
+  FinanceLedgerEntry,
   FinanceState,
   MatchConsequence,
   Offer,
+  RecordFinanceTransactionInput,
   SchoolPath,
   SeasonSchedule,
   StarRating,
@@ -217,6 +219,58 @@ const createDefaultFinanceState = (): FinanceState => ({
   lastNilWeek: undefined,
   lastUpdatedAt: Date.now(),
 });
+
+const buildFinanceTransactionFromDelta = (
+  amount: number,
+  metadata: Omit<RecordFinanceTransactionInput, "type" | "amount">,
+): RecordFinanceTransactionInput | null => {
+  if (amount === 0) {
+    return null;
+  }
+
+  return {
+    type: amount > 0 ? "income" : "expense",
+    amount: Math.abs(amount),
+    ...metadata,
+  };
+};
+
+const createFinanceLedgerEntryId = (week: number): string =>
+  `finance-${week}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const buildFinanceTransactionState = (
+  state: Pick<CareerState, "currentWeek" | "player" | "financeLedger" | "financeState">,
+  input: RecordFinanceTransactionInput,
+): Pick<CareerState, "player" | "financeLedger" | "financeState"> | null => {
+  const normalizedAmount = Math.abs(input.amount);
+  if (normalizedAmount === 0) {
+    return null;
+  }
+
+  const week = input.week ?? state.currentWeek;
+  const signedAmount = input.type === "income" ? normalizedAmount : -normalizedAmount;
+  const entry: FinanceLedgerEntry = {
+    id: createFinanceLedgerEntryId(week),
+    week,
+    type: input.type,
+    category: input.category,
+    amount: normalizedAmount,
+    description: input.description,
+    source: input.source,
+  };
+
+  return {
+    player: {
+      ...state.player,
+      bankBalance: state.player.bankBalance + signedAmount,
+    },
+    financeLedger: [...state.financeLedger, entry],
+    financeState: {
+      ...state.financeState,
+      lastUpdatedAt: Date.now(),
+    },
+  };
+};
 
 const createDefaultExileState = (input: {
   currentMode?: ExileState["currentMode"];
@@ -560,6 +614,7 @@ const initialCareerState: CareerState = {
   injury: null,
   wearTear: 0,
   financeState: createDefaultFinanceState(),
+  financeLedger: [],
   legacyPerks: [],
   isGoatPath: false,
   view: getInitialCareerView(),
@@ -848,16 +903,20 @@ export const useCareerStore = create<CareerStore>()(
       updateAttribute: (attr, amount) => {
         get().applyAttributeGain(attr, amount, "SYSTEM");
       },
+      recordFinanceTransaction: (input) => {
+        set((state) => buildFinanceTransactionState(state, input) ?? state);
+      },
       updateBankBalance: (amount) => {
-        set((state) => {
-          const nextBankBalance = state.player.bankBalance + amount;
-          return {
-            player: {
-              ...state.player,
-              bankBalance: nextBankBalance,
-            },
-          };
+        const transaction = buildFinanceTransactionFromDelta(amount, {
+          category: "misc",
+          description: "Balance update",
+          source: "system",
         });
+        if (!transaction) {
+          return;
+        }
+
+        get().recordFinanceTransaction(transaction);
       },
       adjustGpa: (delta) => {
         set((state) => {
@@ -1216,6 +1275,12 @@ export const useCareerStore = create<CareerStore>()(
             wearTear: state.wearTear,
             currentWeek: state.currentWeek,
           });
+          const matchRewardTransaction = buildFinanceTransactionFromDelta(state.lastMatchResult.bankDelta, {
+            category: "match_reward",
+            description: state.lastMatchResult.didWin ? "Win bonus" : "Game payout",
+            source: "match",
+          });
+          const financeUpdate = matchRewardTransaction ? buildFinanceTransactionState(state, matchRewardTransaction) : null;
 
           return {
             currentWeek: nextState.currentWeek,
@@ -1224,10 +1289,11 @@ export const useCareerStore = create<CareerStore>()(
             seasonSchedule: nextState.seasonSchedule,
             view: pendingSchoolPathSelection ? "SCHOOL_PATH_SELECT" : "HUB",
             player: {
-              ...state.player,
-              bankBalance: state.player.bankBalance + state.lastMatchResult.bankDelta,
+              ...(financeUpdate?.player ?? state.player),
               morale: nextMorale,
             },
+            financeState: financeUpdate?.financeState ?? state.financeState,
+            financeLedger: financeUpdate?.financeLedger ?? state.financeLedger,
             lastMatchResult: null,
             newsFeed,
             scoutVisibility: nextScoutVisibility,
@@ -1248,7 +1314,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 12,
+      version: 13,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -1286,6 +1352,7 @@ export const useCareerStore = create<CareerStore>()(
             newsFeed: [],
             weeklyLoop: createDefaultWeeklyLoopState(),
             pendingSchoolPathSelection: false,
+            financeLedger: [],
             ovrBudget: typedState.ovrBudget ?? 60,
             ...progressionState,
           };
@@ -1369,7 +1436,6 @@ export const useCareerStore = create<CareerStore>()(
           offers: migratedOffers,
           seasonSchedule: typedState.seasonSchedule ?? progressionState.seasonSchedule,
           relationships: typedState.relationships ?? progressionState.relationships,
-          gpa,
           eligibility: syncEligibilityState(
             typedState.eligibility ?? progressionState.eligibility,
             typedState.careerPhase ?? progressionState.careerPhase,
@@ -1378,6 +1444,7 @@ export const useCareerStore = create<CareerStore>()(
           injury: migratedInjury,
           wearTear: migratedWearTear,
           financeState: typedState.financeState ?? progressionState.financeState,
+          financeLedger: typedState.financeLedger ?? [],
           legacyPerks: typedState.legacyPerks ?? progressionState.legacyPerks,
           ovrBudget: typedState.ovrBudget ?? 60,
           exileState: existingExileState,
@@ -1407,6 +1474,7 @@ export const useCareerStore = create<CareerStore>()(
         injury: state.injury,
         wearTear: state.wearTear,
         financeState: state.financeState,
+        financeLedger: state.financeLedger,
         legacyPerks: state.legacyPerks,
         isGoatPath: state.isGoatPath,
         view: state.view,

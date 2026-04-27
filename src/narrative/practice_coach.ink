@@ -12,6 +12,7 @@ The whistle echoes in the empty gym. Practice is over, but Coach grabs your arm.
 Hours vanish. Your eyes ache from the grainy footage, but you start to see the patternsâ€”the way their big man cheats on the pick-and-roll.
 # ACTION: updateAttribute | vision | 1
 # ACTION: updateGpa | gpa | 0.1
+# ACTION: updateBankBalance | 75 | film_stipend | Film room stipend
 # ACTION: updateTeamInterest | houston-cougars | 8
 # ACTION: updateTeamInterest | baylor-bears | 4
 -> coach_done
@@ -20,6 +21,7 @@ Hours vanish. Your eyes ache from the grainy footage, but you start to see the p
 Lungs burning, legs screaming. You drill the baseline suicides until the floor is slick with sweat. You're exhausted, but your engine feels bigger.
 # ACTION: updateAttribute | stamina | 1
 # ACTION: updateGpa | gpa | -0.1
+# ACTION: updateBankBalance | -25 | recovery_cost | Recovery tape and shakes
 # ACTION: updateTeamInterest | all | -2
 # ACTION: updateTeamInterest | gonzaga-bulldogs | 5
 -> coach_done

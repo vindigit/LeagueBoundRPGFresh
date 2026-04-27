@@ -60,7 +60,14 @@ interface UpdateGpaAction {
   amount: number;
 }
 
-type ParsedAction = UpdateAttributeAction | UpdateTeamInterestAction | UpdateGpaAction;
+interface UpdateBankBalanceAction {
+  type: "updateBankBalance";
+  amount: number;
+  category: string;
+  description: string;
+}
+
+type ParsedAction = UpdateAttributeAction | UpdateTeamInterestAction | UpdateGpaAction | UpdateBankBalanceAction;
 
 interface InkStoryLike {
   canContinue: boolean;
@@ -81,17 +88,22 @@ const parseActionTag = (tag: string): ParsedAction | null => {
 
   const actionBody = trimmedTag.slice(ACTION_PREFIX.length).trim().replace(/\\\|/g, "|");
   const parts = actionBody.split("|").map((part) => part.trim());
-  if (parts.length !== 3) {
+  if (parts.length < 3) {
     throw new Error(`Invalid ACTION tag format: "${tag}"`);
   }
 
-  const [actionType, key, rawValue] = parts;
-  const amount = Number(rawValue);
-  if (!Number.isFinite(amount)) {
-    throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
-  }
+  const [actionType, ...rawArgs] = parts;
 
   if (actionType === "updateAttribute") {
+    if (rawArgs.length !== 2) {
+      throw new Error(`Invalid ACTION tag format: "${tag}"`);
+    }
+
+    const [key, rawValue] = rawArgs;
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount)) {
+      throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
+    }
     if (!isAttributeKey(key)) {
       throw new Error(`Unknown attribute key "${key}" in tag "${tag}"`);
     }
@@ -104,6 +116,15 @@ const parseActionTag = (tag: string): ParsedAction | null => {
   }
 
   if (actionType === "updateTeamInterest") {
+    if (rawArgs.length !== 2) {
+      throw new Error(`Invalid ACTION tag format: "${tag}"`);
+    }
+
+    const [key, rawValue] = rawArgs;
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount)) {
+      throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
+    }
     if (key.length === 0) {
       throw new Error(`Unknown team-interest target "${key}" in tag "${tag}"`);
     }
@@ -116,6 +137,15 @@ const parseActionTag = (tag: string): ParsedAction | null => {
   }
 
   if (actionType === "updateGpa") {
+    if (rawArgs.length !== 2) {
+      throw new Error(`Invalid ACTION tag format: "${tag}"`);
+    }
+
+    const [key, rawValue] = rawArgs;
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount)) {
+      throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
+    }
     if (key.toLowerCase() !== "gpa") {
       throw new Error(`Unknown GPA target "${key}" in tag "${tag}"`);
     }
@@ -123,6 +153,31 @@ const parseActionTag = (tag: string): ParsedAction | null => {
     return {
       type: "updateGpa",
       amount,
+    };
+  }
+
+  if (actionType === "updateBankBalance") {
+    if (rawArgs.length !== 3) {
+      throw new Error(`Invalid ACTION tag format: "${tag}"`);
+    }
+
+    const [rawValue, category, description] = rawArgs;
+    const amount = Number(rawValue);
+    if (!Number.isFinite(amount)) {
+      throw new Error(`Invalid ACTION value "${rawValue}" in tag "${tag}"`);
+    }
+    if (category.length === 0) {
+      throw new Error(`Unknown finance category in tag "${tag}"`);
+    }
+    if (description.length === 0) {
+      throw new Error(`Missing finance description in tag "${tag}"`);
+    }
+
+    return {
+      type: "updateBankBalance",
+      amount,
+      category,
+      description,
     };
   }
 
@@ -137,6 +192,17 @@ const applyAction = (action: ParsedAction): void => {
 
   if (action.type === "updateGpa") {
     useCareerStore.getState().adjustGpa(action.amount, "NARRATIVE");
+    return;
+  }
+
+  if (action.type === "updateBankBalance") {
+    useCareerStore.getState().recordFinanceTransaction({
+      type: action.amount >= 0 ? "income" : "expense",
+      amount: Math.abs(action.amount),
+      category: action.category,
+      description: action.description,
+      source: "narrative",
+    });
     return;
   }
 

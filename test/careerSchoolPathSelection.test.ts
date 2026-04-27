@@ -161,6 +161,7 @@ describe("School path selection", () => {
     finishTutorialAndSelectPath("STATE_5A");
     useCareerStore.getState().startNarrative("practice_coach.ink");
     const before = useCareerStore.getState().teamInterestById["houston-cougars"];
+    const startingGpa = useCareerStore.getState().gpa;
 
     const manager = loadNarrativeInkManager("practice_coach.ink");
     manager.continueStory();
@@ -168,6 +169,19 @@ describe("School path selection", () => {
 
     const after = useCareerStore.getState().teamInterestById["houston-cougars"];
     expect(after).toBeGreaterThan(before);
+    expect(useCareerStore.getState().gpa).toBe(startingGpa + 0.1);
+  });
+
+  it("lets narrative choices lower GPA too", () => {
+    finishTutorialAndSelectPath("STATE_5A");
+    useCareerStore.getState().startNarrative("practice_coach.ink");
+    const startingGpa = useCareerStore.getState().gpa;
+
+    const manager = loadNarrativeInkManager("practice_coach.ink");
+    manager.continueStory();
+    manager.chooseOption(1);
+
+    expect(useCareerStore.getState().gpa).toBe(startingGpa - 0.1);
   });
 
   it("does not duplicate active offers when interest updates multiple times", () => {

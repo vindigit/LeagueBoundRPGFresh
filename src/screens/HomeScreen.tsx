@@ -9,7 +9,7 @@ import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
 import { LeagueLevel } from "../types/career";
-import type { ProjectedRole } from "../types/careerProgression";
+import type { FinanceLedgerEntry, ProjectedRole } from "../types/careerProgression";
 
 const formatLeagueLevel = (value: string): string =>
   value
@@ -20,6 +20,15 @@ const formatLeagueLevel = (value: string): string =>
 
 const formatCurrency = (amount: number): string =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount);
+
+const formatFinanceAmount = (entry: FinanceLedgerEntry): string =>
+  `${entry.type === "income" ? "+" : "-"}${formatCurrency(entry.amount)}`;
+
+const formatFinanceCategory = (category: string): string =>
+  category
+    .split("_")
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
 
 const formatGpa = (value: number): string => value.toFixed(1);
 const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
@@ -52,6 +61,7 @@ export function HomeScreen() {
   const currentYear = useCareerStore((state) => state.currentYear);
   const currentWeek = useCareerStore((state) => state.currentWeek);
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
+  const financeLedger = useCareerStore((state) => state.financeLedger);
   const scoutVisibility = useCareerStore((state) => state.scoutVisibility);
   const gpa = useCareerStore((state) => state.gpa);
   const schoolPath = useCareerStore((state) => state.schoolPath);
@@ -73,6 +83,7 @@ export function HomeScreen() {
     .slice(0, 4);
   const availableOffers = offers.filter((offer) => offer.status === "AVAILABLE" && offer.phases.includes("HIGH_SCHOOL"));
   const acceptedOffer = offers.find((offer) => offer.status === "ACCEPTED" && offer.phases.includes("HIGH_SCHOOL"));
+  const recentFinanceEntries = financeLedger.slice(-3).reverse();
   const canOpenEvent = !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
   const canStudy = !weeklyLoop.studyCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
   const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending && academicallyEligible;
@@ -182,6 +193,31 @@ export function HomeScreen() {
             </View>
           </View>
 
+          <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Recent Financial Activity</Text>
+            {recentFinanceEntries.length > 0 ? (
+              <View className="mt-3 gap-3">
+                {recentFinanceEntries.map((entry) => (
+                  <View key={entry.id} className="rounded-lg bg-premium-bg p-3">
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className="text-sm font-semibold text-white">{entry.description}</Text>
+                        <Text className="mt-1 text-xs text-premium-muted">
+                          Week {entry.week} | {formatFinanceCategory(entry.category)} | {entry.source}
+                        </Text>
+                      </View>
+                      <Text className={`text-sm font-semibold ${entry.type === "income" ? "text-emerald-300" : "text-red-300"}`}>
+                        {formatFinanceAmount(entry)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className="mt-3 text-sm text-premium-muted">Financial activity will appear after your first payout or expense.</Text>
+            )}
+          </View>
+
           {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
             <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
               <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Recruiting Interest</Text>
@@ -283,13 +319,11 @@ export function HomeScreen() {
             <Text className="mt-3 text-sm font-medium text-amber-300">Academically ineligible: raise GPA to 2.0 to play.</Text>
           ) : null}
 
-          <Pressable
-            className={`mt-3 items-center justify-center rounded-xl px-4 py-4 ${canStudy ? "bg-emerald-600" : "bg-slate-700"}`}
-            disabled={!canStudy}
-            onPress={completeStudyActivity}
-          >
-            <Text className="text-base font-semibold text-white">{weeklyLoop.studyCompleted ? "Study Complete" : "Study"}</Text>
-          </Pressable>
+          {canStudy ? (
+            <Pressable className="mt-3 items-center justify-center rounded-xl bg-emerald-600 px-4 py-4" onPress={completeStudyActivity}>
+              <Text className="text-base font-semibold text-white">Study</Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
             className={`mt-3 items-center justify-center rounded-xl px-4 py-4 ${canOpenEvent ? "bg-premium-accent" : "bg-slate-700"}`}

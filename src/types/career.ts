@@ -7,10 +7,12 @@ import type {
   EligibilityState,
   ExileMode,
   ExileState,
+  FinanceLedgerEntry,
   FinanceState,
   LegacyPerk,
   MatchConsequence,
   Offer,
+  RecordFinanceTransactionInput,
   RelationshipState,
   SchoolPath,
   SeasonSchedule,
@@ -76,6 +78,7 @@ export interface CareerState {
   injury: ActiveInjury | null;
   wearTear: number;
   financeState: FinanceState;
+  financeLedger: FinanceLedgerEntry[];
   legacyPerks: LegacyPerk[];
   isGoatPath: boolean;
   view: CareerView;
@@ -92,6 +95,7 @@ export interface CareerActions {
   initializeCareer(input: BackstoryInput | BuildBackstoryInput): void;
   applyAttributeGain(attr: keyof PlayerAttributes, amount: number, source?: AttributeGainSource): void;
   updateAttribute(attr: keyof PlayerAttributes, amount: number): void;
+  recordFinanceTransaction(input: RecordFinanceTransactionInput): void;
   updateBankBalance(amount: number): void;
   adjustGpa(delta: number, source?: "STUDY" | "NARRATIVE" | "SYSTEM"): void;
   advanceWeek(): void;

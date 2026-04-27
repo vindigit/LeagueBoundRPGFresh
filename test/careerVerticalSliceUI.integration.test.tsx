@@ -82,6 +82,7 @@ describe("Career vertical slice UI", () => {
         eventCompleted: false,
         matchCompleted: false,
         postgamePending: false,
+        studyCompleted: false,
       },
       currentNarrativeFile: "",
       currentWeek: 1,
@@ -122,7 +123,15 @@ describe("Career vertical slice UI", () => {
     expect(useCareerStore.getState().view).toBe("HUB");
     expect(useCareerStore.getState().weeklyLoop.eventCompleted).toBe(true);
     expect(useCareerStore.getState().player.attributes.vision).toBeGreaterThanOrEqual(startingVision + 1);
+    expect(useCareerStore.getState().financeLedger.at(-1)).toMatchObject({
+      type: "income",
+      category: "film_stipend",
+      description: "Film room stipend",
+      source: "narrative",
+    });
     expect(screen.getByText("Event complete. Match is unlocked.")).toBeTruthy();
+    expect(screen.getByText("Recent Financial Activity")).toBeTruthy();
+    expect(screen.getByText("Film room stipend")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Play Match"));
     expect(useCareerStore.getState().view).toBe("MATCH");
@@ -145,12 +154,16 @@ describe("Career vertical slice UI", () => {
       eventCompleted: false,
       matchCompleted: false,
       postgamePending: false,
+      studyCompleted: false,
     });
     expect(useCareerStore.getState().leagueLevel).toBe("HIGH_SCHOOL");
     expect(useCareerStore.getState().schoolPath).toBe("STATE_5A");
     expect(useCareerStore.getState().newsFeed.some((item) => item.category === "POSTGAME_RECAP")).toBe(true);
+    expect(useCareerStore.getState().financeLedger).toHaveLength(2);
     expect(screen.getByText("School Path")).toBeTruthy();
     expect(screen.getByText("State 5A")).toBeTruthy();
+    expect(screen.getByText("Recent Financial Activity")).toBeTruthy();
+    expect(screen.getByText("Win bonus")).toBeTruthy();
     expect(screen.getByText("Recruiting Interest")).toBeTruthy();
     expect(screen.getByText("Offer Inbox")).toBeTruthy();
     expect(screen.queryAllByText("Accept").length).toBeGreaterThan(0);
@@ -234,5 +247,50 @@ describe("Career vertical slice UI", () => {
 
     expect(useCareerStore.getState().offers.filter((offer) => offer.status === "AVAILABLE")).toHaveLength(initialAvailableCount - 1);
     expect(screen.queryAllByText("Decline")).toHaveLength(initialAvailableCount - 1);
+  });
+
+  it("shows GPA status, supports study, and blocks match access when academically ineligible", () => {
+    const screen = render(<HomeScreen />);
+
+    act(() => {
+      useCareerStore.getState().initializeCareer({
+        firstName: "GPA",
+        lastName: "Tester",
+        stateCode: "TX",
+        citySlug: "houston-tx",
+        archetype: "Playmaker",
+        ageStarted: 8,
+        bodyFrame: "Athletic",
+        dominantHand: "Right",
+        primaryPosition: "PG",
+        secondaryPosition: "SG",
+        height: { feet: 6, inches: 2 },
+        weightLbs: 185,
+        generationSeed: 20260430,
+      });
+    });
+
+    expect(screen.getByText("GPA")).toBeTruthy();
+    expect(screen.getByText("2.5")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Study"));
+    expect(useCareerStore.getState().gpa).toBe(2.6);
+
+    act(() => {
+      useCareerStore.getState().completeNarrativeEvent();
+      useCareerStore.getState().adjustGpa(-0.7, "SYSTEM");
+    });
+
+    expect(screen.getByText("Academically ineligible: raise GPA to 2.0 to play.")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Play Match"));
+    expect(useCareerStore.getState().view).toBe("HUB");
+
+    act(() => {
+      useCareerStore.getState().adjustGpa(0.1, "SYSTEM");
+    });
+
+    fireEvent.press(screen.getByText("Play Match"));
+    expect(useCareerStore.getState().view).toBe("MATCH");
   });
 });

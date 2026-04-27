@@ -42,9 +42,20 @@ describe("Career Store Persistence", () => {
     expect(useCareerStore.getState().player.attributes.speed).toBe(99);
   });
 
-  it("updates bank balance correctly", () => {
+  it("updates bank balance and finance ledger correctly", () => {
     useCareerStore.getState().updateBankBalance(500);
-    expect(useCareerStore.getState().player.bankBalance).toBe(500);
+    const state = useCareerStore.getState();
+
+    expect(state.player.bankBalance).toBe(500);
+    expect(state.financeLedger).toHaveLength(1);
+    expect(state.financeLedger[0]).toMatchObject({
+      week: 1,
+      type: "income",
+      category: "misc",
+      amount: 500,
+      description: "Balance update",
+      source: "system",
+    });
   });
 
   it("keeps potential tier deterministic for the same seed", () => {

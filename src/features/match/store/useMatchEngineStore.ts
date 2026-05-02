@@ -6,6 +6,7 @@ import {
   type MatchEngineStoreState,
 } from "../../../matchEngineStore";
 import type { KeyMomentResolutionInput } from "../../../match/keyMoments/types";
+import type { MatchFocus, MatchWorkRate } from "../../../matchEngine";
 
 interface MatchEngineUiState {
   runtimeStore: MatchEngineStore | null;
@@ -17,6 +18,8 @@ interface MatchEngineUiActions {
   initializeRuntime: (options: MatchEngineStoreStartOptions) => MatchEngineStoreState;
   resetRuntime: () => void;
   stepPossession: () => MatchEngineStoreState | undefined;
+  setWorkRate: (workRate: MatchWorkRate) => MatchEngineStoreState | undefined;
+  setFocus: (focus: MatchFocus) => MatchEngineStoreState | undefined;
   resolveKeyMoment: (input: KeyMomentResolutionInput) => MatchEngineStoreState | undefined;
 }
 
@@ -72,6 +75,24 @@ export const useMatchEngineStore = create<MatchEngineUiStore>((set, get) => ({
     }
 
     const snapshot = runtimeStore.stepPossession();
+    set(() => ({ snapshot }));
+    return snapshot;
+  },
+  setWorkRate: (workRate) => {
+    const runtimeStore = get().runtimeStore;
+    if (!runtimeStore) {
+      return undefined;
+    }
+    const snapshot = runtimeStore.setWorkRate(workRate);
+    set(() => ({ snapshot }));
+    return snapshot;
+  },
+  setFocus: (focus) => {
+    const runtimeStore = get().runtimeStore;
+    if (!runtimeStore) {
+      return undefined;
+    }
+    const snapshot = runtimeStore.setFocus(focus);
     set(() => ({ snapshot }));
     return snapshot;
   },

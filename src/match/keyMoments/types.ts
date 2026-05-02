@@ -1,4 +1,4 @@
-import type { MatchScore, MatchContext, PossessionResult, PossessionState, UserMatchState } from "../../matchEngine";
+import type { MatchScore, MatchContext, MatchFocus, MatchWorkRate, PossessionResult, PossessionState, UserMatchState } from "../../matchEngine";
 import type { MatchConsequence } from "../../types/careerProgression";
 
 export type PeriodKey = "Q1" | "Q2" | "Q3" | "Q4" | `OT${number}`;
@@ -16,8 +16,9 @@ export interface KeyMomentContext {
   userPlayerIndex: number;
   possessionIndex: number;
   score: MatchScore;
-  workRate: number;
-  focus: number;
+  workRate: MatchWorkRate;
+  focus: MatchFocus;
+  fatigue: number;
 }
 
 export interface KeyMomentOption {
@@ -28,7 +29,7 @@ export interface KeyMomentOption {
 }
 
 export interface MinigameSpec {
-  type: "aim_shot_placement" | "timing_release";
+  type: "aim_shot_placement" | "timing_release" | "steal_reaction";
   durationMs: number;
   targetCenter: number;
   targetRadius: number;

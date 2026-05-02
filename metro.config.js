@@ -21,4 +21,21 @@ config.resolver.blockList = exclusionList(
   }),
 );
 
+const defaultResolveRequest = config.resolver.resolveRequest;
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === "web" && moduleName === "zustand/middleware") {
+    return {
+      filePath: path.join(__dirname, "node_modules", "zustand", "middleware.js"),
+      type: "sourceFile",
+    };
+  }
+
+  if (defaultResolveRequest) {
+    return defaultResolveRequest(context, moduleName, platform);
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = withNativeWind(config, { input: "./global.css" });

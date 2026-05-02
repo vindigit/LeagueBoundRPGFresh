@@ -1,0 +1,15 @@
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.33 - expected version: ~54.0.34
+  @types/jest@30.0.0 - expected version: 29.5.14
+Your project may not work correctly until you install the expected versions of the packages.
+TypeError: Invalid URL
+    at new URL (node:internal/url:806:29)
+    at C:\Users\valexander\leaguebound-fresh\node_modules\expo\node_modules\@expo\cli\src\start\server\middleware\CorsMiddleware.ts:45:34
+    at call (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:239:7)
+    at next (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:183:5)
+    at C:\Users\valexander\leaguebound-fresh\node_modules\expo\node_modules\@expo\cli\src\start\server\middleware\ContextModuleSourceMapsMiddleware.ts:29:7
+    at call (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:239:7)
+    at next (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:183:5)
+    at middleware (C:\Users\valexander\leaguebound-fresh\node_modules\expo\node_modules\@expo\cli\src\start\server\middleware\ExpoMiddleware.ts:62:16)
+    at call (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:239:7)
+    at next (C:\Users\valexander\leaguebound-fresh\node_modules\connect\index.js:183:5)

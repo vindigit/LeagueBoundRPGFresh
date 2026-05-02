@@ -7,11 +7,15 @@ import { createKeyMomentScheduler } from "./match/keyMoments/scheduler";
 import { tryResolveKeyMoment } from "./match/keyMoments/resolveKeyMoment";
 import type { KeyMomentPending, KeyMomentResolutionInput, PeriodKey } from "./match/keyMoments/types";
 import {
+  clamp01,
+  getWorkRateFatigueLoadMultiplier,
   createSeededRng,
   getPressure,
   initializePossession,
   simulatePossession,
+  type MatchFocus,
   type MatchContext,
+  type MatchWorkRate,
   type PossessionResult,
   type PossessionState,
   type SimMetrics,
@@ -71,6 +75,8 @@ export interface MatchEngineAdapter {
   getContext(): MatchContext;
   getUserPlayerLocation(): UserPlayerLocation | undefined;
   updateUserInkState(next: InkPlayerState): AdapterStepOutput;
+  setWorkRate(next: MatchWorkRate): AdapterStepOutput;
+  setFocus(next: MatchFocus): AdapterStepOutput;
   resolvePendingKeyMoment(input: KeyMomentResolutionInput): AdapterStepOutput;
 }
 
@@ -157,9 +163,6 @@ const applyInkPlayerState = (player: Player, inkState: InkPlayerState): Player =
   position: inkState.Position,
 });
 
-const clampMatchRating = (value: number): number =>
-  Math.max(0, Math.min(99, Math.round(value)));
-
 const getPeriodState = (
   totalSeconds: number,
   secondsRemaining: number,
@@ -212,10 +215,11 @@ export const createMatchEngineAdapter = (
   };
   let userMatchState: UserMatchState | undefined = userLocation
     ? {
-        baseWorkRate: userLocation.player.attributes.stamina,
-        baseFocus: userLocation.player.morale,
-        workRate: userLocation.player.attributes.stamina,
-        focus: userLocation.player.morale,
+        workRate: "normal",
+        focus: "balanced",
+        fatigue: 0,
+        touchLoad: 0,
+        lateGamePenalty: 0,
       }
     : undefined;
 
@@ -236,16 +240,19 @@ export const createMatchEngineAdapter = (
     }
 
     const touchLoad = getUserTouchLoad(currentState);
-    const pressurePenalty = Math.round(getPressure(currentState) * 12);
+    const pressure = getPressure(currentState);
     const success = overrides?.success === true;
     const failedKeyMoment = overrides?.failedKeyMoment === true;
-
+    const workRateFatigue = Math.max(0, getWorkRateFatigueLoadMultiplier(userMatchState.workRate) - 1) * 0.12;
+    const touchFatigue = touchLoad * 0.018;
+    const lateGameShare = clamp01(1 - currentState.secondsRemaining / Math.max(1, totalSeconds));
+    const lateGamePenalty = clamp01(Math.max(0, lateGameShare - 0.72) / 0.28);
+    const executionSwing = success ? -0.03 : failedKeyMoment ? 0.05 : 0;
     userMatchState = {
       ...userMatchState,
-      workRate: clampMatchRating(userMatchState.baseWorkRate - touchLoad * 2 + (success ? 2 : 0) - (failedKeyMoment ? 1 : 0)),
-      focus: clampMatchRating(
-        userMatchState.baseFocus - pressurePenalty - Math.floor(touchLoad / 2) + (success ? 4 : 0) - (failedKeyMoment ? 4 : 0),
-      ),
+      touchLoad,
+      lateGamePenalty,
+      fatigue: clamp01(touchFatigue + workRateFatigue + pressure * 0.08 + lateGamePenalty * 0.14 + executionSwing),
     };
 
     return userMatchState;
@@ -320,8 +327,9 @@ export const createMatchEngineAdapter = (
       userPlayerIndex: userLocation.playerIndex,
       possessionIndex: previousState.possessionIndex,
       score: previousState.score,
-      workRate: userMatchState?.workRate ?? userLocation.player.attributes.stamina,
-      focus: userMatchState?.focus ?? userLocation.player.morale,
+      workRate: userMatchState?.workRate ?? "normal",
+      focus: userMatchState?.focus ?? "balanced",
+      fatigue: userMatchState?.fatigue ?? 0,
     };
     const scheduled = keyMomentScheduler.onPossessionBoundary({
       context: contextArgs,
@@ -431,6 +439,30 @@ export const createMatchEngineAdapter = (
 
   const getState = (): AdapterStepOutput => buildStepOutput();
 
+  const setWorkRate = (next: MatchWorkRate): AdapterStepOutput => {
+    if (!userMatchState) {
+      return buildStepOutput();
+    }
+    userMatchState = {
+      ...userMatchState,
+      workRate: next,
+    };
+    refreshUserMatchState(state);
+    return buildStepOutput();
+  };
+
+  const setFocus = (next: MatchFocus): AdapterStepOutput => {
+    if (!userMatchState) {
+      return buildStepOutput();
+    }
+    userMatchState = {
+      ...userMatchState,
+      focus: next,
+    };
+    refreshUserMatchState(state);
+    return buildStepOutput();
+  };
+
   const resolvePendingKeyMoment = (input: KeyMomentResolutionInput): AdapterStepOutput => {
     if (!pendingPossession) {
       return buildStepOutput();
@@ -506,6 +538,8 @@ export const createMatchEngineAdapter = (
           }
         : undefined,
     updateUserInkState,
+    setWorkRate,
+    setFocus,
     resolvePendingKeyMoment,
   };
 };

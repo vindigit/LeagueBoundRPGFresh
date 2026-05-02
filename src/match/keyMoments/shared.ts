@@ -1,4 +1,16 @@
-import { getNextMomentumStreaks, type FreeThrowSequence, type MatchContext, type PossessionAction, type PossessionEventType, type PossessionResult, type PossessionState, type ShotZone } from "../../matchEngine";
+import {
+  clamp01 as clampEngine01,
+  getNextMomentumStreaks,
+  type FreeThrowSequence,
+  type MatchContext,
+  type MatchFocus,
+  type MatchWorkRate,
+  type PossessionAction,
+  type PossessionEventType,
+  type PossessionResult,
+  type PossessionState,
+  type ShotZone,
+} from "../../matchEngine";
 import type { Player } from "../../types/player";
 import type { MatchConsequence } from "../../types/careerProgression";
 import type {
@@ -22,7 +34,37 @@ export interface KeyMomentDefinition {
   }): KeyMomentResolutionOutput | undefined;
 }
 
-export const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+export const clamp01 = (value: number): number => clampEngine01(value);
+
+const getFocusBaselineBonus = (focus: MatchFocus): number => {
+  if (focus === "offense") {
+    return 0.05;
+  }
+  if (focus === "defense") {
+    return -0.03;
+  }
+  return 0.01;
+};
+
+const getWorkRateBaselineBonus = (workRate: MatchWorkRate): number => {
+  if (workRate === "high") {
+    return 0.03;
+  }
+  if (workRate === "low") {
+    return -0.02;
+  }
+  return 0;
+};
+
+const getWorkRateFatigueAmplifier = (workRate: MatchWorkRate): number => {
+  if (workRate === "high") {
+    return 1.35;
+  }
+  if (workRate === "low") {
+    return 0.8;
+  }
+  return 1;
+};
 
 export const getOptionById = (pending: KeyMomentPending, choiceId?: string): KeyMomentOption | undefined =>
   pending.options.find((option) => option.id === choiceId);
@@ -89,10 +131,12 @@ export const buildBaselineQuality = (args: {
 }): number => {
   const skill = getWeightedSkill(args.player, args.ratings) / 99;
   const pressurePenalty = getPressure(args.pendingLike) * 0.12;
-  const fatigueAmplifier = 1 + Math.max(0, args.pendingLike.context.workRate - 50) / 100;
-  const fatiguePenalty = getFatigue(args.possessionState, args.pendingLike) * 0.1 * fatigueAmplifier;
-  const focusBonus = ((args.pendingLike.context.focus - 50) / 50) * 0.12;
-  const workRateBonus = ((args.pendingLike.context.workRate - 50) / 50) * 0.04;
+  const contextualFatigue = args.pendingLike.context.fatigue ?? 0;
+  const fatiguePenalty =
+    (contextualFatigue * 0.16 + getFatigue(args.possessionState, args.pendingLike) * 0.08) *
+    getWorkRateFatigueAmplifier(args.pendingLike.context.workRate);
+  const focusBonus = getFocusBaselineBonus(args.pendingLike.context.focus);
+  const workRateBonus = getWorkRateBaselineBonus(args.pendingLike.context.workRate);
   return clamp01(0.38 + skill * 0.42 - pressurePenalty - fatiguePenalty + focusBonus + workRateBonus + (args.riskBias ?? 0));
 };
 
@@ -117,7 +161,7 @@ export const resolveEffectiveQuality = (pending: KeyMomentPending, input: KeyMom
   }
 
   if (input.usedFallbackBaseline) {
-    return clamp01(pending.simBaselineQuality ?? 0.55);
+    return clamp01((pending.simBaselineQuality ?? 0.55) - 0.06);
   }
 
   return choiceQuality(pending, input);

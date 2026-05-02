@@ -3,8 +3,9 @@ import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 
-import type { CareerState } from "../../../types/career";
+import { LeagueLevel, type CareerState } from "../../../types/career";
 import type { CareerActions } from "../../../types/career";
+import type { MatchEngineStoreStartOptions, MatchEngineStoreState } from "../../../matchEngineStore";
 import type { PlayerAttributes } from "../../../types/player";
 
 // TODO: Sprint 2 — update to new 16-attr shape when match engine is rewritten
@@ -27,9 +28,14 @@ const baseAttributes: PlayerAttributes = {
   stamina: 80,
 };
 
+let mockLeagueLevel: LeagueLevel = LeagueLevel.MIDDLE_SCHOOL;
+
 jest.mock("../../../store/useCareerStore", () => ({
   useCareerStore: (selector: (state: CareerState & CareerActions) => unknown) =>
     selector({
+      leagueLevel: mockLeagueLevel,
+      schoolPath: "LOCAL_3A",
+      injury: null,
       player: {
         id: "test-player",
         name: "Test Player",
@@ -57,9 +63,14 @@ jest.mock("../../../store/useCareerStore", () => ({
 
 describe("Terminal Match Simulation", () => {
   jest.setTimeout(30000);
+  const originalInitializeRuntime = useMatchEngineStore.getState().initializeRuntime;
 
   beforeEach(() => {
     jest.useFakeTimers();
+    mockLeagueLevel = LeagueLevel.MIDDLE_SCHOOL;
+    act(() => {
+      useMatchEngineStore.setState(() => ({ initializeRuntime: originalInitializeRuntime }));
+    });
     useMatchEngineStore.getState().resetRuntime();
     useMatchStore.getState().initializeMatch("Terminal City", "Console United");
     useMatchStore.getState().setSimulationMode("full_game");
@@ -68,8 +79,34 @@ describe("Terminal Match Simulation", () => {
   afterEach(() => {
     act(() => {
       useMatchEngineStore.getState().resetRuntime();
+      useMatchEngineStore.setState(() => ({ initializeRuntime: originalInitializeRuntime }));
     });
     jest.useRealTimers();
+  });
+
+  it("initializes match runtime with the active career league level", () => {
+    const capturedOptions: MatchEngineStoreStartOptions[] = [];
+    const initializeRuntime = jest.fn((options: MatchEngineStoreStartOptions): MatchEngineStoreState => {
+      capturedOptions.push(options);
+      return {
+        started: true,
+        simulationMode: options.simulationMode ?? "interactive",
+        pausedForKeyMoment: false,
+        pausedForPendingPossession: false,
+        totalSeconds: options.totalSeconds ?? 0,
+        autosaveEvents: [],
+      };
+    });
+
+    mockLeagueLevel = LeagueLevel.MIDDLE_SCHOOL;
+    act(() => {
+      useMatchEngineStore.setState(() => ({ initializeRuntime }));
+    });
+
+    renderHook(() => useMatchLoop());
+
+    expect(initializeRuntime).toHaveBeenCalledTimes(1);
+    expect(capturedOptions[0]?.leagueLevel).toBe(LeagueLevel.MIDDLE_SCHOOL);
   });
 
   it("runs a bounded simulation window and logs aggregate stats", () => {

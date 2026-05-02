@@ -1,0 +1,26 @@
+
+> leaguebound-fresh@1.0.0 web
+> expo start --web --port 8088 --clear --port 8099
+
+Starting project at C:\Users\valexander\leaguebound-fresh
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8099
+Logs for your project will appear below.
+Web .\index.ts ▓▓▓▓░░░░░░░░░░░░ 29.8% ( 6/11)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 52.4% ( 81/176)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓░░░░░░ 66.6% (288/353)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.6% (451/452)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 14246ms index.ts (454 modules)
+Web Bundled 14251ms index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 57.2% (149/241)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.1% (423/425)
+Web Bundled 7434ms index.ts (429 modules)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 434ms index.ts (1 module)

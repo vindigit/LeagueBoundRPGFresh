@@ -1,13 +1,14 @@
 import {
   createMatchEngineAdapter,
   type AdapterStepOutput,
+  type MatchEngineAdapter,
   type MatchEngineAdapterOptions,
   type PendingPossession,
   type ResolvedKeyMoment,
   type UserPlayerLocation,
 } from "./matchEngineAdapter";
 import type { KeyMomentPending, KeyMomentResolutionInput } from "./match/keyMoments/types";
-import type { MatchContext, PossessionResult, PossessionState, SimMetrics, UserMatchState } from "./matchEngine";
+import type { MatchContext, MatchFocus, MatchWorkRate, PossessionResult, PossessionState, SimMetrics, UserMatchState } from "./matchEngine";
 
 export type AutoSaveReason = "week_advance" | "key_moment_resolution";
 export type MatchSimulationMode = "interactive" | "full_game";
@@ -59,6 +60,8 @@ export interface MatchEngineStore {
   startMatch(options: MatchEngineStoreStartOptions): MatchEngineStoreState;
   stepPossession(): MatchEngineStoreState;
   runPossessions(possessions: number): MatchEngineStoreState;
+  setWorkRate(workRate: MatchWorkRate): MatchEngineStoreState;
+  setFocus(focus: MatchFocus): MatchEngineStoreState;
   resolveKeyMoment(input: KeyMomentResolutionInput): MatchEngineStoreState;
 }
 
@@ -80,7 +83,7 @@ const emitAutoSave = (
 };
 
 export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): MatchEngineStore => {
-  let adapter: ReturnType<typeof createMatchEngineAdapter> | undefined;
+  let adapter: MatchEngineAdapter | undefined;
   let traceId = 0;
   let state: MatchEngineStoreState = {
     started: false,
@@ -199,6 +202,30 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     return setState(emitAutoSave(state, "week_advance", options.onAutoSave));
   };
 
+  const setWorkRate = (workRate: MatchWorkRate): MatchEngineStoreState => {
+    if (!adapter || !state.started) {
+      return state;
+    }
+    const next = adapter.setWorkRate(workRate);
+    return setState({
+      ...state,
+      userMatchState: next.userMatchState,
+      lastStep: next,
+    });
+  };
+
+  const setFocus = (focus: MatchFocus): MatchEngineStoreState => {
+    if (!adapter || !state.started) {
+      return state;
+    }
+    const next = adapter.setFocus(focus);
+    return setState({
+      ...state,
+      userMatchState: next.userMatchState,
+      lastStep: next,
+    });
+  };
+
   const resolveKeyMoment = (input: KeyMomentResolutionInput): MatchEngineStoreState => {
     if (!adapter || !state.pendingKeyMoment || !state.pendingPossession || !state.lastStep?.userInkState) {
       return state;
@@ -262,6 +289,8 @@ export const createMatchEngineStore = (options: MatchEngineStoreOptions = {}): M
     startMatch,
     stepPossession,
     runPossessions,
+    setWorkRate,
+    setFocus,
     resolveKeyMoment,
   };
 };

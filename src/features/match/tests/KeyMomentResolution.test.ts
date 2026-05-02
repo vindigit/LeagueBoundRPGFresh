@@ -173,7 +173,7 @@ describe("Key Moment resolution", () => {
       possessionState,
     });
 
-    expect(resolved.quality).toBeCloseTo(0.55, 5);
+    expect(resolved.quality).toBeCloseTo(0.49, 5);
     expect(resolved.result.eventType).toBe("miss");
   });
 

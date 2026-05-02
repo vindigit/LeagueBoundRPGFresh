@@ -89,38 +89,38 @@ const describeClock = (timeRemaining: number, clockBand: ClockBand): string => {
   const seconds = Math.max(0, timeRemaining) % 60;
   const raw = `${minutes}:${seconds.toString().padStart(2, "0")}`;
   if (clockBand === "critical") {
-    return `with ${raw} left in a critical stretch`;
+    return `${raw} left in crunch time`;
   }
   if (clockBand === "late") {
-    return `with ${raw} left and the clock tightening`;
+    return `${raw} left with the clock shrinking`;
   }
   if (clockBand === "mid") {
-    return `with ${raw} left in the quarter`;
+    return `${raw} left in the quarter`;
   }
-  return `with ${raw} left and time to read it`;
+  return `${raw} left`;
 };
 
-const describeFocus = (focusBand: Band): string => {
+const describeFocus = (focusBand: Band, offenseIsUser: boolean): string => {
   if (focusBand === "low") {
-    return "while your focus is slipping";
+    return offenseIsUser ? "with your eyes on protecting the ball" : "staying home first";
   }
   if (focusBand === "high") {
-    return "with your focus locked in";
+    return offenseIsUser ? "looking to press the attack" : "looking to blow up the action";
   }
-  return "while your focus is steady";
+  return offenseIsUser ? "reading the floor" : "sitting in balanced coverage";
 };
 
 const describeWorkRate = (workRateBand: Band, fatigueBand: Band): string => {
   if (workRateBand === "high" && fatigueBand !== "low") {
-    return "with your motor still running hot";
+    return "with your motor still revving";
   }
   if (fatigueBand === "high") {
-    return "with heavy legs";
+    return "on heavy legs";
   }
   if (workRateBand === "low") {
-    return "while trying to conserve energy";
+    return "while pacing yourself";
   }
-  return "with enough juice to stay patient";
+  return "with steady legs";
 };
 
 const describeBuild = (player: Player | undefined, ctx: Omit<ChoiceContext, "buildText">): string => {
@@ -148,9 +148,19 @@ const getChoiceContext = (args: KeyMomentBuildArgs): ChoiceContext => {
   const userMargin = getUserMargin(args);
   const scoreBand = getScoreBand(userMargin);
   const clockBand = getClockBand(args.context.timeRemaining);
-  const workRateBand = toBand(args.context.workRate, 45, 75);
-  const focusBand = toBand(args.context.focus, 45, 70);
-  const fatigueBand = toBand(getFatigue(args.possessionState, { context: args.context }) * 100, 25, 60);
+  const workRateBand = args.context.workRate === "high" ? "high" : args.context.workRate === "low" ? "low" : "medium";
+  const offenseIsUser = args.context.offense === args.context.userTeam;
+  const focusBand =
+    args.context.focus === "balanced"
+      ? "medium"
+      : offenseIsUser
+        ? args.context.focus === "offense"
+          ? "high"
+          : "low"
+        : args.context.focus === "defense"
+          ? "high"
+          : "low";
+  const fatigueBand = toBand((args.context.fatigue + getFatigue(args.possessionState, { context: args.context })) * 50, 25, 60);
   const playmakingSkill = getWeightedSkill(player, [
     { rating: "vision", weight: 0.45 },
     { rating: "passing", weight: 0.35 },
@@ -187,7 +197,7 @@ const getChoiceContext = (args: KeyMomentBuildArgs): ChoiceContext => {
   ]);
   const base = {
     player,
-    offenseIsUser: args.context.offense === args.context.userTeam,
+    offenseIsUser,
     scoreBand,
     clockBand,
     workRateBand,
@@ -196,7 +206,7 @@ const getChoiceContext = (args: KeyMomentBuildArgs): ChoiceContext => {
     userMargin,
     scoreText: describeScore(userMargin),
     clockText: describeClock(args.context.timeRemaining, clockBand),
-    focusText: describeFocus(focusBand),
+    focusText: describeFocus(focusBand, offenseIsUser),
     workRateText: describeWorkRate(workRateBand, fatigueBand),
     playmakingSkill,
     downhillSkill,
@@ -237,19 +247,19 @@ export const buildContextualMakeTheReadOptions = (args: KeyMomentBuildArgs): Key
     makeOption(
       "kick_out",
       ctx.playmakingSkill >= ctx.downhillSkill ? "Hit the Weak-Side Window" : "Spray It Out",
-      `${ctx.scoreText} ${ctx.clockText}, trust your vision ${ctx.buildText} and find the kick-out three ${ctx.focusText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Move the help and fire the weak-side kick-out, ${ctx.focusText}.`,
       clampDelta(kickOutDelta),
     ),
     makeOption(
       "attack_gap",
       ctx.downhillSkill >= ctx.playmakingSkill ? "Collapse the Gap" : "Knife Through the Help",
-      `${ctx.clockText}, lean into your downhill game ${ctx.buildText} and pressure the lane ${ctx.workRateText}.`,
+      `${ctx.clockText}. Turn the corner and attack the seam ${ctx.workRateText}.`,
       clampDelta(attackGapDelta),
     ),
     makeOption(
       "reset_space",
       ctx.scoreBand === "leading" ? "Settle the Possession" : "Bail Out and Reset",
-      `${ctx.scoreText} ${ctx.clockText}, reset the spacing and avoid a rushed read ${ctx.focusText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Reset the floor and make them guard one more action.`,
       clampDelta(resetSpaceDelta),
     ),
   ];
@@ -276,19 +286,19 @@ export const buildContextualOnBallStopOptions = (args: KeyMomentBuildArgs): KeyM
     makeOption(
       "shade_middle",
       ctx.perimeterDefenseSkill >= ctx.interiorDefenseSkill ? "Cut Off the Middle" : "Angle Into Traffic",
-      `${ctx.scoreText} ${ctx.clockText}, use your feet ${ctx.buildText} to force the ball into help and away from a clean pull-up.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Sit on the middle and send the drive into help.`,
       clampDelta(shadeMiddleDelta),
     ),
     makeOption(
       "crowd_handle",
       ctx.scoreBand === "trailing" ? "Heat Up the Handle" : "Crowd the Dribble",
-      `${ctx.clockText}, pressure the handle and deny rhythm without giving up a clean look ${ctx.focusText}.`,
+      `${ctx.clockText}. Crowd the dribble and take away rhythm, ${ctx.focusText}.`,
       clampDelta(crowdHandleDelta),
     ),
     makeOption(
       "wall_up",
       ctx.scoreBand === "leading" ? "Stay Vertical, No Whistle" : "Wall Up at the Rim",
-      `${ctx.scoreText} ${ctx.clockText}, trust your frame ${ctx.buildText} and do not bail them out with tired contact ${ctx.workRateText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Meet the drive chest-up and finish the stop ${ctx.workRateText}.`,
       clampDelta(wallUpDelta),
     ),
   ];
@@ -315,19 +325,19 @@ export const buildContextualJumpLaneOptions = (args: KeyMomentBuildArgs): KeyMom
     makeOption(
       "shoot_gap",
       ctx.scoreBand === "trailing" ? "Jump the Lane for a Momentum Flip" : "Shoot the Passing Gap",
-      `${ctx.scoreText} ${ctx.clockText}, trust your instincts ${ctx.buildText} and gamble only if your read is clean ${ctx.focusText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Jump it only if you see it early, ${ctx.focusText}.`,
       clampDelta(shootGapDelta),
     ),
     makeOption(
       "stunt_recover",
       "Show Help, Snap Back",
-      `${ctx.clockText}, stunt at the action and recover in rhythm to take away the easy pass ${ctx.workRateText}.`,
+      `${ctx.clockText}. Stunt at the ball and recover before the skip opens up.`,
       clampDelta(stuntRecoverDelta),
     ),
     makeOption(
       "stay_home",
       ctx.scoreBand === "leading" ? "Stay Home, Protect the Lead" : "Stay Home and Contain",
-      `${ctx.scoreText} ${ctx.clockText}, play the solid coverage and do not let a shaky read turn into a layup ${ctx.focusText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Stay attached and make them score over set coverage.`,
       clampDelta(stayHomeDelta),
     ),
   ];
@@ -370,19 +380,19 @@ export const buildContextualFoulPressureOptions = (args: KeyMomentBuildArgs): Ke
       makeOption(
         "rip_through",
         ctx.scoreBand === "trailing" ? "Force the Whistle" : "Rip Through the Hip",
-        `${ctx.scoreText} ${ctx.clockText}, attack the body ${ctx.buildText} and lean into contact ${pendingModeText}.`,
+        `${ctx.scoreText}, ${ctx.clockText}. Get downhill and make the defender absorb contact ${pendingModeText}.`,
         clampDelta(ripThroughDelta),
       ),
       makeOption(
         "go_strong",
         "Finish Through the Chest",
-        `${ctx.clockText}, play through the hit and trust your downhill burst ${ctx.workRateText}.`,
+        `${ctx.clockText}. Power through the hit and finish on balance ${ctx.workRateText}.`,
         clampDelta(goStrongDelta),
       ),
       makeOption(
         "fade_away",
         ctx.scoreBand === "leading" ? "Take the Safer Fade" : "Avoid a Whistle-Dependent Look",
-        `${ctx.scoreText} ${ctx.clockText}, create space without depending on the call ${ctx.focusText}.`,
+        `${ctx.scoreText}, ${ctx.clockText}. Create space and score without hunting the whistle.`,
         clampDelta(fadeAwayDelta),
       ),
     ];
@@ -405,19 +415,19 @@ export const buildContextualFoulPressureOptions = (args: KeyMomentBuildArgs): Ke
     makeOption(
       "wall_up",
       ctx.scoreBand === "leading" ? "Stay Vertical, Do Not Stop the Clock" : "Wall Up Without Fouling",
-      `${ctx.scoreText} ${ctx.clockText}, keep your chest clean ${ctx.buildText} ${pendingModeText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Stay vertical and keep them off the line ${pendingModeText}.`,
       clampDelta(wallUpDelta),
     ),
     makeOption(
       "swipe_down",
       ctx.scoreBand === "trailing" ? "Swipe for the Disruption" : "Swipe Down and Recover",
-      `${ctx.clockText}, reach only if the ball is exposed because ${pendingModeText} ${ctx.focusText}.`,
+      `${ctx.clockText}. Swipe only when the ball is loose because ${pendingModeText}.`,
       clampDelta(swipeDownDelta),
     ),
     makeOption(
       "body_check",
       ctx.scoreBand === "leading" ? "Body Up, No Cheap Bonus" : "Cut Off the Chest Line",
-      `${ctx.scoreText} ${ctx.clockText}, absorb the drive carefully and avoid gifting the line ${pendingModeText}.`,
+      `${ctx.scoreText}, ${ctx.clockText}. Beat the drive to the spot and avoid gifting free throws.`,
       clampDelta(bodyCheckDelta),
     ),
   ];

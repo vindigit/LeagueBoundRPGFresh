@@ -78,11 +78,15 @@ export interface SimMetrics {
   turnoverLikeFailures: number;
 }
 
+export type MatchWorkRate = "low" | "normal" | "high";
+export type MatchFocus = "defense" | "balanced" | "offense";
+
 export interface UserMatchState {
-  baseWorkRate: number;
-  baseFocus: number;
-  workRate: number;
-  focus: number;
+  workRate: MatchWorkRate;
+  focus: MatchFocus;
+  fatigue: number;
+  touchLoad: number;
+  lateGamePenalty: number;
 }
 
 export interface PossessionSimulationOptions {
@@ -171,6 +175,67 @@ type BadgeContext = {
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+export const clamp01 = (value: number): number => clamp(value, 0, 1);
+
+export const getWorkRateInvolvementMultiplier = (workRate: MatchWorkRate): number => {
+  if (workRate === "high") {
+    return 1.26;
+  }
+  if (workRate === "low") {
+    return 0.8;
+  }
+  return 1;
+};
+
+export const getWorkRateFatigueLoadMultiplier = (workRate: MatchWorkRate): number => {
+  if (workRate === "high") {
+    return 1.45;
+  }
+  if (workRate === "low") {
+    return 0.72;
+  }
+  return 1;
+};
+
+const getFocusComposureBonus = (
+  focus: MatchFocus,
+  teamKey: TeamSide,
+  userControl?: PossessionSimulationOptions["userControl"],
+): number => {
+  if (!userControl || userControl.teamKey !== teamKey) {
+    return 0;
+  }
+  if (focus === "offense") {
+    return 6;
+  }
+  if (focus === "defense") {
+    return -3;
+  }
+  return 2;
+};
+
+const getFocusActionBias = (
+  focus: MatchFocus,
+): Record<PossessionAction, number> => {
+  if (focus === "offense") {
+    return { pass: -3, shoot: 6, dribble: 5 };
+  }
+  if (focus === "defense") {
+    return { pass: 5, shoot: -5, dribble: -2 };
+  }
+  return { pass: 1, shoot: 1, dribble: 1 };
+};
+
+const getFocusShotZoneBias = (focus: MatchFocus): Record<ShotZone, number> => {
+  if (focus === "offense") {
+    return { rim: 8, midrange: -2, three: 6 };
+  }
+  if (focus === "defense") {
+    return { rim: -6, midrange: 2, three: -4 };
+  }
+  return { rim: 0, midrange: 0, three: 0 };
+};
 
 export const BADGE_TIER_SCALE: Record<BuilderBadgeTier, number> = {
   BRONZE: 1,
@@ -424,11 +489,16 @@ const getPlayerImpact = (
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   fatigueLoadMultiplier = 1,
+  conditionPenalty = 0,
 ): PlayerImpact => {
   const consistency = getScaledAttribute(getConsistency(player), leagueLevel);
   const discipline = getScaledAttribute(getDiscipline(player), leagueLevel);
   const stamina = getScaledAttribute(player.attributes.stamina, leagueLevel);
-  const fatigueMultiplier = getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex], fatigueLoadMultiplier);
+  const fatigueMultiplier = clamp(
+    getFatigueMultiplier(stamina, touchCounts[teamKey][playerIndex], fatigueLoadMultiplier) - conditionPenalty,
+    tuning.fatigueMinMultiplier,
+    tuning.fatigueMaxMultiplier,
+  );
   const scaledAttrs = {
     vision: getScaledAttribute(player.attributes.vision, leagueLevel),
     passing: getScaledAttribute(player.attributes.passing, leagueLevel),
@@ -538,6 +608,7 @@ export const chooseAction = (
   state: PossessionState,
   rng: () => number,
   focusComposureBonus = 0,
+  actionBias?: Partial<Record<PossessionAction, number>>,
 ): PossessionAction => {
   const pressure = getPressure(state);
   const baseWeights: Record<PossessionAction, number> = tuning.baseActionWeights;
@@ -579,7 +650,15 @@ export const chooseAction = (
   return weightedPick(
     (["pass", "shoot", "dribble"] as PossessionAction[]).map((action) => ({
       key: action,
-      weight: clamp(baseWeights[action] + archetypeAdjust[action] + pressureAdjust[action] + skillAdjust[action], 1, 99),
+      weight: clamp(
+        baseWeights[action] +
+          archetypeAdjust[action] +
+          pressureAdjust[action] +
+          skillAdjust[action] +
+          (actionBias?.[action] ?? 0),
+        1,
+        99,
+      ),
     })),
     rng,
   );
@@ -591,12 +670,16 @@ export const pickBallHandlerIndex = (
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
   leagueLevel: LeagueLevel,
   rng: () => number,
+  userControl?: PossessionSimulationOptions["userControl"],
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+    const isUserControlled = userControl?.teamKey === teamKey && userControl.playerIndex === index;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
-      weight: impact.handle * 0.45 + impact.vision * 0.3 + impact.passing * 0.25,
+      weight:
+        (impact.handle * 0.45 + impact.vision * 0.3 + impact.passing * 0.25) *
+        (isUserControlled ? getWorkRateInvolvementMultiplier(userControl.matchState.workRate) : 1),
     };
   });
   return weightedPick(weighted, rng);
@@ -711,6 +794,7 @@ const pickShotZone = (
   shooterImpact: PlayerImpact,
   badgeContext: BadgeContext,
   rng: () => number,
+  shotZoneBias?: Partial<Record<ShotZone, number>>,
 ): ShotZone => {
   const badgeModifiers = buildBadgeModifierTotals(shooter);
   const base = tuning.shotZoneByAction[action];
@@ -731,18 +815,18 @@ const pickShotZone = (
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
       key: "midrange",
-      weight: base.midrange + midrangeTilt - Math.abs(midrangeTilt - rimTilt) * 0.1,
+      weight: base.midrange + midrangeTilt - Math.abs(midrangeTilt - rimTilt) * 0.1 + (shotZoneBias?.midrange ?? 0),
     },
     {
       key: "rim",
-      weight: base.rim + rimTilt - fatigueTilt * 0.2,
+      weight: base.rim + rimTilt - fatigueTilt * 0.2 + (shotZoneBias?.rim ?? 0),
     },
   ];
 
   if (!suppressThree) {
     entries.unshift({
       key: "three",
-      weight: base.three + threeTilt + fatigueTilt,
+      weight: base.three + threeTilt + fatigueTilt + (shotZoneBias?.three ?? 0),
     });
   }
 
@@ -1313,16 +1397,16 @@ export const simulatePossession = (
   };
   const isUserControlledPlayer = (teamKey: TeamSide, playerIndex: number): boolean =>
     options?.userControl?.teamKey === teamKey && options.userControl.playerIndex === playerIndex;
-  const userFatigueLoadMultiplier =
-    options?.userControl
-      ? 1 + Math.max(0, options.userControl.matchState.workRate - 50) / 75
-      : 1;
-  const userFocusComposureBonus =
-    options?.userControl
-      ? (options.userControl.matchState.focus - 50) * 0.3
-      : 0;
+  const userFatigueLoadMultiplier = options?.userControl
+    ? getWorkRateFatigueLoadMultiplier(options.userControl.matchState.workRate)
+    : 1;
+  const userConditionPenalty = options?.userControl
+    ? options.userControl.matchState.fatigue * 0.14 + options.userControl.matchState.lateGamePenalty * 0.12
+    : 0;
+  const userActionBias = options?.userControl ? getFocusActionBias(options.userControl.matchState.focus) : undefined;
+  const userShotZoneBias = options?.userControl ? getFocusShotZoneBias(options.userControl.matchState.focus) : undefined;
 
-  const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng);
+  const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng, options?.userControl);
   incrementTouch(state.offenseKey, ballHandlerIndex);
   const ballHandler = getPlayerByIndex(offenseTeam, ballHandlerIndex);
   const ballHandlerIsUser = isUserControlledPlayer(state.offenseKey, ballHandlerIndex);
@@ -1333,11 +1417,19 @@ export const simulatePossession = (
     touchCounts,
     leagueLevel,
     ballHandlerIsUser ? userFatigueLoadMultiplier : 1,
+    ballHandlerIsUser ? userConditionPenalty : 0,
   );
   const turnoverShotZoneHint = getTurnoverShotZoneHint(ballHandlerImpact);
 
   pushTrace(trace, "DECIDE_ACTION");
-  const action = chooseAction(ballHandler, ballHandlerImpact, state, rng, ballHandlerIsUser ? userFocusComposureBonus : 0);
+  const action = chooseAction(
+    ballHandler,
+    ballHandlerImpact,
+    state,
+    rng,
+    getFocusComposureBonus(ballHandlerIsUser ? options?.userControl?.matchState.focus ?? "balanced" : "balanced", state.offenseKey, options?.userControl),
+    ballHandlerIsUser ? userActionBias : undefined,
+  );
 
   pushTrace(trace, "RESOLVE_TURNOVER_PRESSURE");
   const primaryDefenderIndex = pickDefenderIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, "turnover", rng);
@@ -1350,6 +1442,7 @@ export const simulatePossession = (
     touchCounts,
     leagueLevel,
     isUserControlledPlayer(state.defenseKey, primaryDefenderIndex) ? userFatigueLoadMultiplier : 1,
+    isUserControlledPlayer(state.defenseKey, primaryDefenderIndex) ? userConditionPenalty : 0,
   );
 
   const turnoverProb = applyHomeCourtToProbability(
@@ -1366,7 +1459,7 @@ export const simulatePossession = (
       action,
       turnoverShotZoneHint,
       badgeContext,
-      ballHandlerIsUser ? userFocusComposureBonus : 0,
+      getFocusComposureBonus(ballHandlerIsUser ? options?.userControl?.matchState.focus ?? "balanced" : "balanced", state.offenseKey, options?.userControl),
     ),
     state.offenseKey,
     "turnover",
@@ -1425,6 +1518,7 @@ export const simulatePossession = (
       touchCounts,
       leagueLevel,
       isUserControlledPlayer(state.offenseKey, receiverIndex) ? userFatigueLoadMultiplier : 1,
+      isUserControlledPlayer(state.offenseKey, receiverIndex) ? userConditionPenalty : 0,
     );
     const assistProb = getAssistProbability(
       ballHandler,
@@ -1449,8 +1543,18 @@ export const simulatePossession = (
     touchCounts,
     leagueLevel,
     shooterIsUser ? userFatigueLoadMultiplier : 1,
+    shooterIsUser ? userConditionPenalty : 0,
   );
-  const shotZone = pickShotZone(shooter, shooterIndex, state.offenseKey, action, shooterImpact, badgeContext, rng);
+  const shotZone = pickShotZone(
+    shooter,
+    shooterIndex,
+    state.offenseKey,
+    action,
+    shooterImpact,
+    badgeContext,
+    rng,
+    shooterIsUser ? userShotZoneBias : undefined,
+  );
   const rimAttemptType = shotZone === "rim" ? pickRimAttemptType(shooter, shooterImpact, rng) : undefined;
 
   pushTrace(trace, "RESOLVE_SHOT_CONTEST");
@@ -1470,6 +1574,8 @@ export const simulatePossession = (
     shotDefenderIndex,
     touchCounts,
     leagueLevel,
+    isUserControlledPlayer(state.defenseKey, shotDefenderIndex) ? userFatigueLoadMultiplier : 1,
+    isUserControlledPlayer(state.defenseKey, shotDefenderIndex) ? userConditionPenalty : 0,
   );
 
   const blockProb = getBlockProbability(
@@ -1514,7 +1620,7 @@ export const simulatePossession = (
         rng,
         badgeContext,
         rimAttemptType,
-        shooterIsUser ? userFocusComposureBonus : 0,
+        getFocusComposureBonus(shooterIsUser ? options?.userControl?.matchState.focus ?? "balanced" : "balanced", state.offenseKey, options?.userControl),
       ),
       state.offenseKey,
       "shot",

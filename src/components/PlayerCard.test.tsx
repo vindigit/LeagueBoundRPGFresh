@@ -105,11 +105,9 @@ describe("PlayerCard", () => {
   it("renders the builder review breakdown with player-facing labels", () => {
     const screen = render(<PlayerCard />);
 
-    expect(screen.getByText("Builder Review")).toBeTruthy();
-    expect(screen.getByText("Classification")).toBeTruthy();
+    expect(screen.getByText("Projected Sim Identity")).toBeTruthy();
+    expect(screen.getByText("Projected Role")).toBeTruthy();
     expect(screen.getByText("Primary Creator")).toBeTruthy();
-    expect(screen.getByText("Archetype Fit")).toBeTruthy();
-    expect(screen.getByText("Playmaker")).toBeTruthy();
     expect(screen.getByText("Top Strengths")).toBeTruthy();
     expect(screen.getByText("Playmaking")).toBeTruthy();
     expect(screen.getByText("Shooting")).toBeTruthy();

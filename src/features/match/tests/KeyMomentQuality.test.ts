@@ -1,6 +1,6 @@
 import { buildCreateShotPending } from "../../../match/keyMoments/createShot";
 import type { KeyMomentBuildArgs } from "../../../match/keyMoments/types";
-import type { MatchContext, PossessionState } from "../../../matchEngine";
+import type { MatchContext, MatchFocus, MatchWorkRate, PossessionState } from "../../../matchEngine";
 import type { Player, PlayerAttributes } from "../../../types/player";
 
 const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
@@ -50,24 +50,12 @@ const matchContext: MatchContext = {
   home: {
     name: "Home",
     teamOvr: 0,
-    roster: [
-      makePlayer("h1"),
-      makePlayer("h2"),
-      makePlayer("h3"),
-      makePlayer("h4"),
-      makePlayer("h5"),
-    ] as const,
+    roster: [makePlayer("h1"), makePlayer("h2"), makePlayer("h3"), makePlayer("h4"), makePlayer("h5")] as const,
   },
   away: {
     name: "Away",
     teamOvr: 0,
-    roster: [
-      makePlayer("a1"),
-      makePlayer("a2"),
-      makePlayer("a3"),
-      makePlayer("a4"),
-      makePlayer("a5"),
-    ] as const,
+    roster: [makePlayer("a1"), makePlayer("a2"), makePlayer("a3"), makePlayer("a4"), makePlayer("a5")] as const,
   },
 };
 
@@ -84,10 +72,10 @@ const buildPossessionState = (userTouches: number): PossessionState => ({
   awayStreak: 0,
 });
 
-const buildArgs = (workRate: number, focus: number, userTouches: number): KeyMomentBuildArgs => ({
-  id: `pending-${workRate}-${focus}-${userTouches}`,
+const buildArgs = (workRate: MatchWorkRate, focus: MatchFocus, fatigue: number, userTouches: number): KeyMomentBuildArgs => ({
+  id: `pending-${workRate}-${focus}-${fatigue}-${userTouches}`,
   context: {
-    id: `ctx-${workRate}-${focus}-${userTouches}`,
+    id: `ctx-${workRate}-${focus}-${fatigue}-${userTouches}`,
     periodKey: "Q3",
     quarter: 3,
     timeRemaining: 300,
@@ -99,31 +87,33 @@ const buildArgs = (workRate: number, focus: number, userTouches: number): KeyMom
     score: { home: 42, away: 39 },
     workRate,
     focus,
+    fatigue,
   },
   matchContext,
   possessionState: buildPossessionState(userTouches),
   userMatchState: {
-    baseWorkRate: 82,
-    baseFocus: 50,
     workRate,
     focus,
+    fatigue,
+    touchLoad: userTouches,
+    lateGamePenalty: 0.15,
   },
   seedValue: 1234,
 });
 
 describe("Key moment baseline quality", () => {
-  it("raises baseline quality when focus is higher", () => {
-    const lowFocus = buildCreateShotPending(buildArgs(60, 30, 1));
-    const highFocus = buildCreateShotPending(buildArgs(60, 80, 1));
+  it("raises baseline quality when focus is offense instead of defense on user offense moments", () => {
+    const defenseFocus = buildCreateShotPending(buildArgs("normal", "defense", 0.15, 1));
+    const offenseFocus = buildCreateShotPending(buildArgs("normal", "offense", 0.15, 1));
 
-    expect(lowFocus).toBeDefined();
-    expect(highFocus).toBeDefined();
-    expect(highFocus!.simBaselineQuality).toBeGreaterThan(lowFocus!.simBaselineQuality);
+    expect(defenseFocus).toBeDefined();
+    expect(offenseFocus).toBeDefined();
+    expect(offenseFocus!.simBaselineQuality).toBeGreaterThan(defenseFocus!.simBaselineQuality);
   });
 
   it("gives high workRate a small upside before fatigue becomes relevant", () => {
-    const lowWorkRate = buildCreateShotPending(buildArgs(35, 50, 0));
-    const highWorkRate = buildCreateShotPending(buildArgs(80, 50, 0));
+    const lowWorkRate = buildCreateShotPending(buildArgs("low", "balanced", 0.05, 0));
+    const highWorkRate = buildCreateShotPending(buildArgs("high", "balanced", 0.05, 0));
 
     expect(lowWorkRate).toBeDefined();
     expect(highWorkRate).toBeDefined();
@@ -131,10 +121,10 @@ describe("Key moment baseline quality", () => {
   });
 
   it("amplifies fatigue penalties more aggressively at high workRate", () => {
-    const lowWorkRateFresh = buildCreateShotPending(buildArgs(35, 50, 0));
-    const lowWorkRateTired = buildCreateShotPending(buildArgs(35, 50, 8));
-    const highWorkRateFresh = buildCreateShotPending(buildArgs(80, 50, 0));
-    const highWorkRateTired = buildCreateShotPending(buildArgs(80, 50, 8));
+    const lowWorkRateFresh = buildCreateShotPending(buildArgs("low", "balanced", 0.05, 0));
+    const lowWorkRateTired = buildCreateShotPending(buildArgs("low", "balanced", 0.65, 8));
+    const highWorkRateFresh = buildCreateShotPending(buildArgs("high", "balanced", 0.05, 0));
+    const highWorkRateTired = buildCreateShotPending(buildArgs("high", "balanced", 0.65, 8));
 
     expect(lowWorkRateFresh).toBeDefined();
     expect(lowWorkRateTired).toBeDefined();

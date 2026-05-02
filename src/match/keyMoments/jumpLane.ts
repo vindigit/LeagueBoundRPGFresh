@@ -2,7 +2,8 @@ import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, Ke
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
 import { buildContextualJumpLaneOptions } from "./contextualOptions";
 
-const PROMPT = "Key Moment: Read the pass and decide whether to jump the lane.";
+const PROMPT = "Read the pass and break on the lane.";
+const STEAL_LANE_OPTION_ID = "steal_lane_tap";
 
 export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending | undefined => {
   if (args.context.offense === args.context.userTeam) {
@@ -14,8 +15,22 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
     type: "jump_lane",
     context: args.context,
     promptText: PROMPT,
-    mode: "choice",
-    options: buildContextualJumpLaneOptions(args),
+    mode: "minigame",
+    options: [
+      {
+        id: STEAL_LANE_OPTION_ID,
+        label: "Steal Lane Jump",
+        description: "Break as the passing window opens and take it clean.",
+        qualityDelta: 0,
+      },
+      ...buildContextualJumpLaneOptions(args),
+    ],
+    minigame: {
+      type: "steal_reaction",
+      durationMs: 1100,
+      targetCenter: 0.58,
+      targetRadius: 0.09,
+    },
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,
@@ -40,7 +55,7 @@ export const resolveJumpLane = (args: {
   const optionId = getResolvedChoiceId(args.pending, args.input);
   const quality = resolveEffectiveQuality(args.pending, args.input);
 
-  if (optionId === "shoot_gap") {
+  if (optionId === STEAL_LANE_OPTION_ID || optionId === "shoot_gap") {
     return buildResolution({
       pending: args.pending,
       possessionState: args.possessionState,

@@ -4,11 +4,11 @@
   "main": "index.ts",
   "scripts": {
     "prestart:tunnel": "node scripts/repair-ngrok-bin.js",
-    "start:tunnel": "npm run prestart:tunnel && expo start --clear --tunnel",
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start:tunnel": "npm run prestart:tunnel && expo start --clear --tunnel --port 8088",
+    "start": "expo start --port 8088",
+    "android": "expo start --android --port 8088",
+    "ios": "expo start --ios --port 8088",
+    "web": "expo start --web --port 8088",
     "test": "jest",
     "test:builder": "jest --runInBand test/builderAllocate.test.ts test/builderBadgeCatalog.test.ts test/builderBadgeResolve.test.ts test/builderCaps.test.ts test/builderClassify.test.ts test/builderProgression.test.ts test/derivedRatings.test.ts",
     "test:career-store": "jest --runInBand test/careerGrowthCaps.test.ts test/careerProgressionModel.test.ts test/careerStoreBuilderIntegration.test.ts test/careerStoreMigrationSmoke.test.tsx test/careerVerticalSliceLoop.test.ts test/careerVerticalSliceUI.integration.test.tsx test/verifyPersistence.test.ts test/growthResidueMigration.test.ts test/playerStateCompatibility.test.ts",
@@ -26,7 +26,9 @@
     "inkjs": "^2.3.2",
     "nativewind": "^4.2.1",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-web": "^0.21.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

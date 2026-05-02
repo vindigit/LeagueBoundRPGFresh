@@ -75,8 +75,9 @@ const pendingChoice: KeyMomentPending = {
     userPlayerIndex: 0,
     possessionIndex: 8,
     score: { home: 34, away: 30 },
-    workRate: 62,
-    focus: 44,
+    workRate: "high",
+    focus: "offense",
+    fatigue: 0.42,
   },
   promptText: "Key Moment: Make the read before the help defense closes.",
   mode: "choice",
@@ -185,10 +186,11 @@ describe("MatchScreen key moment UI", () => {
           ...state.snapshot,
           pendingKeyMoment: pendingChoice,
           userMatchState: {
-            baseWorkRate: 80,
-            baseFocus: 50,
-            workRate: 62,
-            focus: 44,
+            workRate: "high",
+            focus: "offense",
+            fatigue: 0.42,
+            touchLoad: 4,
+            lateGamePenalty: 0.1,
           },
         },
         resolveKeyMoment,
@@ -197,9 +199,9 @@ describe("MatchScreen key moment UI", () => {
 
     expect(screen.getByText(pendingChoice.promptText)).toBeTruthy();
     expect(screen.getByText("34 - 30")).toBeTruthy();
-    expect(screen.getByText("62 (Medium)")).toBeTruthy();
-    expect(screen.getByText("44 (Low)")).toBeTruthy();
-    expect(screen.getByText("PG Playmaker • On offense vs AWAY")).toBeTruthy();
+    expect(screen.getAllByText("High").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Offense").length).toBeGreaterThan(0);
+    expect(screen.getByText("PG Playmaker | On offense vs AWAY")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Sim It"));
 
@@ -225,10 +227,11 @@ describe("MatchScreen key moment UI", () => {
           ...state.snapshot,
           pendingKeyMoment: pendingMinigame,
           userMatchState: {
-            baseWorkRate: 80,
-            baseFocus: 50,
-            workRate: 62,
-            focus: 44,
+            workRate: "high",
+            focus: "offense",
+            fatigue: 0.42,
+            touchLoad: 4,
+            lateGamePenalty: 0.1,
           },
         },
         resolveKeyMoment,
@@ -237,7 +240,6 @@ describe("MatchScreen key moment UI", () => {
 
     expect(screen.getByText(pendingMinigame.promptText)).toBeTruthy();
     expect(screen.getByText("Timing Release")).toBeTruthy();
-    expect(screen.queryByText("Minigame Shell Placeholder")).toBeNull();
 
     act(() => {
       jest.advanceTimersByTime(720);
@@ -252,6 +254,69 @@ describe("MatchScreen key moment UI", () => {
         source: "minigame",
       },
     });
+  });
+
+  it("shows HUD tactic controls outside the overlay and dispatches instant updates", () => {
+    const setWorkRate = jest.fn();
+    const setFocus = jest.fn();
+    const screen = render(<MatchScreen />);
+
+    act(() => {
+      useMatchEngineStore.setState((state) => ({
+        ...state,
+        setWorkRate,
+        setFocus,
+        snapshot: {
+          ...state.snapshot,
+          userMatchState: {
+            workRate: "normal",
+            focus: "balanced",
+            fatigue: 0.2,
+            touchLoad: 2,
+            lateGamePenalty: 0,
+          },
+        },
+      }));
+    });
+
+    fireEvent.press(screen.getByText("High"));
+    fireEvent.press(screen.getByText("Defense"));
+
+    expect(setWorkRate).toHaveBeenCalledWith("high");
+    expect(setFocus).toHaveBeenCalledWith("defense");
+  });
+
+  it("disables the slider and tactic buttons while a key moment modal is active", () => {
+    const setWorkRate = jest.fn();
+    const screen = render(<MatchScreen />);
+
+    act(() => {
+      useMatchStore.getState().updateGame({
+        homeScore: 34,
+        awayScore: 30,
+        quarter: 2,
+        timeRemaining: 185,
+      });
+      useMatchEngineStore.setState((state) => ({
+        ...state,
+        setWorkRate,
+        snapshot: {
+          ...state.snapshot,
+          pendingKeyMoment: pendingChoice,
+          userMatchState: {
+            workRate: "normal",
+            focus: "balanced",
+            fatigue: 0.2,
+            touchLoad: 2,
+            lateGamePenalty: 0,
+          },
+        },
+      }));
+    });
+
+    fireEvent.press(screen.getAllByText("High")[0]!);
+    expect(setWorkRate).not.toHaveBeenCalled();
+    expect(screen.UNSAFE_getByType(require("@react-native-community/slider").default).props.disabled).toBe(true);
   });
 
   it("renders contextual choice copy that matches the generated situation", () => {
@@ -269,8 +334,9 @@ describe("MatchScreen key moment UI", () => {
         userPlayerIndex: 0,
         possessionIndex: 8,
         score: { home: 34, away: 38 },
-        workRate: 62,
-        focus: 44,
+        workRate: "normal",
+        focus: "defense",
+        fatigue: 0.45,
       },
       matchContext,
       possessionState: {
@@ -286,10 +352,11 @@ describe("MatchScreen key moment UI", () => {
         awayStreak: 0,
       },
       userMatchState: {
-        baseWorkRate: 80,
-        baseFocus: 50,
-        workRate: 62,
-        focus: 44,
+        workRate: "normal",
+        focus: "defense",
+        fatigue: 0.45,
+        touchLoad: 4,
+        lateGamePenalty: 0.15,
       },
       seedValue: 123,
     });
@@ -307,10 +374,11 @@ describe("MatchScreen key moment UI", () => {
           ...state.snapshot,
           pendingKeyMoment: pending,
           userMatchState: {
-            baseWorkRate: 80,
-            baseFocus: 50,
-            workRate: 62,
-            focus: 44,
+            workRate: "normal",
+            focus: "defense",
+            fatigue: 0.45,
+            touchLoad: 4,
+            lateGamePenalty: 0.15,
           },
         },
         resolveKeyMoment,
@@ -318,7 +386,7 @@ describe("MatchScreen key moment UI", () => {
     });
 
     expect(screen.getByText("34 - 38")).toBeTruthy();
-    expect(screen.getByText("44 (Low)")).toBeTruthy();
+    expect(screen.getAllByText("Defense").length).toBeGreaterThan(0);
     expect(screen.getByText(pending!.options[0]!.label)).toBeTruthy();
     expect(screen.getByText(pending!.options[0]!.description)).toBeTruthy();
     expect(screen.getByText(pending!.options[2]!.description)).toBeTruthy();

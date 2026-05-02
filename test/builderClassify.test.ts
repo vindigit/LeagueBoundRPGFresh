@@ -25,6 +25,14 @@ const classify = (position: Position, overrides: Partial<PlayerAttributes>) =>
   classifyBuilderBuild(makeAttributes(overrides), position);
 
 describe("Builder classification", () => {
+  it("keeps a flat guard honest as balanced with low confidence", () => {
+    const classification = classify("PG", {});
+
+    expect(classification.taxonomy.label).toBe("Balanced Guard");
+    expect(classification.taxonomy.hasStandoutStrength).toBe(false);
+    expect(classification.archetypeConfidence).toBe("low");
+  });
+
   it("emits dual output for a creator guard", () => {
     const classification = classify("PG", {
       handle: 95,
@@ -36,6 +44,8 @@ describe("Builder classification", () => {
 
     expect(classification.taxonomy.family).toBe("Creation");
     expect(classification.taxonomy.label).toBe("Primary Creator");
+    expect(classification.taxonomy.hasStandoutStrength).toBe(true);
+    expect(classification.archetypeConfidence).not.toBe("low");
     expect(classification.legacyArchetype).toBe("Playmaker");
   });
 

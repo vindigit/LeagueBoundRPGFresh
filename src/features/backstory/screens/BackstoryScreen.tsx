@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
 import { applyAllocation } from "../../../builder/allocate";
+import { buildSimProjection } from "../../../builder/simProjection";
 import { getTotalBuildCost } from "../../../builder/progression";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "../../../components/builderReview";
 import { useCareerStore } from "../../../store/useCareerStore";
@@ -269,6 +270,17 @@ export function BackstoryScreen() {
   const previewSeed = useMemo(() => createBuildBackstorySeed(draftInput), [draftInput]);
   const preview = useMemo(() => generateBackstoryFromBuildInput(draftInput, { seedOverride: previewSeed }), [draftInput, previewSeed]);
   const previewBuilderReview = useMemo(() => buildBuilderReviewSummary(preview.dna), [preview.dna]);
+  const buildProjection = useMemo(
+    () =>
+      buildSimProjection({
+        attributes: buildAttributes,
+        position: primaryPosition,
+        caps: MAX_BUILD_CAPS,
+        height: normalizedHeight,
+        weightLbs: normalizedWeight,
+      }),
+    [buildAttributes, primaryPosition, normalizedHeight, normalizedWeight],
+  );
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
   const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
@@ -473,6 +485,8 @@ export function BackstoryScreen() {
             <Text className="mt-1 text-lg font-bold text-white">{remainingBuildPoints}</Text>
           </View>
 
+          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-4" />
+
           {ATTRIBUTE_GROUPS.map((group) => (
             <View key={group.title} className="mt-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
               <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
@@ -525,7 +539,7 @@ export function BackstoryScreen() {
             </View>
           </View>
 
-          <BuilderReviewSection summary={previewBuilderReview} variant="slate" className="mt-3" />
+          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-3" />
 
           <Pressable
             className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"

@@ -108,8 +108,9 @@ const buildArgs = (overrides: Partial<KeyMomentBuildArgs> = {}): KeyMomentBuildA
     userPlayerIndex: 0,
     possessionIndex: 12,
     score: { home: 42, away: 46 },
-    workRate: 78,
-    focus: 42,
+    workRate: "high",
+    focus: "defense",
+    fatigue: 0.5,
   },
   matchContext: buildMatchContext(
     makePlayer(
@@ -121,10 +122,11 @@ const buildArgs = (overrides: Partial<KeyMomentBuildArgs> = {}): KeyMomentBuildA
   ),
   possessionState: buildPossessionState(),
   userMatchState: {
-    baseWorkRate: 82,
-    baseFocus: 50,
-    workRate: 78,
-    focus: 42,
+    workRate: "high",
+    focus: "defense",
+    fatigue: 0.5,
+    touchLoad: 4,
+    lateGamePenalty: 0.2,
   },
   seedValue: 1234,
   ...overrides,
@@ -157,8 +159,8 @@ describe("Key moment contextual options", () => {
     expect(pending).toBeDefined();
     const descriptions = pending!.options.map((option) => option.description).join(" ");
     expect(descriptions).toContain("down 4");
-    expect(descriptions).toContain("clock tightening");
-    expect(descriptions).toContain("focus is slipping");
+    expect(descriptions).toContain("clock shrinking");
+    expect(descriptions).toContain("protecting the ball");
   });
 
   it("shifts on_ball_stop options for protecting a lead on defense", () => {
@@ -174,8 +176,9 @@ describe("Key moment contextual options", () => {
         userPlayerIndex: 0,
         possessionIndex: 18,
         score: { home: 59, away: 54 },
-        workRate: 64,
-        focus: 43,
+        workRate: "normal",
+        focus: "defense",
+        fatigue: 0.35,
       },
       possessionState: buildPossessionState({
         offenseKey: "away",
@@ -203,8 +206,9 @@ describe("Key moment contextual options", () => {
         userPlayerIndex: 0,
         possessionIndex: 20,
         score: { home: 63, away: 67 },
-        workRate: 80,
-        focus: 72,
+        workRate: "high",
+        focus: "defense",
+        fatigue: 0.25,
       },
       possessionState: buildPossessionState({
         offenseKey: "away",
@@ -233,8 +237,9 @@ describe("Key moment contextual options", () => {
         userPlayerIndex: 0,
         possessionIndex: 20,
         score: { home: 67, away: 63 },
-        workRate: 80,
-        focus: 38,
+        workRate: "high",
+        focus: "offense",
+        fatigue: 0.25,
       },
       possessionState: buildPossessionState({
         offenseKey: "away",
@@ -244,8 +249,8 @@ describe("Key moment contextual options", () => {
       }),
     }));
 
-    expect(trailingPending?.options[0]?.label).toBe("Jump the Lane for a Momentum Flip");
-    expect(leadingPending?.options[2]?.label).toBe("Stay Home, Protect the Lead");
+    expect(trailingPending?.options[0]?.label).toBe("Steal Lane Jump");
+    expect(leadingPending?.options[3]?.label).toBe("Stay Home, Protect the Lead");
   });
 
   it("maps foul_pressure defense options to actual bonus context", () => {
@@ -261,8 +266,9 @@ describe("Key moment contextual options", () => {
         userPlayerIndex: 0,
         possessionIndex: 16,
         score: { home: 28, away: 26 },
-        workRate: 58,
-        focus: 40,
+        workRate: "normal",
+        focus: "defense",
+        fatigue: 0.35,
       },
       possessionState: buildPossessionState({
         offenseKey: "away",

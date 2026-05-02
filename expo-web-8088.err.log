@@ -1,0 +1,21 @@
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.33 - expected version: ~54.0.34
+  @types/jest@30.0.0 - expected version: 29.5.14
+Your project may not work correctly until you install the expected versions of the packages.
+C:\Users\valexander\leaguebound-fresh\node_modules\expo\node_modules\@expo\cli\build\src\utils\errors.js:130
+    throw error;
+    ^
+
+Error: The given URL "http://localhost:8088/?platform=web" has an empty path and cannot be converted to a JSC-safe format.
+    at Object.toJscSafeUrl (C:\Users\valexander\leaguebound-fresh\node_modules\jsc-safe-url\index.js:74:11)
+    at parseBundleOptionsFromBundleRequestUrl (C:\Users\valexander\leaguebound-fresh\node_modules\metro\src\lib\parseBundleOptionsFromBundleRequestUrl.js:88:32)
+    at HmrServer._registerEntryPoint (C:\Users\valexander\leaguebound-fresh\node_modules\metro\src\HmrServer.js:85:53)
+    at C:\Users\valexander\leaguebound-fresh\node_modules\metro\src\HmrServer.js:196:20
+    at Array.map (<anonymous>)
+    at HmrServer.onClientMessage (C:\Users\valexander\leaguebound-fresh\node_modules\metro\src\HmrServer.js:195:30)
+    at WebSocket.<anonymous> (C:\Users\valexander\leaguebound-fresh\node_modules\metro\src\lib\createWebsocketServer.js:38:25)
+    at WebSocket.emit (node:events:524:28)
+    at Receiver.receiverOnMessage (C:\Users\valexander\leaguebound-fresh\node_modules\ws\lib\websocket.js:1070:20)
+    at Receiver.emit (node:events:524:28)
+
+Node.js v20.19.4

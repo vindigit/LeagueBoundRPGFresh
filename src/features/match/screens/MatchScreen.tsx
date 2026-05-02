@@ -8,7 +8,7 @@ import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
-import type { UserMatchState } from "../../../matchEngine";
+import type { MatchFocus, MatchWorkRate, UserMatchState } from "../../../matchEngine";
 
 const AWAY_NAME = "Rivals High";
 
@@ -24,22 +24,31 @@ const getPeriodLabel = (quarter: 1 | 2 | 3 | 4, isOvertime: boolean, overtimePer
 
 const formatSpeedLabel = (speed: number): string => (Number.isInteger(speed) ? `${speed}x` : `${speed.toFixed(1)}x`);
 
-const toBandLabel = (value: number): string => {
-  if (value >= 75) {
+const toWorkRateLabel = (value: MatchWorkRate): string => {
+  if (value === "high") {
     return "High";
   }
-  if (value >= 50) {
-    return "Medium";
+  if (value === "low") {
+    return "Low";
   }
-  return "Low";
+  return "Normal";
 };
 
-const deriveFatigueLabel = (pending: KeyMomentPending): string => {
-  const clock = pending.context.timeRemaining;
-  if (clock <= 120) {
+const toFocusLabel = (value: MatchFocus): string => {
+  if (value === "offense") {
+    return "Offense";
+  }
+  if (value === "defense") {
+    return "Defense";
+  }
+  return "Balanced";
+};
+
+const deriveFatigueLabel = (fatigue: number): string => {
+  if (fatigue >= 0.7) {
     return "High";
   }
-  if (clock <= 360) {
+  if (fatigue >= 0.35) {
     return "Medium";
   }
   return "Low";
@@ -66,17 +75,38 @@ const buildKeyMomentContextSummary = (args: {
   const opponentSide = pending.context.offense === pending.context.userTeam ? pending.context.defense : pending.context.offense;
   const workRate = args.userMatchState?.workRate ?? pending.context.workRate;
   const focus = args.userMatchState?.focus ?? pending.context.focus;
+  const fatigue = args.userMatchState?.fatigue ?? pending.context.fatigue;
 
   return {
     score: `${args.homeScore} - ${args.awayScore}`,
     period: getPeriodLabel(args.quarter, args.isOvertime, args.overtimePeriod),
     clock: formatClock(args.timeRemaining),
-    fatigue: deriveFatigueLabel(pending),
-    workRate: `${workRate} (${toBandLabel(workRate)})`,
-    focus: `${focus} (${toBandLabel(focus)})`,
-    matchup: `${args.playerPosition} ${args.playerArchetype} • ${sideLabel} vs ${opponentSide.toUpperCase()}`,
+    fatigue: deriveFatigueLabel(fatigue),
+    workRate: toWorkRateLabel(workRate),
+    focus: toFocusLabel(focus),
+    matchup: `${args.playerPosition} ${args.playerArchetype} | ${sideLabel} vs ${opponentSide.toUpperCase()}`,
   };
 };
+
+const TacticButton = ({
+  label,
+  active,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) => (
+  <Pressable
+    disabled={disabled}
+    className={`flex-1 rounded-lg border px-2 py-2 ${active ? "border-cyan-300 bg-cyan-400/20" : "border-slate-700 bg-slate-800"} ${disabled ? "opacity-50" : ""}`}
+    onPress={onPress}
+  >
+    <Text className={`text-center text-xs font-semibold ${active ? "text-cyan-100" : "text-slate-200"}`}>{label}</Text>
+  </Pressable>
+);
 
 const getLogTextClassName = (item: PlayLog): string => {
   if (item.isUserAction) {
@@ -149,6 +179,8 @@ export function MatchScreen() {
   const simSpeed = useMatchStore((state) => state.simSpeed);
   const keyMomentPending = useMatchEngineStore((state) => state.snapshot.pendingKeyMoment);
   const userMatchState = useMatchEngineStore((state) => state.snapshot.userMatchState);
+  const setWorkRate = useMatchEngineStore((state) => state.setWorkRate);
+  const setFocus = useMatchEngineStore((state) => state.setFocus);
   const resolveKeyMoment = useMatchEngineStore((state) => state.resolveKeyMoment);
   const keyMomentFeedback = useMatchStore((state) => state.keyMomentFeedback);
   const initializeMatch = useMatchStore((state) => state.initializeMatch);
@@ -169,6 +201,9 @@ export function MatchScreen() {
     playerArchetype,
     userMatchState,
   });
+  const overlayActive = Boolean(keyMomentPending || keyMomentFeedback);
+  const workRate = userMatchState?.workRate ?? "normal";
+  const focus = userMatchState?.focus ?? "balanced";
 
   useEffect(() => {
     hasAppliedResultRef.current = false;
@@ -204,87 +239,106 @@ export function MatchScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
-        <View className="bg-slate-900 px-4 py-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-3">
-              <Text className="text-xs uppercase tracking-wider text-slate-400">Home</Text>
-              <Text className="mt-1 text-lg font-bold text-white">{homeDisplayName}</Text>
-              <Text className="mt-1 text-3xl font-black text-emerald-300">{homeScore}</Text>
-            </View>
+      <View className="bg-slate-900 px-4 py-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 pr-3">
+            <Text className="text-xs uppercase tracking-wider text-slate-400">Home</Text>
+            <Text className="mt-1 text-lg font-bold text-white">{homeDisplayName}</Text>
+            <Text className="mt-1 text-3xl font-black text-emerald-300">{homeScore}</Text>
+          </View>
 
-            <View className="items-center px-2">
-              <Text className="text-3xl font-bold text-white">{formatClock(timeRemaining)}</Text>
-              <Text className="mt-1 text-sm font-semibold text-slate-300">{getPeriodLabel(quarter, isOvertime, overtimePeriod)}</Text>
-            </View>
+          <View className="items-center px-2">
+            <Text className="text-3xl font-bold text-white">{formatClock(timeRemaining)}</Text>
+            <Text className="mt-1 text-sm font-semibold text-slate-300">{getPeriodLabel(quarter, isOvertime, overtimePeriod)}</Text>
+          </View>
 
-            <View className="flex-1 items-end pl-3">
-              <Text className="text-xs uppercase tracking-wider text-slate-400">Away</Text>
-              <Text className="mt-1 text-lg font-bold text-white">{AWAY_NAME}</Text>
-              <Text className="mt-1 text-3xl font-black text-sky-300">{awayScore}</Text>
+          <View className="flex-1 items-end pl-3">
+            <Text className="text-xs uppercase tracking-wider text-slate-400">Away</Text>
+            <Text className="mt-1 text-lg font-bold text-white">{AWAY_NAME}</Text>
+            <Text className="mt-1 text-3xl font-black text-sky-300">{awayScore}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View className="flex-1 px-4 pb-4 pt-3">
+        <FlatList
+          data={logs}
+          keyExtractor={(item) => item.id}
+          renderItem={renderLogItem}
+          contentContainerClassName="pb-4"
+          ListEmptyComponent={
+            <View className="mt-8 items-center">
+              <Text className="text-sm text-slate-500">Match log will appear here.</Text>
+            </View>
+          }
+        />
+      </View>
+
+      <View className="border-t border-slate-800 bg-slate-900 px-4 py-4">
+        <View className="mb-4 gap-3">
+          <View>
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Work Rate</Text>
+            <View className="flex-row gap-2">
+              <TacticButton label="Low" active={workRate === "low"} disabled={overlayActive || gameFinished} onPress={() => setWorkRate("low")} />
+              <TacticButton label="Normal" active={workRate === "normal"} disabled={overlayActive || gameFinished} onPress={() => setWorkRate("normal")} />
+              <TacticButton label="High" active={workRate === "high"} disabled={overlayActive || gameFinished} onPress={() => setWorkRate("high")} />
+            </View>
+          </View>
+          <View>
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Focus</Text>
+            <View className="flex-row gap-2">
+              <TacticButton label="Defense" active={focus === "defense"} disabled={overlayActive || gameFinished} onPress={() => setFocus("defense")} />
+              <TacticButton label="Balanced" active={focus === "balanced"} disabled={overlayActive || gameFinished} onPress={() => setFocus("balanced")} />
+              <TacticButton label="Offense" active={focus === "offense"} disabled={overlayActive || gameFinished} onPress={() => setFocus("offense")} />
             </View>
           </View>
         </View>
 
-        <View className="flex-1 px-4 pb-4 pt-3">
-          <FlatList
-            data={logs}
-            keyExtractor={(item) => item.id}
-            renderItem={renderLogItem}
-            contentContainerClassName="pb-4"
-            ListEmptyComponent={
-              <View className="mt-8 items-center">
-                <Text className="text-sm text-slate-500">Match log will appear here.</Text>
-              </View>
-            }
-          />
-        </View>
-
-        <View className="border-t border-slate-800 bg-slate-900 px-4 py-4">
-          <View className="mb-4">
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sim Speed</Text>
-              <Text className="text-sm font-semibold text-white">{formatSpeedLabel(simSpeed)}</Text>
-            </View>
-            <Slider
-              minimumValue={0.5}
-              maximumValue={4}
-              step={0.5}
-              value={simSpeed}
-              minimumTrackTintColor="#22d3ee"
-              maximumTrackTintColor="#334155"
-              thumbTintColor="#f8fafc"
-              disabled={gameFinished}
-              onValueChange={(value) => {
-                setSimSpeed(value);
-              }}
-            />
+        <View className="mb-4">
+          <View className="mb-2 flex-row items-center justify-between">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sim Speed</Text>
+            <Text className="text-sm font-semibold text-white">{formatSpeedLabel(simSpeed)}</Text>
           </View>
-          {!gameFinished ? (
-            isPlaying ? (
-              <Pressable className="items-center justify-center rounded-xl bg-amber-500 py-3" onPress={pauseMatch}>
-                <Text className="text-base font-semibold text-black">Pause</Text>
-              </Pressable>
-            ) : (
-              <Pressable className="items-center justify-center rounded-xl bg-emerald-500 py-3" onPress={startMatch}>
-                <Text className="text-base font-semibold text-black">Start Game</Text>
-              </Pressable>
-            )
-          ) : (
-            <View className="items-center justify-center rounded-xl bg-slate-700 py-3">
-              <Text className="text-base font-semibold text-white">Building Postgame Summary...</Text>
-            </View>
-          )}
-        </View>
-        {keyMomentPending || keyMomentFeedback ? (
-          <KeyMomentOverlay
-            pending={keyMomentPending}
-            feedback={keyMomentFeedback ? { success: keyMomentFeedback.success, text: keyMomentFeedback.text } : undefined}
-            contextSummary={keyMomentContextSummary}
-            onResolve={(input) => {
-              resolveKeyMoment(input);
+          <Slider
+            minimumValue={0.5}
+            maximumValue={4}
+            step={0.5}
+            value={simSpeed}
+            minimumTrackTintColor="#22d3ee"
+            maximumTrackTintColor="#334155"
+            thumbTintColor="#f8fafc"
+            disabled={gameFinished || overlayActive}
+            onValueChange={(value) => {
+              setSimSpeed(value);
             }}
           />
-        ) : null}
+        </View>
+        {!gameFinished ? (
+          isPlaying ? (
+            <Pressable className="items-center justify-center rounded-xl bg-amber-500 py-3" onPress={pauseMatch}>
+              <Text className="text-base font-semibold text-black">Pause</Text>
+            </Pressable>
+          ) : (
+            <Pressable className="items-center justify-center rounded-xl bg-emerald-500 py-3" onPress={startMatch}>
+              <Text className="text-base font-semibold text-black">Start Game</Text>
+            </Pressable>
+          )
+        ) : (
+          <View className="items-center justify-center rounded-xl bg-slate-700 py-3">
+            <Text className="text-base font-semibold text-white">Building Postgame Summary...</Text>
+          </View>
+        )}
+      </View>
+      {keyMomentPending || keyMomentFeedback ? (
+        <KeyMomentOverlay
+          pending={keyMomentPending}
+          feedback={keyMomentFeedback ? { success: keyMomentFeedback.success, text: keyMomentFeedback.text } : undefined}
+          contextSummary={keyMomentContextSummary}
+          onResolve={(input) => {
+            resolveKeyMoment(input);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

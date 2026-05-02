@@ -6,7 +6,9 @@ NEW Text Based RPG.
 - Active app: `C:\Users\valexander\leaguebound-fresh`
 - Archived reference only: `LeagueBoundRPG/`
 - Start Expo from repo root so Expo Go scans the correct project:
-  - `npx expo start --clear --tunnel`
+  - `npm start`
+  - `npm run start:tunnel`
+- This repo uses port `8088` by default because some Windows setups reserve or conflict with Expo's usual `8081` port.
 
 ## Home Court Advantage
 

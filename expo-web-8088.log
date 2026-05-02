@@ -1,0 +1,20 @@
+Starting project at C:\Users\valexander\leaguebound-fresh
+Starting Metro Bundler
+Waiting on http://localhost:8088
+Logs for your project will appear below.
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.ts ▓▓▓▓▓▓░░░░░░░░░░ 43.7% (41/62)
+Web .\index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 51.5% (189/272)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.3% (417/434)
+Web Bundled 11439ms index.ts (454 modules)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 32ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 27ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 34ms index.ts (1 module)
+Web Bundled 31ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 23ms index.ts (1 module)
+Web Bundled 20ms index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console

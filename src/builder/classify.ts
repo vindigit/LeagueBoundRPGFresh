@@ -4,6 +4,7 @@ import { computeDerivedRatings, type DerivedRatings } from "./derivedRatings";
 type DerivedRatingKey = Exclude<keyof DerivedRatings, "ovr">;
 type PositionFamily = "Guard" | "Wing" | "Big";
 type TaxonomyFamily = "Finishing" | "Shooting" | "Creation" | "Defense" | "Rebounding" | "Physical";
+type ClassificationConfidence = "low" | "medium" | "high";
 
 export interface BuilderTaxonomy {
   family: TaxonomyFamily;
@@ -11,12 +12,14 @@ export interface BuilderTaxonomy {
   label: string;
   primaryStrength: DerivedRatingKey;
   secondaryStrength: DerivedRatingKey;
+  hasStandoutStrength: boolean;
 }
 
 export interface BuilderClassification {
   taxonomy: BuilderTaxonomy;
   legacyArchetype: PlayerArchetype;
   derivedRatings: DerivedRatings;
+  archetypeConfidence: ClassificationConfidence;
 }
 
 const POSITION_FAMILY_BY_POSITION: Record<Position, PositionFamily> = {
@@ -68,6 +71,16 @@ const LABELS_BY_STRENGTH: Record<TaxonomyFamily, Record<PositionFamily, string>>
     Big: "Power Big",
   },
 };
+
+const BALANCED_LABELS: Record<PositionFamily, string> = {
+  Guard: "Balanced Guard",
+  Wing: "Balanced Wing",
+  Big: "Balanced Big",
+};
+
+const STANDOUT_MIN_RATING = 68;
+const STANDOUT_SPREAD = 7;
+const HIGH_CONFIDENCE_SPREAD = 14;
 
 const getStrengthOrder = (derivedRatings: DerivedRatings): DerivedRatingKey[] =>
   (Object.entries(derivedRatings) as Array<[keyof DerivedRatings, number]>)
@@ -121,16 +134,31 @@ export const classifyBuilderBuild = (attributes: PlayerAttributes, position: Pos
   const [primaryStrength, secondaryStrength] = strengthOrder;
   const positionFamily = POSITION_FAMILY_BY_POSITION[position];
   const family = RATING_LABELS[primaryStrength];
+  const primaryValue = derivedRatings[primaryStrength];
+  const secondaryValue = derivedRatings[secondaryStrength];
+  const spread = primaryValue - secondaryValue;
+  const otherAverage =
+    strengthOrder.slice(1).reduce((sum, key) => sum + derivedRatings[key], 0) / Math.max(1, strengthOrder.length - 1);
+  const hasStandoutStrength =
+    primaryValue >= STANDOUT_MIN_RATING &&
+    (spread >= STANDOUT_SPREAD || (primaryValue >= 82 && primaryValue - otherAverage >= STANDOUT_SPREAD));
+  const archetypeConfidence: ClassificationConfidence = hasStandoutStrength
+    ? spread >= HIGH_CONFIDENCE_SPREAD
+      ? "high"
+      : "medium"
+    : "low";
 
   return {
     taxonomy: {
       family,
       positionFamily,
-      label: LABELS_BY_STRENGTH[family][positionFamily],
+      label: hasStandoutStrength ? LABELS_BY_STRENGTH[family][positionFamily] : BALANCED_LABELS[positionFamily],
       primaryStrength,
       secondaryStrength,
+      hasStandoutStrength,
     },
     legacyArchetype: mapToLegacyArchetype(positionFamily, strengthOrder, attributes),
     derivedRatings,
+    archetypeConfidence,
   };
 };

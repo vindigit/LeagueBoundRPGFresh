@@ -1,0 +1,26 @@
+Starting project at C:\Users\valexander\leaguebound-fresh
+Starting Metro Bundler
+Waiting on http://localhost:8088
+Logs for your project will appear below.
+Web .\index.ts ▓░░░░░░░░░░░░░░░  9.0% (3/9)
+Web .\index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 56.0% (152/215)
+Web .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.6% (426/429)
+Web Bundled 10023ms index.ts (429 modules)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 245ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 265ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 289ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 252ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 1278ms index.ts (448 modules)
+Web Bundled 34ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 252ms index.ts (1 module)
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 324ms index.ts (1 module)
+Web Bundled 287ms index.ts (1 module)
+› Detected a change in metro.config.js. Restart the server to see the new results.
+› Detected a change in metro.config.js. Restart the server to see the new results.

@@ -1,7 +1,7 @@
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
 
-const PROMPT = "Key Moment: Create the shot and get to your spot.";
+const PROMPT = "Create separation and rise up.";
 const CREATE_SHOT_OPTION_ID = "timing_release_jump_shot";
 const TIMING_RELEASE_DURATION_MS = 1400;
 const TIMING_RELEASE_TARGET_CENTER = 0.72;

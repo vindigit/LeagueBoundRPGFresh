@@ -491,7 +491,7 @@ export const useMatchLoop = (): void => {
       away: runtimeTeams.away,
       userPlayerId: runtimeTeams.userPlayerId || playerId || "h1",
       seed: Date.now(),
-      leagueLevel: LeagueLevel.PRO,
+      leagueLevel,
       simulationMode,
       totalSeconds: REGULATION_TOTAL_SECONDS,
     });
@@ -501,6 +501,7 @@ export const useMatchLoop = (): void => {
     clearKeyMomentFeedback,
     initializeRuntime,
     initializeBoxScore,
+    leagueLevel,
     playerId,
     resetRuntime,
     runtimeTeams,

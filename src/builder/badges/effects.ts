@@ -65,7 +65,7 @@ export const BUILDER_BADGE_EFFECTS: Record<BuilderBadgeId, BuilderBadgeEffectPro
   },
   deep_range: {
     modifiers: {
-      deepRangeThreeMake: 0.015,
+      deepRangeThreeMake: 0.05,
       deepRangeThreeZoneWeight: 4,
     },
   },
@@ -77,13 +77,13 @@ export const BUILDER_BADGE_EFFECTS: Record<BuilderBadgeId, BuilderBadgeEffectPro
   },
   catch_and_shoot: {
     modifiers: {
-      catchAndShootAssistedJumperMake: 0.015,
+      catchAndShootAssistedJumperMake: 0.024,
     },
   },
   floor_general: {
     modifiers: {
-      floorGeneralBallSecurity: 4,
-      floorGeneralAssistProbability: 0.01,
+      floorGeneralBallSecurity: 7,
+      floorGeneralAssistProbability: 0.018,
     },
   },
   needle_threader: {

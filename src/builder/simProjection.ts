@@ -1,10 +1,11 @@
 import type { ExactHeight } from "../types/backstory";
 import type { PlayerAttributes, Position } from "../types/player";
+import { LeagueLevel } from "../types/career";
 import { BUILDER_BADGE_CATALOG, type BuilderBadgeCatalogEntry, type BuilderBadgeTierRule } from "./badges/catalog";
 import { resolveBuilderBadges, type ResolvedBuilderBadge } from "./badges/resolve";
 import { classifyBuilderBuild, type BuilderClassification } from "./classify";
+import { derivePlayerRoleTendencies, toShotProfile, toTendencyLabels, type TendencyLabel } from "./roleTendencies";
 
-type TendencyLabel = "Low" | "Medium" | "High";
 type AttributeKey = keyof PlayerAttributes;
 
 export interface BuildShotProfileProjection {
@@ -49,51 +50,12 @@ export interface BuildSimProjectionInput {
   caps?: PlayerAttributes;
   height?: ExactHeight;
   weightLbs?: number;
+  leagueLevel?: LeagueLevel;
 }
 
 const NEAR_BADGE_THRESHOLD_DISTANCE = 5;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
-
-const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length;
-
-const scoreToLabel = (score: number): TendencyLabel => {
-  if (score >= 67) {
-    return "High";
-  }
-  if (score >= 47) {
-    return "Medium";
-  }
-  return "Low";
-};
-
-const riskToLabel = (risk: number): TendencyLabel => {
-  if (risk >= 58) {
-    return "High";
-  }
-  if (risk >= 38) {
-    return "Medium";
-  }
-  return "Low";
-};
-
-const normalizePercentages = (raw: Record<keyof BuildShotProfileProjection, number>): BuildShotProfileProjection => {
-  const total = raw.rim + raw.midrange + raw.three;
-  const rim = Math.round((raw.rim / total) * 100);
-  const midrange = Math.round((raw.midrange / total) * 100);
-  return {
-    rim,
-    midrange,
-    three: 100 - rim - midrange,
-  };
-};
-
-const getSizeModifier = (height: ExactHeight | undefined, weightLbs: number | undefined): number => {
-  const inches = height ? height.feet * 12 + height.inches : 74;
-  const heightModifier = clamp((inches - 74) * 1.2, -8, 10);
-  const weightModifier = weightLbs ? clamp((weightLbs - 190) / 12, -6, 7) : 0;
-  return heightModifier + weightModifier;
-};
 
 const getProjectedRole = (classification: BuilderClassification, tendencies: BuildTendencyProjection): string => {
   if (!classification.taxonomy.hasStandoutStrength) {
@@ -209,43 +171,19 @@ const buildBadgeWatch = (
 };
 
 export const buildSimProjection = (input: BuildSimProjectionInput): BuildSimProjection => {
-  const { attributes, position, caps, height, weightLbs } = input;
+  const { attributes, position, caps, height, weightLbs, leagueLevel = LeagueLevel.MIDDLE_SCHOOL } = input;
   const classification = classifyBuilderBuild(attributes, position);
   const badges = resolveBuilderBadges({ attributes, caps, classification });
-  const badgeIds = new Set(badges.map((badge) => badge.id));
-  const sizeModifier = getSizeModifier(height, weightLbs);
-
-  const creation = attributes.handle * 0.45 + attributes.vision * 0.3 + attributes.passing * 0.25;
-  const rimPressure = attributes.shortRange * 0.38 + attributes.dunking * 0.28 + attributes.speed * 0.22 + attributes.strength * 0.12;
-  const shooting = attributes.threePoint * 0.68 + attributes.midrange * 0.22 + attributes.vision * 0.1;
-  const playmaking = attributes.vision * 0.42 + attributes.passing * 0.38 + attributes.handle * 0.2;
-  const defense = attributes.perimeterDefense * 0.28 + attributes.interiorDefense * 0.22 + attributes.stealing * 0.25 + attributes.blocking * 0.25;
-  const rebounding = attributes.offRebounding * 0.42 + attributes.defRebounding * 0.48 + attributes.strength * 0.1 + sizeModifier;
-  const ballSecurity = attributes.handle * 0.52 + attributes.vision * 0.28 + attributes.passing * 0.2;
-
-  const threeBadgeBoost = badgeIds.has("deep_range") ? 8 : 0;
-  const rimBadgeBoost = badgeIds.has("quick_first_step") ? 7 : badgeIds.has("rim_pressure") ? 5 : 0;
-  const rawShotProfile = {
-    rim: 28 + (rimPressure - 60) * 0.75 + rimBadgeBoost,
-    midrange: 24 + (attributes.midrange - 60) * 0.45 + (attributes.shortRange - attributes.threePoint) * 0.08,
-    three: 24 + (attributes.threePoint - 60) * 0.95 + threeBadgeBoost,
-  };
-  const shotProfile = normalizePercentages({
-    rim: clamp(rawShotProfile.rim, 8, 70),
-    midrange: clamp(rawShotProfile.midrange, 8, 55),
-    three: attributes.threePoint < 62 ? clamp(rawShotProfile.three * 0.55, 5, 40) : clamp(rawShotProfile.three, 8, 65),
+  const roleTendencies = derivePlayerRoleTendencies({
+    attributes,
+    position,
+    height,
+    weightLbs,
+    badges,
+    leagueLevel,
   });
-
-  const tendencies: BuildTendencyProjection = {
-    touches: scoreToLabel(creation),
-    rimAttempts: scoreToLabel(rimPressure),
-    threeAttempts: scoreToLabel(shooting),
-    turnoverRisk: riskToLabel(78 - ballSecurity * 0.75 - (badgeIds.has("floor_general") ? 7 : 0) - (badgeIds.has("needle_threader") ? 5 : 0)),
-    assistRate: scoreToLabel(playmaking),
-    reboundInvolvement: scoreToLabel(rebounding),
-    defensiveEvents: scoreToLabel(defense),
-    fatigueRisk: riskToLabel(92 - attributes.stamina * 0.8 + (creation > 72 ? 8 : 0)),
-  };
+  const tendencies = toTendencyLabels(roleTendencies);
+  const shotProfile = toShotProfile(roleTendencies);
 
   return {
     classification,
@@ -256,10 +194,10 @@ export const buildSimProjection = (input: BuildSimProjectionInput): BuildSimProj
     badges,
     badgeWatch: buildBadgeWatch(attributes, classification, caps, badges),
     explanations: [
-      `Three point drives projected three volume to ${shotProfile.three}%.`,
-      `Handle, vision, and passing set ball security and assist chances.`,
-      `Speed, finishing, and strength set rim pressure and contact finishing.`,
-      `Stamina controls fatigue risk across a full game.`,
+      `Current ${leagueLevel.toLowerCase().replace("_", " ")} role tendencies project three volume to ${shotProfile.three}%.`,
+      `Handle, vision, and passing drive touches, creation, ball security, and assist chances.`,
+      `Position, size, finishing, and strength drive rim pressure and rebounding involvement.`,
+      `Badges and stamina tilt possession choices without fixing stat lines.`,
     ],
   };
 };

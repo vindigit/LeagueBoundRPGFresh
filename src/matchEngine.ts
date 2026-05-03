@@ -3,6 +3,7 @@ import type { Team } from "./types/team";
 import { LEAGUE_MODIFIERS } from "./constants/leagueScaling";
 import { LeagueLevel } from "./types/career";
 import { computeOverall } from "./builder/derivedRatings";
+import { derivePlayerRoleTendencies, type PlayerRoleTendencies } from "./builder/roleTendencies";
 import type { BuilderBadgeId, BuilderBadgeTier } from "./builder/badges/catalog";
 import { BUILDER_BADGE_EFFECTS, type BuilderBadgeEffectModifier } from "./builder/badges/effects";
 import type { ResolvedBuilderBadge } from "./builder/badges/resolve";
@@ -373,6 +374,52 @@ validateMatchEngineTuning(tuning as Record<string, unknown>);
 const average = (values: number[]): number =>
   values.reduce((sum, value) => sum + value, 0) / values.length;
 
+const teamRelativeContextCache = new WeakMap<Team, ReturnType<typeof buildTeamRelativeContext>>();
+const playerRoleTendencyCache = new WeakMap<Player, Map<string, PlayerRoleTendencies>>();
+
+const getPlayerSizeInput = (player: Player) => ({
+  height: player.identity?.height,
+  weightLbs: player.identity?.weightLbs,
+  bodyFrame: player.identity?.bodyFrame,
+});
+
+const buildTeamRelativeContext = (team: Team) => ({
+  averageThreePoint: average(team.roster.map((player) => player.attributes.threePoint)),
+  averageCreation: average(team.roster.map((player) => player.attributes.handle * 0.42 + player.attributes.passing * 0.28 + player.attributes.vision * 0.3)),
+  averageRebounding: average(team.roster.map((player) => player.attributes.offRebounding * 0.45 + player.attributes.defRebounding * 0.55)),
+  averageDefense: average(team.roster.map((player) => player.attributes.perimeterDefense * 0.3 + player.attributes.interiorDefense * 0.25 + player.attributes.stealing * 0.2 + player.attributes.blocking * 0.25)),
+});
+
+const getTeamRelativeContext = (team: Team): ReturnType<typeof buildTeamRelativeContext> => {
+  const cached = teamRelativeContextCache.get(team);
+  if (cached) {
+    return cached;
+  }
+  const context = buildTeamRelativeContext(team);
+  teamRelativeContextCache.set(team, context);
+  return context;
+};
+
+const getRoleTendencies = (player: Player, leagueLevel: LeagueLevel, team?: Team): PlayerRoleTendencies => {
+  const cacheKey = `${leagueLevel}:${team ? getTeamRelativeContext(team).averageThreePoint : "solo"}`;
+  const playerCache = playerRoleTendencyCache.get(player) ?? new Map<string, PlayerRoleTendencies>();
+  const cached = playerCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const tendencies = derivePlayerRoleTendencies({
+    attributes: player.attributes,
+    position: player.position,
+    badges: getUniqueBadges(player),
+    leagueLevel,
+    teamContext: team ? getTeamRelativeContext(team) : undefined,
+    ...getPlayerSizeInput(player),
+  });
+  playerCache.set(cacheKey, tendencies);
+  playerRoleTendencyCache.set(player, playerCache);
+  return tendencies;
+};
+
 const pushTrace = (trace: MarkovStateNode[], node: MarkovStateNode): void => {
   trace.push(node);
 };
@@ -477,7 +524,7 @@ export const calculateTeamOvr = (team: Team): number =>
 
 const getFatigueMultiplier = (stamina: number, touchCount: number, fatigueLoadMultiplier = 1): number =>
   clamp(
-    1 - touchCount * fatigueLoadMultiplier * tuning.fatigueTouchScale * 1.35 * (1 - stamina / 100),
+    1 - touchCount * fatigueLoadMultiplier * tuning.fatigueTouchScale * 1.7 * (1 - stamina / 100),
     tuning.fatigueMinMultiplier,
     tuning.fatigueMaxMultiplier,
   );
@@ -605,6 +652,7 @@ export const applyMomentumToShotMakeProbability = (
 export const chooseAction = (
   ballHandler: Player,
   ballHandlerImpact: PlayerImpact,
+  roleTendencies: PlayerRoleTendencies,
   state: PossessionState,
   rng: () => number,
   focusComposureBonus = 0,
@@ -636,15 +684,19 @@ export const chooseAction = (
     pass:
       (ballHandlerImpact.vision - 50) * 0.12 +
       (ballHandlerImpact.passing - 50) * 0.1 +
-      composureAdjustment,
+      composureAdjustment +
+      (roleTendencies.passCreationWeight - 0.5) * 38,
     shoot:
       (shootingProfile - 50) * 0.1 +
       (ballHandlerImpact.vision - 50) * 0.05 +
-      composureAdjustment * 0.5,
+      composureAdjustment * 0.5 +
+      (roleTendencies.selfCreationWeight + roleTendencies.offBallShotWeight - 1) * 12,
     dribble:
       (ballHandlerImpact.handle - 50) * 0.14 +
       (ballHandlerImpact.speed - 50) * 0.06 -
-      composureAdjustment * 0.5,
+      composureAdjustment * 0.5 +
+      (roleTendencies.selfCreationWeight - 0.5) * 20 -
+      (roleTendencies.turnoverRiskWeight - 0.5) * 8,
   };
 
   return weightedPick(
@@ -674,11 +726,12 @@ export const pickBallHandlerIndex = (
 ): number => {
   const weighted = offenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+    const role = getRoleTendencies(player, leagueLevel, offenseTeam);
     const isUserControlled = userControl?.teamKey === teamKey && userControl.playerIndex === index;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
       weight:
-        (impact.handle * 0.45 + impact.vision * 0.3 + impact.passing * 0.25) *
+        (impact.handle * 0.28 + impact.vision * 0.22 + impact.passing * 0.18 + role.touchWeight * 44 + role.passCreationWeight * 30 + role.selfCreationWeight * 10) *
         (isUserControlled ? getWorkRateInvolvementMultiplier(userControl.matchState.workRate) : 1),
     };
   });
@@ -695,12 +748,13 @@ const pickDefenderIndex = (
 ): number => {
   const weighted = defenseTeam.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+    const roleTendencies = getRoleTendencies(player, leagueLevel, defenseTeam);
     const weight =
       role === "turnover"
-        ? impact.stealing * 0.55 + impact.speed * 0.3 + impact.perimeterDefense * 0.15
+        ? impact.stealing * 0.45 + impact.speed * 0.22 + impact.perimeterDefense * 0.13 + roleTendencies.stealEventWeight * 35
         : role === "perimeter"
-          ? impact.perimeterDefense * 0.75 + impact.speed * 0.25
-          : impact.interiorDefense * 0.55 + impact.blocking * 0.3 + impact.strength * 0.15;
+          ? impact.perimeterDefense * 0.58 + impact.speed * 0.18 + roleTendencies.contestWeight * 32
+          : impact.interiorDefense * 0.44 + impact.blocking * 0.22 + impact.strength * 0.12 + roleTendencies.blockEventWeight * 42 + roleTendencies.contestWeight * 18;
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
       weight,
@@ -722,12 +776,16 @@ const pickAssistReceiverIndex = (
     .filter((entry) => entry.index !== ballHandlerIndex)
     .map(({ player, index }) => {
       const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+      const role = getRoleTendencies(player, leagueLevel, offenseTeam);
       const receiverShotValue =
         impact.threePoint * 0.28 +
         impact.midrange * 0.24 +
         impact.shortRange * 0.32 +
         impact.dunking * 0.1 +
-        impact.vision * 0.06;
+        impact.vision * 0.06 +
+        role.offBallShotWeight * 22 +
+        role.threeVolumeWeight * 10 +
+        role.rimPressureWeight * 8;
       return {
         key: index as 0 | 1 | 2 | 3 | 4,
         weight: receiverShotValue,
@@ -747,17 +805,20 @@ const pickRebounderIndex = (
 ): number => {
   const weighted = team.roster.map((player, index) => {
     const impact = getPlayerImpact(player, teamKey, index, touchCounts, leagueLevel);
+    const role = getRoleTendencies(player, leagueLevel, team);
     const badgeModifiers = buildBadgeModifierTotals(player);
     return {
       key: index as 0 | 1 | 2 | 3 | 4,
       weight:
         reboundType === "offense"
-          ? impact.offRebounding * 0.85 +
-            impact.strength * 0.15 +
+          ? impact.offRebounding * 0.55 +
+            impact.strength * 0.12 +
+            role.offensiveReboundWeight * 104 +
             badgeModifiers.glassCleanerReboundWeight +
             badgeModifiers.putbackBossOffReboundWeight
-          : impact.defRebounding * 0.8 +
-            impact.strength * 0.2 +
+          : impact.defRebounding * 0.52 +
+            impact.strength * 0.13 +
+            role.defensiveReboundWeight * 122 +
             badgeModifiers.glassCleanerReboundWeight +
             badgeModifiers.boxOutBeastDefReboundWeight,
     };
@@ -792,6 +853,7 @@ const pickShotZone = (
   offenseKey: TeamSide,
   action: PossessionAction,
   shooterImpact: PlayerImpact,
+  roleTendencies: PlayerRoleTendencies,
   badgeContext: BadgeContext,
   rng: () => number,
   shotZoneBias?: Partial<Record<ShotZone, number>>,
@@ -802,15 +864,18 @@ const pickShotZone = (
   const decisionTilt = 1 + ((shooterImpact.vision - 50) / 49) * 0.08;
   const threeTilt =
     (shooterImpact.threePoint - 50) * tuning.shotZoneThreePointWeight * decisionTilt +
-    badgeModifiers.deepRangeThreeZoneWeight;
+    badgeModifiers.deepRangeThreeZoneWeight +
+    (roleTendencies.threeVolumeWeight - 0.5) * 28;
   const midrangeTilt =
     (shooterImpact.midrange - 50) * tuning.shotZoneMidrangeWeight * decisionTilt +
-    badgeModifiers.midRangeMagicianMidrangeZoneWeight;
+    badgeModifiers.midRangeMagicianMidrangeZoneWeight +
+    (roleTendencies.midrangeVolumeWeight - 0.5) * 14;
   const rimTilt =
     ((shooterImpact.shortRange - 50) * tuning.shotZoneRimShortRangeWeight +
       (shooterImpact.dunking - 50) * tuning.shotZoneRimDunkingWeight) *
       decisionTilt +
-    badgeModifiers.quickFirstStepRimZoneWeight;
+    badgeModifiers.quickFirstStepRimZoneWeight +
+    (roleTendencies.rimPressureWeight - 0.5) * 26;
   const fatigueTilt = (shooterImpact.fatigueMultiplier - 1) * 100 * tuning.shotZoneFatigueWeight;
   const entries: Array<{ key: ShotZone; weight: number }> = [
     {
@@ -891,6 +956,7 @@ const getTurnoverProbability = (
   ballHandlerIndex: number,
   offenseKey: TeamSide,
   ballHandlerImpact: ReturnType<typeof getPlayerImpact>,
+  ballHandlerRole: PlayerRoleTendencies,
   defenseTeam: Team,
   defenseKey: TeamSide,
   touchCounts: { home: [number, number, number, number, number]; away: [number, number, number, number, number] },
@@ -909,6 +975,7 @@ const getTurnoverProbability = (
       impact.stealing * 0.45 +
       impact.speed * 0.35 +
       impact.perimeterDefense * 0.2 +
+      getRoleTendencies(player, leagueLevel, defenseTeam).stealEventWeight * 18 +
       badgeModifiers.pointOfAttackDefenderPressure +
       badgeModifiers.pickpocketDefenderPressure
     );
@@ -955,7 +1022,7 @@ const getTurnoverProbability = (
   );
 
   return clamp(
-    (tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor) / composureMultiplier,
+    (tuning.turnoverBase + (defenderPressure - ballSecurity) / tuning.turnoverDivisor + (ballHandlerRole.turnoverRiskWeight - 0.5) * 0.05) / composureMultiplier,
     tuning.turnoverMin,
     tuning.turnoverMax,
   );
@@ -966,6 +1033,7 @@ const getStealProbability = (
   defenderIndex: number,
   defenseKey: TeamSide,
   defenderImpact: PlayerImpact,
+  defenderRole: PlayerRoleTendencies,
   ballHandlerImpact: PlayerImpact,
   badgeContext: BadgeContext,
 ): number =>
@@ -1001,6 +1069,7 @@ const getStealProbability = (
       tuning.stealBase +
         badgeModifiers.pointOfAttackStealProbability +
         badgeModifiers.pickpocketStealProbability +
+        (defenderRole.stealEventWeight - 0.5) * 0.08 +
         (defenderImpact.stealing * tuning.stealDefenseWeight +
           defenderImpact.speed * tuning.stealSpeedWeight -
           ballHandlerImpact.handle) /
@@ -1015,7 +1084,9 @@ const getAssistProbability = (
   passerIndex: number,
   offenseKey: TeamSide,
   passerImpact: ReturnType<typeof getPlayerImpact>,
+  passerRole: PlayerRoleTendencies,
   shooterImpact: ReturnType<typeof getPlayerImpact>,
+  shooterRole: PlayerRoleTendencies,
   badgeContext: BadgeContext,
 ): number => {
   const badgeModifiers = buildBadgeModifierTotals(passer);
@@ -1026,8 +1097,10 @@ const getAssistProbability = (
     (passerImpact.vision * 0.5 +
       passerImpact.passing * 0.35 +
       passerImpact.handle * 0.15 -
-      shooterImpact.handle * 0.15) /
-      tuning.assistDivisor;
+      shooterImpact.handle * 0.08) /
+      tuning.assistDivisor +
+    (passerRole.assistCreationWeight - 0.5) * 0.32 +
+    (shooterRole.offBallShotWeight - 0.5) * 0.08;
   recordBadgeStageContributions(
     badgeContext,
     passer,
@@ -1047,7 +1120,7 @@ const getAssistProbability = (
 const getContestValue = (shotZone: ShotZone, defenderImpact: PlayerImpact, defender: Player): number => {
   const badgeModifiers = buildBadgeModifierTotals(defender);
   return shotZone === "rim"
-    ? defenderImpact.interiorDefense * 0.9 + defenderImpact.strength * 0.1 + badgeModifiers.helpDefenderRimContest
+    ? defenderImpact.interiorDefense * 1.35 + defenderImpact.strength * 0.05 + badgeModifiers.helpDefenderRimContest
     : defenderImpact.perimeterDefense * 0.9 + defenderImpact.speed * 0.1 + badgeModifiers.pointOfAttackPerimeterContest;
 };
 
@@ -1059,6 +1132,7 @@ const getBlockProbability = (
   defenderIndex: number,
   defenseKey: TeamSide,
   defenderImpact: PlayerImpact,
+  defenderRole: PlayerRoleTendencies,
   shooterImpact: PlayerImpact,
   shotZone: ShotZone,
   badgeContext: BadgeContext,
@@ -1120,7 +1194,7 @@ const getBlockProbability = (
   );
 
   return clamp(
-    (tuning.blockBase + badgeBlockBonus + (defenderBlockValue + zoneDefenseValue * 0.15 - shooterResistance) / tuning.blockDivisor) * zoneMultiplier,
+    (tuning.blockBase + badgeBlockBonus + (defenderRole.blockEventWeight - 0.5) * 0.055 + (defenderBlockValue + zoneDefenseValue * 0.15 - shooterResistance) / tuning.blockDivisor) * zoneMultiplier,
     tuning.blockMin * zoneMultiplier,
     tuning.blockMax * zoneMultiplier,
   );
@@ -1164,7 +1238,7 @@ const getShotMakeProbability = (
   const defenseValue = getContestValue(shotZone, defenderImpact, defender);
   const pressure = getPressure(state);
   const composureMultiplier = getComposureMultiplier(shooterImpact.discipline + focusComposureBonus, pressure);
-  const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 4;
+  const fatiguePenalty = (1 - shooterImpact.fatigueMultiplier) * 8;
   const attemptBonus =
     shotZone === "rim" ? (rimAttemptType === "dunk" ? tuning.dunkMakeBonus : tuning.layupMakeBonus) : 0;
   const offenseEdge = (offenseValue - defenseValue) / tuning.shotOffenseDivisor;
@@ -1252,8 +1326,9 @@ const getOffensiveReboundProbability = (
       const impact = getPlayerImpact(player, offenseKey, index, touchCounts, leagueLevel);
       const badgeModifiers = buildBadgeModifierTotals(player);
       return (
-        impact.offRebounding * 0.85 +
+        impact.offRebounding * 0.55 +
         impact.strength * 0.15 +
+        getRoleTendencies(player, leagueLevel, offenseTeam).offensiveReboundWeight * 52 +
         badgeModifiers.glassCleanerReboundWeight +
         badgeModifiers.putbackBossOffReboundWeight
       );
@@ -1265,8 +1340,9 @@ const getOffensiveReboundProbability = (
       const impact = getPlayerImpact(player, defenseKey, index, touchCounts, leagueLevel);
       const badgeModifiers = buildBadgeModifierTotals(player);
       return (
-        impact.defRebounding * 0.85 +
+        impact.defRebounding * 0.55 +
         impact.strength * 0.15 +
+        getRoleTendencies(player, leagueLevel, defenseTeam).defensiveReboundWeight * 58 +
         badgeModifiers.glassCleanerReboundWeight +
         badgeModifiers.boxOutBeastDefReboundWeight
       );
@@ -1409,6 +1485,7 @@ export const simulatePossession = (
   const ballHandlerIndex = pickBallHandlerIndex(offenseTeam, state.offenseKey, touchCounts, leagueLevel, rng, options?.userControl);
   incrementTouch(state.offenseKey, ballHandlerIndex);
   const ballHandler = getPlayerByIndex(offenseTeam, ballHandlerIndex);
+  const ballHandlerRole = getRoleTendencies(ballHandler, leagueLevel, offenseTeam);
   const ballHandlerIsUser = isUserControlledPlayer(state.offenseKey, ballHandlerIndex);
   const ballHandlerImpact = getPlayerImpact(
     ballHandler,
@@ -1425,6 +1502,7 @@ export const simulatePossession = (
   const action = chooseAction(
     ballHandler,
     ballHandlerImpact,
+    ballHandlerRole,
     state,
     rng,
     getFocusComposureBonus(ballHandlerIsUser ? options?.userControl?.matchState.focus ?? "balanced" : "balanced", state.offenseKey, options?.userControl),
@@ -1451,6 +1529,7 @@ export const simulatePossession = (
       ballHandlerIndex,
       state.offenseKey,
       ballHandlerImpact,
+      ballHandlerRole,
       defenseTeam,
       state.defenseKey,
       touchCounts,
@@ -1465,8 +1544,9 @@ export const simulatePossession = (
     "turnover",
   );
   if (rng() <= turnoverProb) {
+    const primaryDefenderRole = getRoleTendencies(primaryDefender, leagueLevel, defenseTeam);
     const steal =
-      rng() <= getStealProbability(primaryDefender, primaryDefenderIndex, state.defenseKey, primaryDefenderImpact, ballHandlerImpact, badgeContext);
+      rng() <= getStealProbability(primaryDefender, primaryDefenderIndex, state.defenseKey, primaryDefenderImpact, primaryDefenderRole, ballHandlerImpact, badgeContext);
     const elapsedSeconds = getElapsedByEvent(steal ? "steal" : "turnover", rng);
     const nextBallHandlerIndex = pickBallHandlerIndex(defenseTeam, state.defenseKey, touchCounts, leagueLevel, rng);
 
@@ -1520,12 +1600,15 @@ export const simulatePossession = (
       isUserControlledPlayer(state.offenseKey, receiverIndex) ? userFatigueLoadMultiplier : 1,
       isUserControlledPlayer(state.offenseKey, receiverIndex) ? userConditionPenalty : 0,
     );
+    const receiverRole = getRoleTendencies(getPlayerByIndex(offenseTeam, receiverIndex), leagueLevel, offenseTeam);
     const assistProb = getAssistProbability(
       ballHandler,
       ballHandlerIndex,
       state.offenseKey,
       ballHandlerImpact,
+      ballHandlerRole,
       receiverImpact,
+      receiverRole,
       badgeContext,
     );
     if (rng() <= assistProb) {
@@ -1534,6 +1617,7 @@ export const simulatePossession = (
   }
 
   const shooter = getPlayerByIndex(offenseTeam, shooterIndex);
+  const shooterRole = getRoleTendencies(shooter, leagueLevel, offenseTeam);
   incrementTouch(state.offenseKey, shooterIndex);
   const shooterIsUser = isUserControlledPlayer(state.offenseKey, shooterIndex);
   const shooterImpact = getPlayerImpact(
@@ -1551,6 +1635,7 @@ export const simulatePossession = (
     state.offenseKey,
     action,
     shooterImpact,
+    shooterRole,
     badgeContext,
     rng,
     shooterIsUser ? userShotZoneBias : undefined,
@@ -1568,6 +1653,7 @@ export const simulatePossession = (
   );
   incrementTouch(state.defenseKey, shotDefenderIndex);
   const shotDefender = getPlayerByIndex(defenseTeam, shotDefenderIndex);
+  const shotDefenderRole = getRoleTendencies(shotDefender, leagueLevel, defenseTeam);
   const shotDefenderImpact = getPlayerImpact(
     shotDefender,
     state.defenseKey,
@@ -1586,6 +1672,7 @@ export const simulatePossession = (
     shotDefenderIndex,
     state.defenseKey,
     shotDefenderImpact,
+    shotDefenderRole,
     shooterImpact,
     shotZone,
     badgeContext,

@@ -64,7 +64,8 @@ describe("builder sim projection", () => {
 
   it("changes rebound and defensive event labels from ratings", () => {
     const baseline = project();
-    const stopper = project({
+    const stopper = buildSimProjection({
+      attributes: makeAttributes({
       perimeterDefense: 88,
       interiorDefense: 82,
       stealing: 86,
@@ -72,6 +73,11 @@ describe("builder sim projection", () => {
       offRebounding: 84,
       defRebounding: 88,
       strength: 82,
+      }),
+      position: "C",
+      caps: makeAttributes(),
+      height: { feet: 6, inches: 11 },
+      weightLbs: 245,
     });
 
     expect(stopper.tendencies.defensiveEvents).toBe("High");

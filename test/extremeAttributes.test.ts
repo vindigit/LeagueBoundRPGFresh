@@ -295,7 +295,7 @@ describe("matchEngine extreme attribute invariants", () => {
       );
     const getRimMakeRate = (awayOverrides: Partial<PlayerAttributes>, seed: number): number =>
       getMakeRate(
-        getNonTurnoverResults(runPossessions(makeContext(rimShooter, awayOverrides), seed, 220, 3600)).filter(
+        getNonTurnoverResults(runPossessions(makeContext(rimShooter, awayOverrides), seed, 480, 9000)).filter(
           (result) => result.shotZone === "rim",
         ),
       );

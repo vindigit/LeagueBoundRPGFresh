@@ -58,7 +58,7 @@ module.exports = {
   shotZoneRimDunkingWeight: 0.05,
   shotZoneFatigueWeight: 0.08,
   dunkAttemptThreshold: 62,
-  dunkAttemptBase: 0.06,
+  dunkAttemptBase: 0.075,
   dunkAttemptDunkingWeight: 0.006,
   dunkAttemptStrengthWeight: 0.0015,
   dunkAttemptSpeedWeight: 0.001,

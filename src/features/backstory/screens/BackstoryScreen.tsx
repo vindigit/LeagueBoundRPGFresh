@@ -203,6 +203,7 @@ export function BackstoryScreen() {
   const [ageStarted, setAgeStarted] = useState(8);
   const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(getDefaultBuildPreset("PG").attributes);
   const [isAdvancedEditOpen, setIsAdvancedEditOpen] = useState(false);
+  const [hasCustomizedAttributes, setHasCustomizedAttributes] = useState(false);
   const stepTransition = useRef(new Animated.Value(1)).current;
 
   const setClampedHeight = (nextFeet: number, nextInches: number): void => {
@@ -267,12 +268,14 @@ export function BackstoryScreen() {
     setSelectedPresetId(preset.id);
     setBuildAttributes(preset.attributes);
     setIsAdvancedEditOpen(false);
+    setHasCustomizedAttributes(false);
   };
 
   const selectBuildPreset = (preset: BuildPreset): void => {
     setSelectedPresetId(preset.id);
     setBuildAttributes(preset.attributes);
     setIsAdvancedEditOpen(false);
+    setHasCustomizedAttributes(false);
   };
 
   const adjustAttribute = (attribute: keyof PlayerAttributes, delta: number): void => {
@@ -286,6 +289,7 @@ export function BackstoryScreen() {
 
     if (allocation.success) {
       setBuildAttributes(allocation.attributes);
+      setHasCustomizedAttributes(true);
     }
   };
 
@@ -541,7 +545,12 @@ export function BackstoryScreen() {
 
     if (step === 4) {
       const projectedClassification = buildProjection.classification.taxonomy.label;
-      const hasDivergedFromPreset = projectedClassification !== selectedPreset.label;
+      const hasDivergedFromPreset =
+        hasCustomizedAttributes &&
+        Object.keys(buildAttributes).some((key) => {
+          const attributeKey = key as keyof PlayerAttributes;
+          return buildAttributes[attributeKey] !== selectedPreset.attributes[attributeKey];
+        });
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
           <Text className="text-sm font-semibold text-white">Step 4: Review And Customize</Text>
@@ -561,7 +570,7 @@ export function BackstoryScreen() {
             <Text className="mt-1 text-lg font-bold text-white">{remainingBuildPoints}</Text>
           </View>
 
-          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-4" />
+          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-4" title="Current-Level Sim Projection" />
 
           <Pressable
             className="mt-4 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3"
@@ -625,7 +634,7 @@ export function BackstoryScreen() {
             </View>
           </View>
 
-          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-3" />
+          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-3" title="Current-Level Sim Projection" />
 
           <Pressable
             className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"

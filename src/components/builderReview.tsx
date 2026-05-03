@@ -15,6 +15,7 @@ export interface BuilderReviewSummary {
   growthOutlook: string;
   archetypeConfidence: string;
   hasStandoutStrength: boolean;
+  legacyArchetype: string;
 }
 
 const STRENGTH_LABELS: Record<StrengthKey, string> = {
@@ -42,6 +43,7 @@ export const buildBuilderReviewSummary = (dna: PlayerDNA | null | undefined): Bu
   return {
     classification: classification.taxonomy.label,
     archetypeFit: classification.legacyArchetype,
+    legacyArchetype: classification.legacyArchetype,
     topStrengths: classification.taxonomy.hasStandoutStrength
       ? [
           STRENGTH_LABELS[classification.taxonomy.primaryStrength],
@@ -113,7 +115,7 @@ export function BuilderReviewSection({
   summary,
   projection,
   variant = "premium",
-  title = "Projected Sim Identity",
+  title = "Current-Level Sim Projection",
   className = "",
 }: BuilderReviewSectionProps) {
   if (!summary) {
@@ -131,6 +133,17 @@ export function BuilderReviewSection({
           <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Projected Role</Text>
           <Text className={`mt-1 text-sm font-semibold ${theme.valueClassName}`}>{projection?.projectedRole ?? summary.classification}</Text>
           <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{projection?.identityNote ?? (summary.hasStandoutStrength ? `Confidence: ${summary.archetypeConfidence}` : NO_STANDOUT_LABEL)}</Text>
+        </View>
+
+        <View className="flex-row gap-2">
+          <View className={`flex-1 rounded-lg border px-2 py-2 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
+            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Sim Classification</Text>
+            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{summary.classification}</Text>
+          </View>
+          <View className={`flex-1 rounded-lg border px-2 py-2 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
+            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Legacy Archetype</Text>
+            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{summary.legacyArchetype}</Text>
+          </View>
         </View>
 
         {projection ? (

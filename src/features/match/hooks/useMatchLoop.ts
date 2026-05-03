@@ -111,6 +111,34 @@ const teammateProfileByPosition: Record<Position, { archetype: PlayerArchetype; 
   C: { archetype: "Paint Beast", delta: { shortRange: 11, defRebounding: 13, interiorDefense: 10, threePoint: -14, handle: -18 } },
 };
 
+const teammateBaseAttributesByPosition: Record<Position, PlayerAttributes> = {
+  PG: {
+    shortRange: 64, dunking: 48, midrange: 64, threePoint: 62, handle: 74, passing: 72, vision: 70,
+    perimeterDefense: 66, interiorDefense: 42, stealing: 64, blocking: 36, offRebounding: 38, defRebounding: 46,
+    speed: 74, strength: 50, stamina: 72,
+  },
+  SG: {
+    shortRange: 62, dunking: 54, midrange: 70, threePoint: 74, handle: 66, passing: 60, vision: 62,
+    perimeterDefense: 64, interiorDefense: 44, stealing: 62, blocking: 38, offRebounding: 40, defRebounding: 48,
+    speed: 72, strength: 52, stamina: 72,
+  },
+  SF: {
+    shortRange: 68, dunking: 66, midrange: 66, threePoint: 64, handle: 62, passing: 60, vision: 62,
+    perimeterDefense: 70, interiorDefense: 60, stealing: 66, blocking: 58, offRebounding: 54, defRebounding: 62,
+    speed: 70, strength: 64, stamina: 72,
+  },
+  PF: {
+    shortRange: 70, dunking: 70, midrange: 60, threePoint: 58, handle: 52, passing: 56, vision: 58,
+    perimeterDefense: 62, interiorDefense: 72, stealing: 58, blocking: 70, offRebounding: 72, defRebounding: 76,
+    speed: 64, strength: 74, stamina: 72,
+  },
+  C: {
+    shortRange: 76, dunking: 74, midrange: 48, threePoint: 36, handle: 40, passing: 50, vision: 54,
+    perimeterDefense: 48, interiorDefense: 78, stealing: 52, blocking: 78, offRebounding: 76, defRebounding: 82,
+    speed: 56, strength: 82, stamina: 70,
+  },
+};
+
 const buildRuntimeTeams = (
   userPlayer: Player,
   userAttributes: PlayerAttributes,
@@ -151,7 +179,7 @@ const buildRuntimeTeams = (
       getHomeNameForPosition(position),
       profile.archetype,
       position,
-      withDelta(userAttributes, schoolPathProfile ? mergeDelta(profile.delta, schoolPathProfile.teammateRuntimeDelta) : profile.delta),
+      withDelta(teammateBaseAttributesByPosition[position], schoolPathProfile ? mergeDelta(profile.delta, schoolPathProfile.teammateRuntimeDelta) : profile.delta),
     );
   }) as Team["roster"];
 

@@ -166,20 +166,22 @@ const applyInkPlayerState = (player: Player, inkState: InkPlayerState): Player =
 const getPeriodState = (
   totalSeconds: number,
   secondsRemaining: number,
-): { quarter: 1 | 2 | 3 | 4; overtimePeriod?: number; periodKey: PeriodKey } => {
+): { quarter: 1 | 2 | 3 | 4; overtimePeriod?: number; periodKey: PeriodKey; timeRemaining: number } => {
   const regulationSeconds = Math.max(4, totalSeconds);
   const quarterSeconds = Math.max(1, Math.floor(regulationSeconds / 4));
   if (secondsRemaining <= 0) {
-    return { quarter: 4, periodKey: "Q4" };
+    return { quarter: 4, periodKey: "Q4", timeRemaining: 0 };
   }
   if (secondsRemaining > regulationSeconds) {
     const overtimeSeconds = secondsRemaining - regulationSeconds;
     const overtimePeriod = Math.max(1, Math.ceil(overtimeSeconds / quarterSeconds));
-    return { quarter: 4, overtimePeriod, periodKey: `OT${overtimePeriod}` };
+    const elapsedInOvertime = overtimeSeconds - (overtimePeriod - 1) * quarterSeconds;
+    return { quarter: 4, overtimePeriod, periodKey: `OT${overtimePeriod}`, timeRemaining: Math.max(0, quarterSeconds - elapsedInOvertime) };
   }
   const elapsed = Math.max(0, regulationSeconds - secondsRemaining);
   const quarter = Math.min(4, Math.floor(elapsed / quarterSeconds) + 1) as 1 | 2 | 3 | 4;
-  return { quarter, periodKey: `Q${quarter}` as PeriodKey };
+  const elapsedInQuarter = elapsed - (quarter - 1) * quarterSeconds;
+  return { quarter, periodKey: `Q${quarter}` as PeriodKey, timeRemaining: Math.max(0, quarterSeconds - elapsedInQuarter) };
 };
 
 const getBonusSegment = (periodKey: PeriodKey): BonusSegment =>
@@ -311,6 +313,10 @@ export const createMatchEngineAdapter = (
       return undefined;
     }
     const critical = isCriticalState(previousState);
+    const elapsedSeconds = Math.max(0, totalSeconds - previousState.secondsRemaining);
+    if (!critical && (previousState.possessionIndex <= 2 || elapsedSeconds < 90)) {
+      return undefined;
+    }
     const pendingId = `pending-possession-${pendingIdCounter}`;
     const periodState = getPeriodState(totalSeconds, previousState.secondsRemaining);
     const foulSegment = getBonusSegment(periodState.periodKey);
@@ -320,7 +326,7 @@ export const createMatchEngineAdapter = (
       periodKey: periodState.periodKey,
       quarter: periodState.quarter,
       overtimePeriod: periodState.overtimePeriod,
-      timeRemaining: previousState.secondsRemaining,
+      timeRemaining: periodState.timeRemaining,
       offense: previousState.offenseKey,
       defense: previousState.defenseKey,
       userTeam: userLocation.teamKey,

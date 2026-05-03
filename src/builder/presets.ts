@@ -250,7 +250,7 @@ export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]>
       weaknesses: ["Limited shooting", "Limited creation", "Spacing-negative without growth"],
       attributes: attrs({
         shortRange: 80, dunking: 82, midrange: 54, threePoint: 46, handle: 54, passing: 52, vision: 54,
-        perimeterDefense: 62, interiorDefense: 68, stealing: 58, blocking: 68, offRebounding: 66, defRebounding: 70,
+        perimeterDefense: 62, interiorDefense: 68, stealing: 58, blocking: 68, offRebounding: 60, defRebounding: 64,
         speed: 76, strength: 78, stamina: 72,
       }),
       intendedTendencies: {
@@ -269,7 +269,7 @@ export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]>
       weaknesses: ["Limited shooting", "Limited shot creation", "Lower scoring ceiling"],
       attributes: attrs({
         shortRange: 66, dunking: 68, midrange: 48, threePoint: 40, handle: 48, passing: 50, vision: 54,
-        perimeterDefense: 68, interiorDefense: 82, stealing: 64, blocking: 82, offRebounding: 82, defRebounding: 84,
+        perimeterDefense: 68, interiorDefense: 84, stealing: 64, blocking: 84, offRebounding: 88, defRebounding: 90,
         speed: 66, strength: 82, stamina: 74,
       }),
       intendedTendencies: {

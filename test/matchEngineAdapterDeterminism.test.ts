@@ -125,17 +125,20 @@ describe("matchEngineAdapter determinism", () => {
 
     const started = adapter.startGame();
     expect(started.userMatchState).toEqual({
-      baseWorkRate: 88,
-      baseFocus: 50,
-      workRate: 88,
-      focus: 50,
+      workRate: "normal",
+      focus: "balanced",
+      fatigue: 0,
+      touchLoad: 0,
+      lateGamePenalty: 0,
     });
 
     const stepped = adapter.stepPossession();
     expect(stepped.result).toBeDefined();
     expect(stepped.userMatchState).toBeDefined();
-    expect(stepped.userMatchState!.workRate).toBeLessThan(stepped.userMatchState!.baseWorkRate);
-    expect(stepped.userMatchState!.focus).toBeLessThanOrEqual(stepped.userMatchState!.baseFocus);
+    expect(stepped.userMatchState!.workRate).toBe("normal");
+    expect(stepped.userMatchState!.focus).toBe("balanced");
+    expect(stepped.userMatchState!.touchLoad).toBeGreaterThanOrEqual(0);
+    expect(stepped.userMatchState!.fatigue).toBeGreaterThanOrEqual(0);
   });
 
   it("changes workRate and focus based on key moment success versus failure", () => {
@@ -181,7 +184,8 @@ describe("matchEngineAdapter determinism", () => {
 
     expect(success.resolvedKeyMoment?.success).toBe(true);
     expect(failure.resolvedKeyMoment?.success).toBe(false);
-    expect(success.userMatchState!.focus).toBeGreaterThan(failure.userMatchState!.focus);
-    expect(success.userMatchState!.workRate).toBeGreaterThan(failure.userMatchState!.workRate);
+    expect(success.userMatchState!.fatigue).toBeLessThan(failure.userMatchState!.fatigue);
+    expect(success.userMatchState!.workRate).toBe(failure.userMatchState!.workRate);
+    expect(success.userMatchState!.focus).toBe(failure.userMatchState!.focus);
   });
 });

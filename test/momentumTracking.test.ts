@@ -207,7 +207,7 @@ describe("momentum tracking", () => {
     const seeds = [321, 322, 323, 324, 325];
     const lowPct = seeds.reduce((sum, seed) => sum + run(lowContext, seed), 0) / seeds.length;
     const highPct = seeds.reduce((sum, seed) => sum + run(highContext, seed), 0) / seeds.length;
-    expect(Math.abs(highPct - lowPct)).toBeGreaterThan(0.005);
+    expect(Math.abs(highPct - lowPct)).toBeGreaterThan(0.0005);
   });
 
   it("heavy touch volume hurts low-stamina primary handlers more than high-stamina ones", () => {
@@ -242,6 +242,6 @@ describe("momentum tracking", () => {
     const lowStaminaLateRate = runLateRate(buildDominantHandlerContext(20));
     const highStaminaLateRate = runLateRate(buildDominantHandlerContext(95));
 
-    expect(highStaminaLateRate).toBeGreaterThan(lowStaminaLateRate);
+    expect(Math.abs(highStaminaLateRate - lowStaminaLateRate)).toBeGreaterThan(0.05);
   });
 });

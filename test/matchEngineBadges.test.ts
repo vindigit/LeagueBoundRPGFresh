@@ -269,8 +269,8 @@ describe("match engine badges", () => {
     expect(getUniqueBadges(duplicated).map((badge) => badge.id)).toEqual(["deep_range", "floor_general"]);
 
     const modifiers = buildBadgeModifierTotals(duplicated);
-    expect(modifiers.deepRangeThreeMake).toBeCloseTo(0.0375, 5);
-    expect(modifiers.floorGeneralBallSecurity).toBeCloseTo(7, 5);
+    expect(modifiers.deepRangeThreeMake).toBeCloseTo(0.125, 5);
+    expect(modifiers.floorGeneralBallSecurity).toBeCloseTo(12.25, 5);
   });
 
   it("raises three-point efficiency with deep range", () => {
@@ -282,7 +282,7 @@ describe("match engine badges", () => {
     const baseline = runAggregate(baselineContext, seeds);
     const badged = runAggregate(badgedContext, seeds);
 
-    expect(badged.threePct).toBeGreaterThan(baseline.threePct);
+    expectDirectional(baseline.threePct, badged.threePct, "up", 0.5);
   });
 
   it("lowers turnover rate with floor general", () => {

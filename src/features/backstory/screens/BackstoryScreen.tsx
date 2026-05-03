@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
 import { applyAllocation } from "../../../builder/allocate";
+import { BUILD_PRESETS_BY_POSITION, getDefaultBuildPreset, type BuildPreset } from "../../../builder/presets";
 import { buildSimProjection } from "../../../builder/simProjection";
 import { getTotalBuildCost } from "../../../builder/progression";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "../../../components/builderReview";
@@ -36,25 +37,6 @@ const MAX_BUILD_CAPS: PlayerAttributes = {
   speed: 99,
   strength: 99,
   stamina: 99,
-};
-
-const BUILD_BASELINE: PlayerAttributes = {
-  shortRange: 60,
-  dunking: 60,
-  midrange: 60,
-  threePoint: 60,
-  handle: 60,
-  passing: 60,
-  vision: 60,
-  perimeterDefense: 60,
-  interiorDefense: 60,
-  stealing: 60,
-  blocking: 60,
-  offRebounding: 60,
-  defRebounding: 60,
-  speed: 60,
-  strength: 60,
-  stamina: 60,
 };
 
 const ATTRIBUTE_GROUPS: Array<{ title: string; keys: Array<keyof PlayerAttributes> }> = [
@@ -150,6 +132,58 @@ const Stepper = ({
   </View>
 );
 
+const joinLabels = (values: readonly string[]): string => values.join(", ");
+
+const BuildPresetCard = ({
+  preset,
+  selected,
+  projectionRole,
+  onSelect,
+}: {
+  preset: BuildPreset;
+  selected: boolean;
+  projectionRole: string;
+  onSelect: () => void;
+}) => (
+  <Pressable
+    className={`mt-3 rounded-xl border p-3 ${selected ? "border-emerald-400 bg-emerald-400/15" : "border-slate-700 bg-slate-950"}`}
+    onPress={onSelect}
+  >
+    <View className="flex-row items-start justify-between gap-3">
+      <View className="flex-1">
+        <Text className={`text-base font-bold ${selected ? "text-emerald-100" : "text-white"}`}>{preset.label}</Text>
+        <Text className="mt-1 text-xs text-slate-300">{preset.description}</Text>
+      </View>
+      {selected ? (
+        <View className="rounded-full border border-emerald-300/50 bg-emerald-300/15 px-2 py-1">
+          <Text className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100">Selected</Text>
+        </View>
+      ) : null}
+    </View>
+
+    <View className="mt-3 gap-2">
+      <Text className="text-[11px] text-slate-300">
+        <Text className="font-semibold text-emerald-200">Strengths: </Text>
+        {joinLabels(preset.strengths)}
+      </Text>
+      <Text className="text-[11px] text-slate-300">
+        <Text className="font-semibold text-rose-200">Weaknesses: </Text>
+        {joinLabels(preset.weaknesses)}
+      </Text>
+      <Text className="text-[11px] text-slate-300">
+        <Text className="font-semibold text-cyan-200">Projected sim identity: </Text>
+        {projectionRole}
+      </Text>
+      {preset.tradeoffNote ? (
+        <Text className="text-[11px] text-slate-400">
+          <Text className="font-semibold text-amber-200">Tradeoff: </Text>
+          {preset.tradeoffNote}
+        </Text>
+      ) : null}
+    </View>
+  </Pressable>
+);
+
 export function BackstoryScreen() {
   const initializeCareer = useCareerStore((state) => state.initializeCareer);
   const [step, setStep] = useState(1);
@@ -160,14 +194,15 @@ export function BackstoryScreen() {
   const [stateCode, setStateCode] = useState<string>(getDefaultStateCode());
   const [citySlug, setCitySlug] = useState<string>(() => getDefaultCityForState(getDefaultStateCode()).slug);
   const [primaryPosition, setPrimaryPosition] = useState<Position>("PG");
-  const [secondaryPosition, setSecondaryPosition] = useState<Position>("SG");
+  const [selectedPresetId, setSelectedPresetId] = useState(getDefaultBuildPreset("PG").id);
   const [heightFeet, setHeightFeet] = useState(6);
   const [heightInches, setHeightInches] = useState(2);
   const [weightLbs, setWeightLbs] = useState(185);
   const [bodyFrame, setBodyFrame] = useState<BodyFrame>("Athletic");
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
   const [ageStarted, setAgeStarted] = useState(8);
-  const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(BUILD_BASELINE);
+  const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(getDefaultBuildPreset("PG").attributes);
+  const [isAdvancedEditOpen, setIsAdvancedEditOpen] = useState(false);
   const stepTransition = useRef(new Animated.Value(1)).current;
 
   const setClampedHeight = (nextFeet: number, nextInches: number): void => {
@@ -218,9 +253,27 @@ export function BackstoryScreen() {
 
   const normalizedHeight = useMemo(() => clampHeight({ feet: heightFeet, inches: heightInches }), [heightFeet, heightInches]);
   const normalizedWeight = useMemo(() => clampWeight(weightLbs), [weightLbs]);
-  const safeSecondaryPosition = secondaryPosition === primaryPosition ? getDefaultSecondaryPosition(primaryPosition) : secondaryPosition;
-  const currentBuildCost = useMemo(() => getTotalBuildCost(buildAttributes, BUILD_BASELINE), [buildAttributes]);
+  const selectedPreset = useMemo(
+    () => BUILD_PRESETS_BY_POSITION[primaryPosition].find((preset) => preset.id === selectedPresetId) ?? getDefaultBuildPreset(primaryPosition),
+    [primaryPosition, selectedPresetId],
+  );
+  const safeSecondaryPosition = getDefaultSecondaryPosition(primaryPosition);
+  const currentBuildCost = useMemo(() => getTotalBuildCost(buildAttributes, selectedPreset.attributes), [buildAttributes, selectedPreset.attributes]);
   const remainingBuildPoints = BUILD_POINT_BUDGET - currentBuildCost;
+
+  const selectPrimaryPosition = (position: Position): void => {
+    const preset = getDefaultBuildPreset(position);
+    setPrimaryPosition(position);
+    setSelectedPresetId(preset.id);
+    setBuildAttributes(preset.attributes);
+    setIsAdvancedEditOpen(false);
+  };
+
+  const selectBuildPreset = (preset: BuildPreset): void => {
+    setSelectedPresetId(preset.id);
+    setBuildAttributes(preset.attributes);
+    setIsAdvancedEditOpen(false);
+  };
 
   const adjustAttribute = (attribute: keyof PlayerAttributes, delta: number): void => {
     const allocation = applyAllocation({
@@ -284,7 +337,7 @@ export function BackstoryScreen() {
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
   const canAdvanceFromLocation = stateCode.trim().length > 0 && citySlug.trim().length > 0;
-  const canAdvanceFromBuild = primaryPosition !== secondaryPosition;
+  const canAdvanceFromBuild = Boolean(selectedPreset);
 
   useEffect(() => {
     stepTransition.setValue(0);
@@ -430,20 +483,31 @@ export function BackstoryScreen() {
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
           <Text className="text-sm font-semibold text-white">Step 3: Build Profile</Text>
           <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Primary Position</Text>
-          <SelectGroup options={POSITIONS} selected={primaryPosition} onSelect={setPrimaryPosition} />
-
-          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Secondary Position</Text>
-          <SelectGroup options={POSITIONS} selected={secondaryPosition} onSelect={setSecondaryPosition} />
-
-          {primaryPosition === secondaryPosition ? (
-            <View className="mt-3 rounded-lg border border-rose-400/50 bg-rose-500/10 px-3 py-2">
-              <Text className="text-xs font-semibold text-rose-200">Primary and secondary positions must be different.</Text>
-            </View>
-          ) : null}
+          <SelectGroup options={POSITIONS} selected={primaryPosition} onSelect={selectPrimaryPosition} />
 
           <View className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
-            <Text className="text-xs font-semibold text-cyan-100">The new builder path is build-driven. Archetype is now derived from your preview, not selected directly.</Text>
+            <Text className="text-xs font-semibold text-cyan-100">Choose a starting build. Your final sim identity still comes from the attributes you take into your career.</Text>
           </View>
+
+          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Build Preset</Text>
+          {BUILD_PRESETS_BY_POSITION[primaryPosition].map((preset) => {
+            const projection = buildSimProjection({
+              attributes: preset.attributes,
+              position: preset.position,
+              caps: MAX_BUILD_CAPS,
+              height: normalizedHeight,
+              weightLbs: normalizedWeight,
+            });
+            return (
+              <BuildPresetCard
+                key={preset.id}
+                preset={preset}
+                selected={preset.id === selectedPreset.id}
+                projectionRole={projection.projectedRole}
+                onSelect={() => selectBuildPreset(preset)}
+              />
+            );
+          })}
 
           <Stepper
             label="Height - Feet"
@@ -476,31 +540,53 @@ export function BackstoryScreen() {
     }
 
     if (step === 4) {
+      const projectedClassification = buildProjection.classification.taxonomy.label;
+      const hasDivergedFromPreset = projectedClassification !== selectedPreset.label;
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-          <Text className="text-sm font-semibold text-white">Step 4: Attributes And Age Started</Text>
-          <Text className="mt-2 text-xs text-slate-400">Allocate from a shared point budget and set when you started playing.</Text>
+          <Text className="text-sm font-semibold text-white">Step 4: Review And Customize</Text>
+          <Text className="mt-2 text-xs text-slate-400">Review the starting package, then open advanced edits if you want to tune the numbers.</Text>
           <View className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Build Points Remaining</Text>
+            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Starting Build</Text>
+            <Text className="mt-1 text-lg font-bold text-white">{selectedPreset.label}</Text>
+            <Text className="mt-1 text-xs text-slate-200">{selectedPreset.tradeoffNote}</Text>
+          </View>
+          {hasDivergedFromPreset ? (
+            <View className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2">
+              <Text className="text-xs font-semibold text-amber-100">Your edits now project closer to {projectedClassification}.</Text>
+            </View>
+          ) : null}
+          <View className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Customization Points Remaining</Text>
             <Text className="mt-1 text-lg font-bold text-white">{remainingBuildPoints}</Text>
           </View>
 
           <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-4" />
 
-          {ATTRIBUTE_GROUPS.map((group) => (
-            <View key={group.title} className="mt-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
-              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
-              {group.keys.map((key) => (
-                <Stepper
-                  key={key}
-                  label={ATTRIBUTE_LABELS[key]}
-                  value={buildAttributes[key]}
-                  onDec={() => adjustAttribute(key, -1)}
-                  onInc={() => adjustAttribute(key, 1)}
-                />
-              ))}
-            </View>
-          ))}
+          <Pressable
+            className="mt-4 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3"
+            onPress={() => setIsAdvancedEditOpen((value) => !value)}
+          >
+            <Text className="text-sm font-semibold text-white">{isAdvancedEditOpen ? "Hide Customize Attributes" : "Customize Attributes"}</Text>
+            <Text className="mt-1 text-xs text-slate-400">Advanced Edit: tune individual ratings from the selected starting build.</Text>
+          </Pressable>
+
+          {isAdvancedEditOpen
+            ? ATTRIBUTE_GROUPS.map((group) => (
+                <View key={group.title} className="mt-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
+                  {group.keys.map((key) => (
+                    <Stepper
+                      key={key}
+                      label={ATTRIBUTE_LABELS[key]}
+                      value={buildAttributes[key]}
+                      onDec={() => adjustAttribute(key, -1)}
+                      onInc={() => adjustAttribute(key, 1)}
+                    />
+                  ))}
+                </View>
+              ))
+            : null}
 
           <Text className="mt-4 text-xs text-slate-400">Age started determines growth curve and early starting profile. Range: 4 to 12.</Text>
           <View className="mt-4 flex-row items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 py-3">
@@ -522,7 +608,7 @@ export function BackstoryScreen() {
           <Text className="text-sm font-semibold text-white">Step 5: Preview</Text>
           <Text className="mt-2 text-2xl font-bold text-white">{preview.identity.displayName}</Text>
           <Text className="mt-1 text-sm text-slate-300">
-            {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.primaryPosition}/{preview.identity.secondaryPosition}
+            {preview.identity.hometown.city}, {preview.identity.hometown.state} | {preview.identity.primaryPosition}
           </Text>
           <Text className="mt-1 text-sm text-slate-300">
             {preview.identity.height.feet}'{preview.identity.height.inches}\" • {preview.identity.weightLbs} lbs

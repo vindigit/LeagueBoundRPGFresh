@@ -3,6 +3,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 import { useCareerStore } from "../src/store/useCareerStore";
+import { getDefaultBuildPreset } from "../src/builder/presets";
 import type { BuildBackstoryInput } from "../src/types/backstory";
 import type { PlayerAttributes } from "../src/types/player";
 
@@ -51,6 +52,18 @@ describe("Career store builder integration", () => {
     expect(player.dna?.builderProfile).toBeTruthy();
     expect(player.dna?.builderProfile?.classification.legacyArchetype).toBe(player.archetype);
     expect(Array.isArray(player.dna?.builderProfile?.badges)).toBe(true);
+  });
+
+  it("uses selected preset attributes as the initialized player attributes", () => {
+    const preset = getDefaultBuildPreset("C");
+    useCareerStore.getState().initializeCareer({
+      ...buildInput,
+      primaryPosition: "C",
+      secondaryPosition: "PF",
+      buildAttributes: preset.attributes,
+    });
+
+    expect(useCareerStore.getState().player.attributes).toEqual(preset.attributes);
   });
 
   it("lazy-backfills missing builder profile during migration", () => {

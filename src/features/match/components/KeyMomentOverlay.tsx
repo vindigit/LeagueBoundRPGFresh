@@ -7,6 +7,7 @@ export interface KeyMomentContextSummary {
   score: string;
   period: string;
   clock: string;
+  situation?: string;
   fatigue: string;
   workRate: string;
   focus: string;
@@ -54,6 +55,19 @@ const ContextChip = ({ label, value }: { label: string; value: string }) => (
   </View>
 );
 
+const buildSituationHeadline = (contextSummary: KeyMomentContextSummary | undefined): string | undefined => {
+  if (!contextSummary) {
+    return undefined;
+  }
+
+  const parts = [contextSummary.clock, contextSummary.situation].filter(Boolean);
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  return parts.join(" • ");
+};
+
 export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve }: KeyMomentOverlayProps) => {
   const [submitting, setSubmitting] = useState(false);
   const [timingProgress, setTimingProgress] = useState(0);
@@ -96,6 +110,8 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
   if (!feedback && !pending) {
     return null;
   }
+
+  const situationHeadline = buildSituationHeadline(contextSummary);
 
   const getLiveTimingProgress = (): number => {
     const durationMs =
@@ -252,7 +268,14 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
         {pending ? (
           <View className="w-full max-w-md rounded-2xl border border-amber-400/40 bg-slate-900 p-4">
             <Text className="text-xs font-semibold uppercase tracking-wider text-amber-300">Key Moment</Text>
-            <Text className="mt-2 text-base font-semibold text-white">{pending.promptText}</Text>
+            {pending.mode === "choice" && situationHeadline ? (
+              <Text testID="key-moment-situation-headline" className="mt-2 text-lg font-bold text-white">
+                {situationHeadline}
+              </Text>
+            ) : null}
+            <Text className={`${pending.mode === "choice" ? "mt-1 text-sm text-slate-300" : "mt-2 text-base font-semibold text-white"}`}>
+              {pending.promptText}
+            </Text>
             {contextSummary ? (
               <View className="mt-4 gap-2">
                 <View className="flex-row flex-wrap justify-between gap-2">
@@ -278,7 +301,7 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
                   <Pressable
                     key={option.id}
                     disabled={submitting}
-                    className={`rounded-lg border px-3 py-3 ${submitting ? "border-slate-700 bg-slate-800" : "border-cyan-500/40 bg-cyan-500/10"}`}
+                    className={`rounded-xl border px-4 py-4 ${submitting ? "border-slate-700 bg-slate-800" : "border-cyan-500/40 bg-cyan-500/10"}`}
                     onPress={() => {
                       if (submitting || resolvedRef.current) {
                         return;
@@ -288,8 +311,8 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
                       onResolve({ pendingId: pending.id, choiceId: option.id });
                     }}
                   >
-                    <Text className="text-sm font-semibold text-cyan-200">{option.label}</Text>
-                    <Text className="mt-1 text-xs text-slate-300">{option.description}</Text>
+                    <Text className="text-base font-bold text-cyan-100">{option.label}</Text>
+                    <Text className="mt-1 text-[11px] leading-4 text-slate-400">{option.description}</Text>
                   </Pressable>
                 ))}
                 <Pressable

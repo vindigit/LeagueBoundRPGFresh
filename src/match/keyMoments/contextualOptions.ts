@@ -246,19 +246,19 @@ export const buildContextualMakeTheReadOptions = (args: KeyMomentBuildArgs): Key
   return [
     makeOption(
       "kick_out",
-      ctx.playmakingSkill >= ctx.downhillSkill ? "Hit the Weak-Side Window" : "Spray It Out",
+      ctx.playmakingSkill >= ctx.downhillSkill ? "Hit Weak-Side" : "Spray It Out",
       `${ctx.scoreText}, ${ctx.clockText}. Move the help and fire the weak-side kick-out, ${ctx.focusText}.`,
       clampDelta(kickOutDelta),
     ),
     makeOption(
       "attack_gap",
-      ctx.downhillSkill >= ctx.playmakingSkill ? "Collapse the Gap" : "Knife Through the Help",
+      ctx.downhillSkill >= ctx.playmakingSkill ? "Collapse Gap" : "Knife Through Help",
       `${ctx.clockText}. Turn the corner and attack the seam ${ctx.workRateText}.`,
       clampDelta(attackGapDelta),
     ),
     makeOption(
       "reset_space",
-      ctx.scoreBand === "leading" ? "Settle the Possession" : "Bail Out and Reset",
+      ctx.scoreBand === "leading" ? "Settle Possession" : "Bail Out Reset",
       `${ctx.scoreText}, ${ctx.clockText}. Reset the floor and make them guard one more action.`,
       clampDelta(resetSpaceDelta),
     ),
@@ -285,19 +285,19 @@ export const buildContextualOnBallStopOptions = (args: KeyMomentBuildArgs): KeyM
   return [
     makeOption(
       "shade_middle",
-      ctx.perimeterDefenseSkill >= ctx.interiorDefenseSkill ? "Cut Off the Middle" : "Angle Into Traffic",
+      ctx.perimeterDefenseSkill >= ctx.interiorDefenseSkill ? "Cut Off Middle" : "Angle Into Traffic",
       `${ctx.scoreText}, ${ctx.clockText}. Sit on the middle and send the drive into help.`,
       clampDelta(shadeMiddleDelta),
     ),
     makeOption(
       "crowd_handle",
-      ctx.scoreBand === "trailing" ? "Heat Up the Handle" : "Crowd the Dribble",
+      ctx.scoreBand === "trailing" ? "Heat the Handle" : "Crowd the Dribble",
       `${ctx.clockText}. Crowd the dribble and take away rhythm, ${ctx.focusText}.`,
       clampDelta(crowdHandleDelta),
     ),
     makeOption(
       "wall_up",
-      ctx.scoreBand === "leading" ? "Stay Vertical, No Whistle" : "Wall Up at the Rim",
+      ctx.scoreBand === "leading" ? "Stay Vertical" : "Wall Up Rim",
       `${ctx.scoreText}, ${ctx.clockText}. Meet the drive chest-up and finish the stop ${ctx.workRateText}.`,
       clampDelta(wallUpDelta),
     ),
@@ -324,19 +324,19 @@ export const buildContextualJumpLaneOptions = (args: KeyMomentBuildArgs): KeyMom
   return [
     makeOption(
       "shoot_gap",
-      ctx.scoreBand === "trailing" ? "Jump the Lane for a Momentum Flip" : "Shoot the Passing Gap",
+      ctx.scoreBand === "trailing" ? "Jump the Lane" : "Shoot Passing Gap",
       `${ctx.scoreText}, ${ctx.clockText}. Jump it only if you see it early, ${ctx.focusText}.`,
       clampDelta(shootGapDelta),
     ),
     makeOption(
       "stunt_recover",
-      "Show Help, Snap Back",
+      "Show Help Back",
       `${ctx.clockText}. Stunt at the ball and recover before the skip opens up.`,
       clampDelta(stuntRecoverDelta),
     ),
     makeOption(
       "stay_home",
-      ctx.scoreBand === "leading" ? "Stay Home, Protect the Lead" : "Stay Home and Contain",
+      ctx.scoreBand === "leading" ? "Stay Home" : "Stay Home Contain",
       `${ctx.scoreText}, ${ctx.clockText}. Stay attached and make them score over set coverage.`,
       clampDelta(stayHomeDelta),
     ),
@@ -379,19 +379,19 @@ export const buildContextualFoulPressureOptions = (args: KeyMomentBuildArgs): Ke
     return [
       makeOption(
         "rip_through",
-        ctx.scoreBand === "trailing" ? "Force the Whistle" : "Rip Through the Hip",
+        ctx.scoreBand === "trailing" ? "Force Whistle" : "Rip Through Hip",
         `${ctx.scoreText}, ${ctx.clockText}. Get downhill and make the defender absorb contact ${pendingModeText}.`,
         clampDelta(ripThroughDelta),
       ),
       makeOption(
         "go_strong",
-        "Finish Through the Chest",
+        "Finish Through Chest",
         `${ctx.clockText}. Power through the hit and finish on balance ${ctx.workRateText}.`,
         clampDelta(goStrongDelta),
       ),
       makeOption(
         "fade_away",
-        ctx.scoreBand === "leading" ? "Take the Safer Fade" : "Avoid a Whistle-Dependent Look",
+        ctx.scoreBand === "leading" ? "Take Safer Fade" : "Avoid Whistle Hunt",
         `${ctx.scoreText}, ${ctx.clockText}. Create space and score without hunting the whistle.`,
         clampDelta(fadeAwayDelta),
       ),
@@ -414,19 +414,19 @@ export const buildContextualFoulPressureOptions = (args: KeyMomentBuildArgs): Ke
   return [
     makeOption(
       "wall_up",
-      ctx.scoreBand === "leading" ? "Stay Vertical, Do Not Stop the Clock" : "Wall Up Without Fouling",
+      ctx.scoreBand === "leading" ? "Stay Vertical" : "Wall Up Clean",
       `${ctx.scoreText}, ${ctx.clockText}. Stay vertical and keep them off the line ${pendingModeText}.`,
       clampDelta(wallUpDelta),
     ),
     makeOption(
       "swipe_down",
-      ctx.scoreBand === "trailing" ? "Swipe for the Disruption" : "Swipe Down and Recover",
+      ctx.scoreBand === "trailing" ? "Swipe for Disruption" : "Swipe Down Recover",
       `${ctx.clockText}. Swipe only when the ball is loose because ${pendingModeText}.`,
       clampDelta(swipeDownDelta),
     ),
     makeOption(
       "body_check",
-      ctx.scoreBand === "leading" ? "Body Up, No Cheap Bonus" : "Cut Off the Chest Line",
+      ctx.scoreBand === "leading" ? "Body Up Clean" : "Cut Off Chest",
       `${ctx.scoreText}, ${ctx.clockText}. Beat the drive to the spot and avoid gifting free throws.`,
       clampDelta(bodyCheckDelta),
     ),

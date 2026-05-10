@@ -149,7 +149,7 @@ describe("Key moment contextual options", () => {
     const playmakerPending = buildMakeTheReadPending(playmakerArgs);
     const slasherPending = buildMakeTheReadPending(slasherArgs);
 
-    expect(playmakerPending?.options[0]?.label).toBe("Hit the Weak-Side Window");
+    expect(playmakerPending?.options[0]?.label).toBe("Hit Weak-Side");
     expect(slasherPending?.options[0]?.label).toBe("Spray It Out");
   });
 
@@ -189,7 +189,7 @@ describe("Key moment contextual options", () => {
     }));
 
     expect(pending).toBeDefined();
-    expect(pending!.options[2]?.label).toBe("Stay Vertical, No Whistle");
+    expect(pending!.options[2]?.label).toBe("Stay Vertical");
     expect(pending!.options[2]?.description).toContain("up 5");
   });
 
@@ -249,8 +249,8 @@ describe("Key moment contextual options", () => {
       }),
     }));
 
-    expect(trailingPending?.options[0]?.label).toBe("Steal Lane Jump");
-    expect(leadingPending?.options[3]?.label).toBe("Stay Home, Protect the Lead");
+    expect(trailingPending?.options[0]?.label).toBe("Jump the Lane");
+    expect(leadingPending?.options[3]?.label).toBe("Stay Home");
   });
 
   it("maps foul_pressure defense options to actual bonus context", () => {

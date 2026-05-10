@@ -20,7 +20,7 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
     options: [
       {
         id: STEAL_LANE_OPTION_ID,
-        label: "Steal Lane Jump",
+        label: "Jump the Lane",
         description: "Break as the passing window opens and take it clean.",
         qualityDelta: 0,
       },

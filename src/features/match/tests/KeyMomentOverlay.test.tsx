@@ -7,6 +7,7 @@ const contextSummary: KeyMomentContextSummary = {
   score: "42 - 39",
   period: "Q3",
   clock: "5:21",
+  situation: "Up 3",
   fatigue: "Medium",
   workRate: "80 (High)",
   focus: "50 (Medium)",
@@ -97,6 +98,7 @@ describe("KeyMomentOverlay", () => {
       <KeyMomentOverlay pending={pendingChoice} contextSummary={contextSummary} onResolve={onResolve} />,
     );
 
+    expect(screen.getByText("5:21 • Up 3")).toBeTruthy();
     expect(screen.getByText(pendingChoice.promptText)).toBeTruthy();
     expect(screen.getByText("42 - 39")).toBeTruthy();
     expect(screen.getByText("Q3")).toBeTruthy();
@@ -106,6 +108,7 @@ describe("KeyMomentOverlay", () => {
     expect(screen.getByText("50 (Medium)")).toBeTruthy();
     expect(screen.getByText("PG Playmaker • On offense vs AWAY")).toBeTruthy();
     expect(screen.getByText("Kick Out")).toBeTruthy();
+    expect(screen.getByText("Trust the weak-side pass.")).toBeTruthy();
     expect(screen.getByText("Sim It")).toBeTruthy();
   });
 

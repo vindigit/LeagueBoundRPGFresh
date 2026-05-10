@@ -54,6 +54,17 @@ const deriveFatigueLabel = (fatigue: number): string => {
   return "Low";
 };
 
+const describeScoreSituation = (homeScore: number, awayScore: number): string => {
+  const margin = homeScore - awayScore;
+  if (margin === 0) {
+    return "Tied game";
+  }
+  if (margin > 0) {
+    return `Up ${margin}`;
+  }
+  return `Down ${Math.abs(margin)}`;
+};
+
 const buildKeyMomentContextSummary = (args: {
   pending?: KeyMomentPending;
   homeScore: number;
@@ -81,6 +92,7 @@ const buildKeyMomentContextSummary = (args: {
     score: `${args.homeScore} - ${args.awayScore}`,
     period: getPeriodLabel(args.quarter, args.isOvertime, args.overtimePeriod),
     clock: formatClock(args.timeRemaining),
+    situation: describeScoreSituation(args.homeScore, args.awayScore),
     fatigue: deriveFatigueLabel(fatigue),
     workRate: toWorkRateLabel(workRate),
     focus: toFocusLabel(focus),

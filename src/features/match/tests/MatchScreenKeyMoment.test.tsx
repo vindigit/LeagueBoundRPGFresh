@@ -188,7 +188,7 @@ describe("MatchScreen key moment UI", () => {
     jest.useFakeTimers();
     useMatchEngineStore.getState().resetRuntime();
     useMatchEngineStore.setState(() => ({ resolveKeyMoment: originalResolveKeyMoment }));
-    useMatchStore.getState().initializeMatch("Test Player", "Rivals High");
+    useMatchStore.getState().resetForNewSession("Test Player", "Rivals High");
   });
 
   afterEach(() => {
@@ -227,6 +227,7 @@ describe("MatchScreen key moment UI", () => {
     });
 
     expect(screen.getByText(pendingChoice.promptText)).toBeTruthy();
+    expect(screen.getByText("3:05 • Up 4")).toBeTruthy();
     expect(screen.getByText("34 - 30")).toBeTruthy();
     expect(screen.getAllByText("High").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Offense").length).toBeGreaterThan(0);
@@ -442,6 +443,7 @@ describe("MatchScreen key moment UI", () => {
     });
 
     expect(screen.getByText("34 - 38")).toBeTruthy();
+    expect(screen.getByText("3:05 • Down 4")).toBeTruthy();
     expect(screen.getAllByText("Defense").length).toBeGreaterThan(0);
     expect(screen.getByText(pending!.options[0]!.label)).toBeTruthy();
     expect(screen.getByText(pending!.options[0]!.description)).toBeTruthy();

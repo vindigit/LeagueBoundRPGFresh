@@ -247,8 +247,12 @@ describe("Career vertical slice UI", () => {
       });
     });
 
+    expect(screen.getByText("Gym Bag Goods")).toBeTruthy();
+    expect(screen.getByText("Gym Bag Goods — Rec Counter")).toBeTruthy();
+    expect(screen.getByText("Everything you forgot. Everything you need.")).toBeTruthy();
+    expect(screen.getByText("Open Gym Bag Goods")).toBeTruthy();
     expect(screen.getByText("CourtFuel")).toBeTruthy();
-    expect(screen.getByText("Need $6")).toBeTruthy();
+    expect(screen.getByText("You check your pockets. Not enough cash.")).toBeTruthy();
     fireEvent.press(screen.getByText("CourtFuel"));
     expect(useCareerStore.getState().weeklyActionState.actionsTaken).toHaveLength(0);
 
@@ -264,8 +268,9 @@ describe("Career vertical slice UI", () => {
     fireEvent.press(screen.getByText("CourtFuel"));
 
     expect(screen.getByText("Fuel the run.")).toBeTruthy();
-    expect(screen.getByText("Cost $6")).toBeTruthy();
-    expect(useCareerStore.getState().player.bankBalance).toBe(34);
+    expect(screen.getByText("Added to your gym bag.")).toBeTruthy();
+    expect(screen.getByText("Cost $25")).toBeTruthy();
+    expect(useCareerStore.getState().player.bankBalance).toBe(15);
     expect(useCareerStore.getState().energy).toBe(100);
     expect(useCareerStore.getState().condition).toBe(100);
     expect(useCareerStore.getState().financeLedger.at(-1)).toMatchObject({
@@ -273,9 +278,10 @@ describe("Career vertical slice UI", () => {
       category: "misc",
       description: "CourtFuel purchase",
       source: "weekly_action",
-      amount: 6,
+      amount: 25,
     });
-    expect(screen.getByText("Energy +18 | Condition +3 | $8")).toBeTruthy();
+    expect(screen.getByText("Energy +18 | Condition +3 | $36")).toBeTruthy();
+    expect(screen.getByText("More items unlock as your career grows.")).toBeTruthy();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {

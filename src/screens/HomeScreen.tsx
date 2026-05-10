@@ -4,6 +4,17 @@ import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
 import { BackstoryScreen } from "../features/backstory/screens/BackstoryScreen";
 import { HIGH_SCHOOL_RECRUITING_PROGRAMS } from "../features/career/recruiting";
+import {
+  getGymBagGoodsDescription,
+  getGymBagGoodsDisplayName,
+  GYM_BAG_GOODS_CORE_DESCRIPTION,
+  GYM_BAG_GOODS_EMPTY_COPY,
+  GYM_BAG_GOODS_ENTRY_COPY,
+  GYM_BAG_GOODS_INSUFFICIENT_FUNDS_COPY,
+  GYM_BAG_GOODS_PURCHASE_SUCCESS_COPY,
+  GYM_BAG_GOODS_SLOGAN,
+  GYM_BAG_GOODS_TITLE,
+} from "../features/career/shopBranding";
 import { SchoolPathSelectionScreen } from "../features/career/screens/SchoolPathSelectionScreen";
 import { getWeeklyActionDefinition } from "../features/career/weeklyActions";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
@@ -179,6 +190,10 @@ export function HomeScreen() {
     leagueLevel === LeagueLevel.MIDDLE_SCHOOL && middleSchoolTournament && !middleSchoolTournament.completed
       ? middleSchoolTournament.matches[middleSchoolTournament.currentMatchIndex] ?? null
       : null;
+  const shopDisplayName = getGymBagGoodsDisplayName(leagueLevel);
+  const shopDescription = getGymBagGoodsDescription(leagueLevel);
+  const shopActionIds = visibleActionIds.filter((actionId) => actionId === "COURTFUEL");
+  const nonShopActionIds = visibleActionIds.filter((actionId) => actionId !== "COURTFUEL");
 
   return (
     <SafeAreaView className="relative flex-1 bg-premium-bg">
@@ -419,11 +434,14 @@ export function HomeScreen() {
             {lastWeeklyActionResult ? (
               <View className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
                 <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                  {lastWeeklyActionResult.actionLabel} Applied
+                  {lastWeeklyActionResult.statusLabel ?? `${lastWeeklyActionResult.actionLabel} Applied`}
                 </Text>
                 <Text className="mt-2 text-lg font-semibold text-white">{lastWeeklyActionResult.title}</Text>
                 {lastWeeklyActionResult.tagline ? (
                   <Text className="mt-1 text-sm font-medium text-emerald-200">{lastWeeklyActionResult.tagline}</Text>
+                ) : null}
+                {lastWeeklyActionResult.actionId === "COURTFUEL" ? (
+                  <Text className="mt-2 text-sm font-medium text-emerald-200">{GYM_BAG_GOODS_PURCHASE_SUCCESS_COPY}</Text>
                 ) : null}
                 {lastWeeklyActionResult.description ? (
                   <Text className="mt-2 text-sm leading-6 text-premium-muted">{lastWeeklyActionResult.description}</Text>
@@ -439,7 +457,7 @@ export function HomeScreen() {
             ) : null}
 
             <View className="mt-4 gap-3">
-              {visibleActionIds.map((actionId) => {
+              {nonShopActionIds.map((actionId) => {
                 const definition = getWeeklyActionDefinition(actionId);
                 const isTaken = actionId === "COURTFUEL" ? false : weeklyActionState.actionsTaken.some((action) => action.id === actionId);
                 const entry = definition.buildEntry({ leagueLevel });
@@ -477,6 +495,57 @@ export function HomeScreen() {
                   </Pressable>
                 );
               })}
+            </View>
+
+            <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-bg p-4">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">{GYM_BAG_GOODS_TITLE}</Text>
+              <Text className="mt-2 text-lg font-semibold text-white">{shopDisplayName}</Text>
+              <Text className="mt-1 text-sm font-medium text-premium-accent">{GYM_BAG_GOODS_SLOGAN}</Text>
+              <Text className="mt-2 text-sm text-premium-muted">{GYM_BAG_GOODS_CORE_DESCRIPTION}</Text>
+              <Text className="mt-2 text-sm text-premium-muted">{shopDescription}</Text>
+              <Text className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{GYM_BAG_GOODS_ENTRY_COPY}</Text>
+
+              {shopActionIds.length > 0 ? (
+                <View className="mt-4 gap-3">
+                  {shopActionIds.map((actionId) => {
+                    const definition = getWeeklyActionDefinition(actionId);
+                    const entry = definition.buildEntry({ leagueLevel });
+                    const resolvedPrice = actionId === "COURTFUEL" ? courtFuelPrice : Math.abs(entry.moneyDelta ?? 0);
+                    const needsMoney = resolvedPrice > 0 && bankBalance < resolvedPrice;
+                    const disabled =
+                      weeklyActionState.postgamePending ||
+                      weeklyActionState.matchUnlocked ||
+                      weeklyActionState.slotsRemaining <= 0 ||
+                      needsMoney;
+
+                    return (
+                      <Pressable
+                        key={actionId}
+                        className={`rounded-xl border px-4 py-4 ${
+                          disabled ? "border-slate-700 bg-slate-800/70" : "border-premium-surfaceAlt bg-black/30"
+                        }`}
+                        disabled={disabled}
+                        onPress={() => {
+                          takeWeeklyAction(actionId);
+                        }}
+                      >
+                        <View className="flex-row items-center justify-between gap-3">
+                          <Text className={`flex-1 text-base font-semibold ${disabled ? "text-slate-300" : "text-white"}`}>
+                            {definition.label}
+                          </Text>
+                        </View>
+                        <Text className="mt-1 text-sm text-premium-muted">{definition.description}</Text>
+                        <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId, leagueLevel, courtFuelPrice)}</Text>
+                        {needsMoney ? (
+                          <Text className="mt-2 text-xs font-semibold text-amber-300">{GYM_BAG_GOODS_INSUFFICIENT_FUNDS_COPY}</Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text className="mt-4 text-sm text-premium-muted">{GYM_BAG_GOODS_EMPTY_COPY}</Text>
+              )}
             </View>
           </View>
 

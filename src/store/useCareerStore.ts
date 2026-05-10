@@ -423,7 +423,7 @@ const getCourtFuelBasePrice = (leagueLevel: LeagueLevel): number => {
     case LeagueLevel.HIGH_SCHOOL:
     case LeagueLevel.MIDDLE_SCHOOL:
     default:
-      return 6;
+      return 25;
   }
 };
 
@@ -967,6 +967,7 @@ const buildWeeklyActionResult = (entry: WeeklyActionEntry): WeeklyActionResult =
   return {
     actionId: entry.id,
     actionLabel: entry.label,
+    statusLabel: entry.id === "COURTFUEL" ? "Added to your gym bag." : `${entry.label} Applied`,
     title: definition.resultTitle ?? entry.label,
     tagline: definition.tagline,
     description: definition.resultDescription ?? definition.description,

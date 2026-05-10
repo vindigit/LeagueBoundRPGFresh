@@ -200,13 +200,13 @@ describe("Career vertical slice weekly loop", () => {
     const afterDrink = useCareerStore.getState();
     expect(afterDrink.energy).toBe(88);
     expect(afterDrink.condition).toBe(83);
-    expect(afterDrink.player.bankBalance).toBe(34);
+    expect(afterDrink.player.bankBalance).toBe(15);
     expect(afterDrink.weeklyActionState.actionsTaken.at(-1)).toMatchObject({ id: "COURTFUEL" });
     expect(afterDrink.lastWeeklyActionResult).toMatchObject({
       actionId: "COURTFUEL",
       title: "CourtFuel — Tropical Surge",
       tagline: "Fuel the run.",
-      moneyDelta: -6,
+      moneyDelta: -25,
       energyDelta: 18,
       conditionDelta: 3,
     });
@@ -215,8 +215,9 @@ describe("Career vertical slice weekly loop", () => {
       category: "misc",
       description: "CourtFuel purchase",
       source: "weekly_action",
-      amount: 6,
+      amount: 25,
     });
+    expect(afterDrink.lastWeeklyActionResult?.statusLabel).toBe("Added to your gym bag.");
     expect(afterDrink.courtFuelEconomy).toMatchObject({
       weeklyBought: 1,
       seasonBought: 1,
@@ -263,11 +264,11 @@ describe("Career vertical slice weekly loop", () => {
       }));
     });
 
-    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(6);
+    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(25);
     useCareerStore.getState().takeWeeklyAction("COURTFUEL");
-    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(8);
+    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(36);
     useCareerStore.getState().takeWeeklyAction("COURTFUEL");
-    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(11);
+    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(48);
 
     useCareerStore.getState().advanceWeek();
 
@@ -277,6 +278,6 @@ describe("Career vertical slice weekly loop", () => {
       weeklyBought: 0,
       seasonBought: 2,
     });
-    expect(afterAdvance.getCourtFuelPrice()).toBe(6);
+    expect(afterAdvance.getCourtFuelPrice()).toBe(27);
   });
 });

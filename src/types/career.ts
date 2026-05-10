@@ -89,6 +89,7 @@ export interface WeeklyActionEntry {
 export interface WeeklyActionResult {
   actionId: WeeklyActionDefinitionId;
   actionLabel: string;
+  statusLabel?: string;
   title: string;
   tagline?: string;
   description?: string;

@@ -88,6 +88,22 @@ describe("Career store builder integration", () => {
     );
   });
 
+  it("initializes basketball background choices while preserving legacy age fields", () => {
+    const input: BuildBackstoryInput = {
+      ...buildInput,
+      ageStarted: 11,
+      basketballBackground: "LATE_BLOOMER",
+    };
+
+    useCareerStore.getState().initializeCareer(input);
+    const player = useCareerStore.getState().player;
+
+    expect(player.identity?.basketballBackground).toBe("LATE_BLOOMER");
+    expect(player.identity?.ageStarted).toBe(11);
+    expect(player.identity?.ageStartedBand).toBe("LATE");
+    expect(player.dna?.growthCurve).toBe("LATE_BLOOMER");
+  });
+
   it("lazy-backfills missing builder profile during migration", () => {
     useCareerStore.getState().initializeCareer(buildInput);
     const current = useCareerStore.getState();

@@ -7,6 +7,7 @@ export type BodyFrame = "Lean" | "Athletic" | "Stocky";
 export type DominantHand = "Left" | "Right";
 export type AgeStartedBand = "EARLY" | "STANDARD" | "LATE";
 export type GrowthCurve = "EARLY_STARTER" | "STEADY" | "LATE_BLOOMER";
+export type BasketballBackground = "EARLY_STARTER" | "BALANCED_PATH" | "LATE_BLOOMER";
 export type AttributeGainSource = "NARRATIVE" | "MATCH_REWARD" | "TRAINING" | "SYSTEM";
 export type HeightPreset = "5_8_5_10" | "5_11_6_1" | "6_2_6_4" | "6_5_6_7" | "6_8_6_10" | "6_11_7_1";
 export type WeightPreset = "150_165" | "166_180" | "181_200" | "201_220" | "221_245" | "246_270";
@@ -43,6 +44,7 @@ export interface PlayerIdentity {
   hometown: Hometown;
   ageStarted: number;
   ageStartedBand: AgeStartedBand;
+  basketballBackground?: BasketballBackground;
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   archetype: PlayerArchetype;
@@ -74,6 +76,7 @@ export interface BackstoryInput {
   citySlug: string;
   archetype: PlayerArchetype;
   ageStarted: number;
+  basketballBackground?: BasketballBackground;
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   primaryPosition: Position;
@@ -89,6 +92,7 @@ export interface BuildBackstoryInput {
   stateCode: string;
   citySlug: string;
   ageStarted: number;
+  basketballBackground?: BasketballBackground;
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   primaryPosition: Position;

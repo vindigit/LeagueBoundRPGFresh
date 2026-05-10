@@ -15,6 +15,11 @@ describe("Backstory screen builder integration", () => {
     expect(source).toContain("ARCHETYPE_PROFILES_BY_POSITION");
     expect(source).toContain("getDefaultSecondaryPosition(primaryPosition)");
     expect(source).toContain("Step 3: Archetype");
+    expect(source).toContain("Basketball Background");
+    expect(source).toContain("basketballBackground");
+    expect(source).toContain("getRepresentativeAgeStarted");
+    expect(source).not.toContain("Age started determines growth curve");
+    expect(source).not.toContain("setAgeStarted");
     expect(source).not.toContain('positionRecommendations');
     expect(source).not.toContain("setArchetype");
     expect(source).not.toContain("setSecondaryPosition");

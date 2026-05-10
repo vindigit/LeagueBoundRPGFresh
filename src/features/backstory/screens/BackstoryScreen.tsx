@@ -15,11 +15,18 @@ import { ARCHETYPE_PROFILES_BY_POSITION, getDefaultArchetypeProfile, type Archet
 import { buildSimProjection } from "../../../builder/simProjection";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "../../../components/builderReview";
 import { useCareerStore } from "../../../store/useCareerStore";
-import type { BuildBackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
+import type { BasketballBackground, BuildBackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
 import type { PlayerAttributes, Position } from "../../../types/player";
 import { clampHeight, clampWeight } from "../constants/bodyMapping";
 import { ALL_STATES, getCitiesForState, getDefaultCityForState, getDefaultStateCode } from "../data/hometowns";
-import { createBuildBackstorySeed, generateBackstoryFromBuildInput, getDefaultSecondaryPosition } from "../generator";
+import {
+  BASKETBALL_BACKGROUND_BY_ID,
+  BASKETBALL_BACKGROUND_OPTIONS,
+  createBuildBackstorySeed,
+  generateBackstoryFromBuildInput,
+  getDefaultSecondaryPosition,
+  getRepresentativeAgeStarted,
+} from "../generator";
 
 const POSITIONS: readonly Position[] = ["PG", "SG", "SF", "PF", "C"];
 const BODY_FRAMES: readonly BodyFrame[] = ["Lean", "Athletic", "Stocky"];
@@ -50,7 +57,6 @@ const MAX_BUILD_CAPS: PlayerAttributes = {
   stamina: 99,
 };
 
-const clampAgeStarted = (value: number): number => Math.min(12, Math.max(4, Math.round(value)));
 const clampFeet = (value: number): number => Math.min(7, Math.max(5, Math.round(value)));
 const clampInches = (value: number): number => Math.min(11, Math.max(0, Math.round(value)));
 
@@ -181,7 +187,7 @@ export function BackstoryScreen() {
   const [weightLbs, setWeightLbs] = useState(185);
   const [bodyFrame, setBodyFrame] = useState<BodyFrame>("Athletic");
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
-  const [ageStarted, setAgeStarted] = useState(8);
+  const [basketballBackground, setBasketballBackground] = useState<BasketballBackground>("BALANCED_PATH");
   const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(getDefaultArchetypeProfile("PG").attributes);
   const stepTransition = useRef(new Animated.Value(1)).current;
   const buildPresetCardWidth = Math.max(260, Math.min(460, windowWidth - BUILD_PRESET_SIDE_PADDING * 2 - BUILD_PRESET_PEEK_WIDTH));
@@ -250,6 +256,8 @@ export function BackstoryScreen() {
       : 0;
   const safeSecondaryPosition = getDefaultSecondaryPosition(primaryPosition);
   const selectedRoleLabel = selectedPreset.roleLabelByPosition?.[primaryPosition] ?? selectedPreset.defaultRoleLabel;
+  const selectedBackgroundOption = BASKETBALL_BACKGROUND_BY_ID[basketballBackground];
+  const ageStarted = getRepresentativeAgeStarted(basketballBackground);
 
   const selectPrimaryPosition = (position: Position): void => {
     const preset = getDefaultArchetypeProfile(position);
@@ -282,6 +290,7 @@ export function BackstoryScreen() {
       stateCode,
       citySlug,
       ageStarted,
+      basketballBackground,
       bodyFrame,
       dominantHand,
       primaryPosition,
@@ -299,6 +308,7 @@ export function BackstoryScreen() {
       stateCode,
       citySlug,
       ageStarted,
+      basketballBackground,
       bodyFrame,
       dominantHand,
       primaryPosition,
@@ -582,15 +592,52 @@ export function BackstoryScreen() {
             showBadges={false}
           />
 
-          <Text className="mt-4 text-xs text-slate-400">Age started determines growth curve and early starting profile. Range: 4 to 12.</Text>
-          <View className="mt-4 flex-row items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 py-3">
-            <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={() => setAgeStarted((value) => clampAgeStarted(value - 1))}>
-              <Text className="text-sm font-semibold text-white">-</Text>
-            </Pressable>
-            <Text className="text-lg font-bold text-emerald-300">{ageStarted}</Text>
-            <Pressable className="rounded-md border border-slate-600 bg-slate-800 px-4 py-2" onPress={() => setAgeStarted((value) => clampAgeStarted(value + 1))}>
-              <Text className="text-sm font-semibold text-white">+</Text>
-            </Pressable>
+          <View className="mt-4 rounded-xl border border-slate-700 bg-slate-950 p-3">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Basketball Background</Text>
+            <Text className="mt-1 text-xs text-slate-300">
+              Choose the path that shaped your prospect. This changes starting polish and growth curve, not hidden potential.
+            </Text>
+            <View className="mt-3 gap-2">
+              {BASKETBALL_BACKGROUND_OPTIONS.map((option) => {
+                const isSelected = option.id === basketballBackground;
+                return (
+                  <Pressable
+                    key={option.id}
+                    className={`rounded-lg border px-3 py-2.5 ${
+                      isSelected ? "border-emerald-400 bg-emerald-400/15" : "border-slate-700 bg-slate-900"
+                    }`}
+                    onPress={() => setBasketballBackground(option.id)}
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className={`text-sm font-bold ${isSelected ? "text-emerald-100" : "text-white"}`}>{option.label}</Text>
+                        <Text className="mt-1 text-xs text-slate-300">{option.summary}</Text>
+                      </View>
+                      {isSelected ? (
+                        <View className="rounded-full border border-emerald-300/50 bg-emerald-300/15 px-2 py-0.5">
+                          <Text className="text-[9px] font-semibold uppercase text-emerald-100">Selected</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View className="mt-2 flex-row flex-wrap gap-2">
+                      <View className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5">
+                        <Text className="text-[10px] font-semibold text-cyan-100">{option.currentPolish}</Text>
+                      </View>
+                      <View className="rounded-full border border-violet-400/30 bg-violet-400/10 px-2 py-0.5">
+                        <Text className="text-[10px] font-semibold text-violet-100">{option.developmentEmphasis}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View className="mt-3 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selected Growth Path</Text>
+              <Text className="mt-1 text-sm font-semibold text-white">{selectedBackgroundOption.label}</Text>
+              <Text className="mt-1 text-xs text-slate-300">
+                {selectedBackgroundOption.currentPolish} • {selectedBackgroundOption.developmentEmphasis}
+              </Text>
+            </View>
           </View>
         </Animated.View>
       );

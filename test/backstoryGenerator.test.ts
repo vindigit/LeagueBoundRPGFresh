@@ -1,4 +1,9 @@
-import { generateBackstoryFromBuildInput, generateBackstoryFromInput } from "../src/features/backstory/generator";
+import {
+  createBuildBackstorySeed,
+  generateBackstoryFromBuildInput,
+  generateBackstoryFromInput,
+  getRepresentativeAgeStarted,
+} from "../src/features/backstory/generator";
 import type { BuildBackstoryInput } from "../src/types/backstory";
 import type { PlayerAttributes } from "../src/types/player";
 
@@ -61,6 +66,36 @@ describe("Backstory generator", () => {
     expect(early.dna.growthCurve).toBe("EARLY_STARTER");
     expect(standard.identity.ageStartedBand).toBe("STANDARD");
     expect(standard.dna.growthCurve).toBe("STEADY");
+    expect(late.identity.ageStartedBand).toBe("LATE");
+    expect(late.dna.growthCurve).toBe("LATE_BLOOMER");
+  });
+
+  it("maps basketball backgrounds to representative age bands and growth curves", () => {
+    const early = generateBackstoryFromInput(
+      { ...baseInput, ageStarted: 8, basketballBackground: "EARLY_STARTER" },
+      { seedOverride: 1 },
+    );
+    const balanced = generateBackstoryFromInput(
+      { ...baseInput, ageStarted: 5, basketballBackground: "BALANCED_PATH" },
+      { seedOverride: 2 },
+    );
+    const late = generateBackstoryFromInput(
+      { ...baseInput, ageStarted: 8, basketballBackground: "LATE_BLOOMER" },
+      { seedOverride: 3 },
+    );
+
+    expect(early.identity.basketballBackground).toBe("EARLY_STARTER");
+    expect(early.identity.ageStarted).toBe(getRepresentativeAgeStarted("EARLY_STARTER"));
+    expect(early.identity.ageStartedBand).toBe("EARLY");
+    expect(early.dna.growthCurve).toBe("EARLY_STARTER");
+
+    expect(balanced.identity.basketballBackground).toBe("BALANCED_PATH");
+    expect(balanced.identity.ageStarted).toBe(getRepresentativeAgeStarted("BALANCED_PATH"));
+    expect(balanced.identity.ageStartedBand).toBe("STANDARD");
+    expect(balanced.dna.growthCurve).toBe("STEADY");
+
+    expect(late.identity.basketballBackground).toBe("LATE_BLOOMER");
+    expect(late.identity.ageStarted).toBe(getRepresentativeAgeStarted("LATE_BLOOMER"));
     expect(late.identity.ageStartedBand).toBe("LATE");
     expect(late.dna.growthCurve).toBe("LATE_BLOOMER");
   });
@@ -168,5 +203,58 @@ describe("Backstory generator", () => {
         expect(generated.startingAttributes[key]).toBeLessThanOrEqual(generated.dna.caps[key]);
       }
     }
+  });
+
+  it("keeps build potential seed stable when only background or legacy age changes", () => {
+    const buildAttributes = makeBuildAttributes();
+    const baseBuildInput: BuildBackstoryInput = {
+      firstName: "Builder",
+      lastName: "Background",
+      stateCode: "TX",
+      citySlug: "houston-tx",
+      ageStarted: 8,
+      basketballBackground: "BALANCED_PATH",
+      bodyFrame: "Athletic",
+      dominantHand: "Right",
+      primaryPosition: "SG",
+      secondaryPosition: "PG",
+      height: { feet: 6, inches: 4 },
+      weightLbs: 200,
+      buildAttributes,
+      archetypeId: "sg_slashing_scorer",
+      archetypeLabel: "Slasher",
+      roleLabel: "Rim-pressure scorer",
+    };
+
+    const earlyInput: BuildBackstoryInput = {
+      ...baseBuildInput,
+      ageStarted: 6,
+      basketballBackground: "EARLY_STARTER",
+    };
+    const lateInput: BuildBackstoryInput = {
+      ...baseBuildInput,
+      ageStarted: 11,
+      basketballBackground: "LATE_BLOOMER",
+    };
+    const legacyBaseBuildInput = { ...baseBuildInput };
+    delete legacyBaseBuildInput.basketballBackground;
+    const legacyLateInput: BuildBackstoryInput = {
+      ...legacyBaseBuildInput,
+      ageStarted: 12,
+    };
+
+    expect(createBuildBackstorySeed(earlyInput)).toBe(createBuildBackstorySeed(baseBuildInput));
+    expect(createBuildBackstorySeed(lateInput)).toBe(createBuildBackstorySeed(baseBuildInput));
+    expect(createBuildBackstorySeed(legacyLateInput)).toBe(createBuildBackstorySeed(baseBuildInput));
+
+    const seed = createBuildBackstorySeed(baseBuildInput);
+    const early = generateBackstoryFromBuildInput(earlyInput, { seedOverride: seed });
+    const balanced = generateBackstoryFromBuildInput(baseBuildInput, { seedOverride: seed });
+    const late = generateBackstoryFromBuildInput(lateInput, { seedOverride: seed });
+
+    expect(early.dna.potential).toBe(balanced.dna.potential);
+    expect(late.dna.potential).toBe(balanced.dna.potential);
+    expect(early.startingAttributes.handle).toBeGreaterThan(balanced.startingAttributes.handle);
+    expect(late.startingAttributes.handle).toBeLessThan(balanced.startingAttributes.handle);
   });
 });

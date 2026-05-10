@@ -1,5 +1,6 @@
 import type {
   BackstoryInput,
+  BasketballBackground,
   BuildBackstoryInput,
   ExactHeight,
   GeneratedBadgeProfile,
@@ -57,6 +58,59 @@ const AGE_BAND_OFFSETS: Record<PlayerIdentity["ageStartedBand"], number> = {
   STANDARD: 0,
   LATE: -5,
 };
+
+export interface BasketballBackgroundOption {
+  id: BasketballBackground;
+  label: string;
+  representativeAgeStarted: number;
+  ageStartedBand: PlayerIdentity["ageStartedBand"];
+  growthCurve: GrowthCurve;
+  summary: string;
+  currentPolish: string;
+  developmentEmphasis: string;
+}
+
+export const BASKETBALL_BACKGROUND_OPTIONS: readonly BasketballBackgroundOption[] = [
+  {
+    id: "EARLY_STARTER",
+    label: "Early Starter",
+    representativeAgeStarted: 6,
+    ageStartedBand: "EARLY",
+    growthCurve: "EARLY_STARTER",
+    summary: "More polished now with a higher starting floor and steadier development.",
+    currentPolish: "Higher starting floor",
+    developmentEmphasis: "Steady growth curve",
+  },
+  {
+    id: "BALANCED_PATH",
+    label: "Balanced Path",
+    representativeAgeStarted: 8,
+    ageStartedBand: "STANDARD",
+    growthCurve: "STEADY",
+    summary: "Neutral starting point with a balanced growth path.",
+    currentPolish: "Neutral starting polish",
+    developmentEmphasis: "Balanced development",
+  },
+  {
+    id: "LATE_BLOOMER",
+    label: "Late Bloomer",
+    representativeAgeStarted: 11,
+    ageStartedBand: "LATE",
+    growthCurve: "LATE_BLOOMER",
+    summary: "Less polished now with a lower starting floor and more long-term upside emphasis.",
+    currentPolish: "Lower starting floor",
+    developmentEmphasis: "Long-term upside emphasis",
+  },
+];
+
+export const BASKETBALL_BACKGROUND_BY_ID: Record<BasketballBackground, BasketballBackgroundOption> =
+  BASKETBALL_BACKGROUND_OPTIONS.reduce(
+    (byId, option) => ({
+      ...byId,
+      [option.id]: option,
+    }),
+    {} as Record<BasketballBackground, BasketballBackgroundOption>,
+  );
 
 const FRAME_BONUSES: Record<PlayerIdentity["bodyFrame"], Partial<Record<keyof PlayerAttributes, number>>> = {
   Lean: {
@@ -168,6 +222,45 @@ const getGrowthCurveFromBand = (band: PlayerIdentity["ageStartedBand"]): GrowthC
   return "STEADY";
 };
 
+export const getBasketballBackgroundFromAgeStarted = (ageStarted: number): BasketballBackground =>
+  getAgeStartedBand(ageStarted) === "EARLY"
+    ? "EARLY_STARTER"
+    : getAgeStartedBand(ageStarted) === "LATE"
+      ? "LATE_BLOOMER"
+      : "BALANCED_PATH";
+
+export const getRepresentativeAgeStarted = (basketballBackground: BasketballBackground): number =>
+  BASKETBALL_BACKGROUND_BY_ID[basketballBackground].representativeAgeStarted;
+
+const resolveBasketballBackground = (
+  input: Pick<BackstoryInput | BuildBackstoryInput, "ageStarted" | "basketballBackground">,
+): {
+  ageStarted: number;
+  ageStartedBand: PlayerIdentity["ageStartedBand"];
+  basketballBackground: BasketballBackground;
+  growthCurve: GrowthCurve;
+} => {
+  if (input.basketballBackground) {
+    const option = BASKETBALL_BACKGROUND_BY_ID[input.basketballBackground];
+    return {
+      ageStarted: option.representativeAgeStarted,
+      ageStartedBand: option.ageStartedBand,
+      basketballBackground: option.id,
+      growthCurve: option.growthCurve,
+    };
+  }
+
+  const ageStarted = clamp(Math.round(input.ageStarted), AGE_STARTED_MIN, AGE_STARTED_MAX);
+  const ageStartedBand = getAgeStartedBand(ageStarted);
+  const growthCurve = getGrowthCurveFromBand(ageStartedBand);
+  return {
+    ageStarted,
+    ageStartedBand,
+    basketballBackground: getBasketballBackgroundFromAgeStarted(ageStarted),
+    growthCurve,
+  };
+};
+
 const getPotentialBonus = (potential: number): number => {
   if (potential >= 90) {
     return 6;
@@ -228,7 +321,7 @@ const getCurveLabel = (growthCurve: GrowthCurve): string => {
   if (growthCurve === "LATE_BLOOMER") {
     return "Late Bloomer";
   }
-  return "Steady Climber";
+  return "Balanced Path";
 };
 
 /**
@@ -387,7 +480,6 @@ export const createBuildBackstorySeed = (input: BuildBackstoryInput): number =>
       input.citySlug.trim().toLowerCase(),
       input.primaryPosition,
       input.secondaryPosition,
-      input.ageStarted,
       input.bodyFrame,
       input.dominantHand,
       input.height.feet,
@@ -459,9 +551,7 @@ export const generateBackstoryFromInput = (
   const firstName = sanitizeNamePart(rawInput.firstName, "Unnamed");
   const lastName = sanitizeNamePart(rawInput.lastName, "Prospect");
   const hometown = resolveHometown(rawInput.stateCode, rawInput.citySlug);
-  const ageStarted = clamp(Math.round(rawInput.ageStarted), AGE_STARTED_MIN, AGE_STARTED_MAX);
-  const ageStartedBand = getAgeStartedBand(ageStarted);
-  const growthCurve = getGrowthCurveFromBand(ageStartedBand);
+  const { ageStarted, ageStartedBand, basketballBackground, growthCurve } = resolveBasketballBackground(rawInput);
   const normalizedHeight = clampHeight(rawInput.height);
   const normalizedWeight = clampWeight(rawInput.weightLbs);
   const heightPreset = toHeightPreset(normalizedHeight);
@@ -492,6 +582,7 @@ export const generateBackstoryFromInput = (
     hometown,
     ageStarted,
     ageStartedBand,
+    basketballBackground,
     bodyFrame: rawInput.bodyFrame,
     dominantHand: rawInput.dominantHand,
     archetype: rawInput.archetype,
@@ -552,9 +643,7 @@ export const generateBackstoryFromBuildInput = (
   const firstName = sanitizeNamePart(rawInput.firstName, "Unnamed");
   const lastName = sanitizeNamePart(rawInput.lastName, "Prospect");
   const hometown = resolveHometown(rawInput.stateCode, rawInput.citySlug);
-  const ageStarted = clamp(Math.round(rawInput.ageStarted), AGE_STARTED_MIN, AGE_STARTED_MAX);
-  const ageStartedBand = getAgeStartedBand(ageStarted);
-  const growthCurve = getGrowthCurveFromBand(ageStartedBand);
+  const { ageStarted, ageStartedBand, basketballBackground, growthCurve } = resolveBasketballBackground(rawInput);
   const normalizedHeight = clampHeight(rawInput.height);
   const normalizedWeight = clampWeight(rawInput.weightLbs);
   const heightPreset = toHeightPreset(normalizedHeight);
@@ -601,6 +690,7 @@ export const generateBackstoryFromBuildInput = (
     hometown,
     ageStarted,
     ageStartedBand,
+    basketballBackground,
     bodyFrame: rawInput.bodyFrame,
     dominantHand: rawInput.dominantHand,
     archetype: builderProfile.classification.legacyArchetype,

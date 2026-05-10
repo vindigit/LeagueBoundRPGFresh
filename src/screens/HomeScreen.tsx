@@ -264,7 +264,7 @@ export function HomeScreen() {
                 />
               </View>
 
-              {showSchoolPathStatus || leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+              {showSchoolPathStatus ? (
                 <View className="flex-row gap-3">
                   {showSchoolPathStatus ? (
                     <DashboardMetricCard label="School Path" value={formatSchoolPathLabel(schoolPath)} compact />
@@ -440,9 +440,6 @@ export function HomeScreen() {
                 {lastWeeklyActionResult.tagline ? (
                   <Text className="mt-1 text-sm font-medium text-emerald-200">{lastWeeklyActionResult.tagline}</Text>
                 ) : null}
-                {lastWeeklyActionResult.actionId === "COURTFUEL" ? (
-                  <Text className="mt-2 text-sm font-medium text-emerald-200">{GYM_BAG_GOODS_PURCHASE_SUCCESS_COPY}</Text>
-                ) : null}
                 {lastWeeklyActionResult.description ? (
                   <Text className="mt-2 text-sm leading-6 text-premium-muted">{lastWeeklyActionResult.description}</Text>
                 ) : null}
@@ -459,9 +456,9 @@ export function HomeScreen() {
             <View className="mt-4 gap-3">
               {nonShopActionIds.map((actionId) => {
                 const definition = getWeeklyActionDefinition(actionId);
-                const isTaken = actionId === "COURTFUEL" ? false : weeklyActionState.actionsTaken.some((action) => action.id === actionId);
+                const isTaken = weeklyActionState.actionsTaken.some((action) => action.id === actionId);
                 const entry = definition.buildEntry({ leagueLevel });
-                const resolvedPrice = actionId === "COURTFUEL" ? courtFuelPrice : Math.abs(entry.moneyDelta ?? 0);
+                const resolvedPrice = Math.abs(entry.moneyDelta ?? 0);
                 const needsMoney = resolvedPrice > 0 && bankBalance < resolvedPrice;
                 const disabled =
                   isTaken ||

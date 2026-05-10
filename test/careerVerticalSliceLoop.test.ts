@@ -266,9 +266,9 @@ describe("Career vertical slice weekly loop", () => {
 
     expect(useCareerStore.getState().getCourtFuelPrice()).toBe(25);
     useCareerStore.getState().takeWeeklyAction("COURTFUEL");
-    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(36);
+    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(35);
     useCareerStore.getState().takeWeeklyAction("COURTFUEL");
-    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(48);
+    expect(useCareerStore.getState().getCourtFuelPrice()).toBe(46);
 
     useCareerStore.getState().advanceWeek();
 

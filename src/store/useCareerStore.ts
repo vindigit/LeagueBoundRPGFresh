@@ -917,7 +917,9 @@ const canTakeWeeklyAction = (
 const canStartNarrative = (state: Pick<CareerState, "weeklyActionState">): boolean =>
   !state.weeklyActionState.postgamePending && state.weeklyActionState.pendingNarrativeActionId !== null;
 
-const canCompleteStudy = (state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel">): boolean =>
+const canCompleteStudy = (
+  state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel" | "courtFuelEconomy" | "currentWeek" | "seasonNumber">,
+): boolean =>
   canTakeWeeklyAction(state, "STUDY");
 
 const canUnlockMatch = (weeklyActionState: WeeklyActionState): boolean =>
@@ -1932,6 +1934,7 @@ export const useCareerStore = create<CareerStore>()(
             consequences,
           });
           const tournamentMatch = getCurrentTournamentMatch(state.middleSchoolTournament);
+          const tournamentMatchIndex = state.middleSchoolTournament?.currentMatchIndex ?? -1;
 
           return {
             view: "POSTGAME",
@@ -1947,7 +1950,7 @@ export const useCareerStore = create<CareerStore>()(
                 ? {
                     ...state.middleSchoolTournament,
                     matches: state.middleSchoolTournament.matches.map((match, index) =>
-                      tournamentMatch && index === state.middleSchoolTournament.currentMatchIndex && match.stage === "FINAL_OR_PLACEMENT"
+                      tournamentMatch && index === tournamentMatchIndex && match.stage === "FINAL_OR_PLACEMENT"
                         ? {
                             ...match,
                             label: didWin ? "Final" : "Placement Game",

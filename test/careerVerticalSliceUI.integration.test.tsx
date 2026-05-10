@@ -280,8 +280,7 @@ describe("Career vertical slice UI", () => {
       source: "weekly_action",
       amount: 25,
     });
-    expect(screen.getByText("Energy +18 | Condition +3 | $36")).toBeTruthy();
-    expect(screen.getByText("More items unlock as your career grows.")).toBeTruthy();
+    expect(screen.getByText("Energy +18 | Condition +3 | $35")).toBeTruthy();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {

@@ -66,16 +66,19 @@ const initializeCareer = () => {
 };
 
 const finishTutorialAndSelectPath = (path: SchoolPath) => {
-  const state = useCareerStore.getState();
-  state.completeNarrativeEvent();
-  state.navigateToMatch();
-  useCareerStore.getState().completeMatch({
-    homeScore: 62,
-    awayScore: 50,
-    overtimePeriods: 0,
-    boxScore: makeBoxScore(),
-  });
-  useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+  for (let week = 0; week < 4; week += 1) {
+    useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().takeWeeklyAction("STUDY");
+    useCareerStore.getState().navigateToMatch();
+    useCareerStore.getState().completeMatch({
+      homeScore: 62 + week,
+      awayScore: 50,
+      overtimePeriods: 0,
+      boxScore: makeBoxScore(),
+    });
+    useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+  }
   useCareerStore.getState().selectSchoolPath(path);
 };
 

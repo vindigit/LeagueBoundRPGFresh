@@ -30,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(15);
+    expect(version).toBe(18);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -464,54 +464,56 @@ describe("Career progression domain model", () => {
 });
 
 const actToHighSchool = () => {
-  useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
-  useCareerStore.getState().completeNarrativeEvent();
-  useCareerStore.getState().takeWeeklyAction("STUDY");
-  useCareerStore.getState().completeMatch({
-    homeScore: 68,
-    awayScore: 54,
-    overtimePeriods: 0,
-    boxScore: {
-      homePlayers: [
-        {
-          id: "home-0",
-          name: useCareerStore.getState().player.name,
-          team: "home",
-          pts: 24,
-          reb: 5,
-          ast: 7,
-          stl: 2,
-          blk: 0,
-          to: 2,
-          fgm: 9,
-          fga: 16,
-          ftm: 0,
-          fta: 0,
-          pf: 1,
-        },
-      ],
-      awayPlayers: [
-        {
-          id: "away-0",
-          name: "Rivals High",
-          team: "away",
-          pts: 16,
-          reb: 4,
-          ast: 2,
-          stl: 1,
-          blk: 0,
-          to: 3,
-          fgm: 6,
-          fga: 14,
-          ftm: 0,
-          fta: 0,
-          pf: 2,
-        },
-      ],
-      homeTotals: { pts: 68, reb: 24, ast: 18, stl: 6, blk: 1, to: 10, fgm: 26, fga: 52, ftm: 0, fta: 0, pf: 8 },
-      awayTotals: { pts: 54, reb: 19, ast: 10, stl: 4, blk: 1, to: 12, fgm: 21, fga: 48, ftm: 0, fta: 0, pf: 10 },
-    },
-  });
-  useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+  for (let week = 0; week < 4; week += 1) {
+    useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().takeWeeklyAction("STUDY");
+    useCareerStore.getState().completeMatch({
+      homeScore: 68 + week,
+      awayScore: 54,
+      overtimePeriods: 0,
+      boxScore: {
+        homePlayers: [
+          {
+            id: "home-0",
+            name: useCareerStore.getState().player.name,
+            team: "home",
+            pts: 24 + week,
+            reb: 5 + (week % 2),
+            ast: 7,
+            stl: 2,
+            blk: 0,
+            to: 2,
+            fgm: 9,
+            fga: 16,
+            ftm: 0,
+            fta: 0,
+            pf: 1,
+          },
+        ],
+        awayPlayers: [
+          {
+            id: "away-0",
+            name: "Rivals High",
+            team: "away",
+            pts: 16,
+            reb: 4,
+            ast: 2,
+            stl: 1,
+            blk: 0,
+            to: 3,
+            fgm: 6,
+            fga: 14,
+            ftm: 0,
+            fta: 0,
+            pf: 2,
+          },
+        ],
+        homeTotals: { pts: 68 + week, reb: 24, ast: 18, stl: 6, blk: 1, to: 10, fgm: 26, fga: 52, ftm: 0, fta: 0, pf: 8 },
+        awayTotals: { pts: 54, reb: 19, ast: 10, stl: 4, blk: 1, to: 12, fgm: 21, fga: 48, ftm: 0, fta: 0, pf: 10 },
+      },
+    });
+    useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+  }
   useCareerStore.getState().selectSchoolPath("STATE_5A");
 };

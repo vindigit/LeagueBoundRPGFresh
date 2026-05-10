@@ -1,4 +1,4 @@
-import { Modal, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import { formatSchoolPathLabel, getSchoolPathProfile } from "../constants/schoolPaths";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
@@ -105,10 +105,10 @@ export function HomeScreen() {
   const offers = useCareerStore((state) => state.offers);
   const newsFeed = useCareerStore((state) => state.newsFeed);
   const weeklyActionState = useCareerStore((state) => state.weeklyActionState);
+  const middleSchoolTournament = useCareerStore((state) => state.middleSchoolTournament);
   const lastWeeklyActionResult = useCareerStore((state) => state.lastWeeklyActionResult);
   const openStoryDetail = useCareerStore((state) => state.openStoryDetail);
   const takeWeeklyAction = useCareerStore((state) => state.takeWeeklyAction);
-  const dismissWeeklyActionResult = useCareerStore((state) => state.dismissWeeklyActionResult);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
   const respondToOffer = useCareerStore((state) => state.respondToOffer);
   const showSchoolPathStatus = leagueLevel !== LeagueLevel.MIDDLE_SCHOOL;
@@ -134,6 +134,10 @@ export function HomeScreen() {
     !weeklyActionState.actionsTaken.some((action) => action.id === actionId),
   );
   const recruitingBuzz = visibleInterestEntries[0]?.[1] ?? 0;
+  const activeTournamentMatch =
+    leagueLevel === LeagueLevel.MIDDLE_SCHOOL && middleSchoolTournament && !middleSchoolTournament.completed
+      ? middleSchoolTournament.matches[middleSchoolTournament.currentMatchIndex] ?? null
+      : null;
 
   return (
     <SafeAreaView className="relative flex-1 bg-premium-bg">
@@ -255,6 +259,16 @@ export function HomeScreen() {
               <Text className="text-xs text-premium-muted">Loop Status</Text>
               <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
             </View>
+
+            {activeTournamentMatch ? (
+              <View className="mt-3 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">{middleSchoolTournament?.eventName}</Text>
+                <Text className="mt-1 text-sm font-semibold text-white">{activeTournamentMatch.label}</Text>
+                <Text className="mt-1 text-xs text-premium-muted">
+                  vs {activeTournamentMatch.opponentLabel} • {activeTournamentMatch.tutorialFocus.join(" | ")}
+                </Text>
+              </View>
+            ) : null}
 
             <View className="mt-3 rounded-lg bg-premium-bg p-3">
               <Text className="text-xs text-premium-muted">Weekly Action Budget</Text>
@@ -399,6 +413,28 @@ export function HomeScreen() {
               Spend your remaining actions to prepare for the week. The match unlocks once the budget is exhausted.
             </Text>
 
+            {lastWeeklyActionResult ? (
+              <View className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  {lastWeeklyActionResult.actionLabel} Applied
+                </Text>
+                <Text className="mt-2 text-lg font-semibold text-white">{lastWeeklyActionResult.title}</Text>
+                {lastWeeklyActionResult.tagline ? (
+                  <Text className="mt-1 text-sm font-medium text-emerald-200">{lastWeeklyActionResult.tagline}</Text>
+                ) : null}
+                {lastWeeklyActionResult.description ? (
+                  <Text className="mt-2 text-sm leading-6 text-premium-muted">{lastWeeklyActionResult.description}</Text>
+                ) : null}
+                <View className="mt-3 gap-1">
+                  {formatWeeklyActionResultLines(lastWeeklyActionResult).map((line) => (
+                    <Text key={line} className="text-sm font-medium text-white">
+                      {line}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
             <View className="mt-4 gap-3">
               {visibleActionIds.map((actionId) => {
                 const definition = getWeeklyActionDefinition(actionId);
@@ -466,37 +502,6 @@ export function HomeScreen() {
 
       {view === "SCHOOL_PATH_SELECT" ? <SchoolPathSelectionScreen /> : null}
 
-      {view === "HUB" && lastWeeklyActionResult ? (
-        <Modal transparent visible animationType="fade" statusBarTranslucent>
-          <View className="flex-1 items-center justify-center bg-black/70 px-6">
-            <View className="w-full max-w-md rounded-3xl border border-premium-surfaceAlt bg-premium-surface p-6">
-              <Text className="text-xs font-semibold uppercase tracking-[0.24em] text-premium-accent">
-                {lastWeeklyActionResult.actionLabel}
-              </Text>
-              <Text className="mt-3 text-2xl font-bold text-white">{lastWeeklyActionResult.title}</Text>
-              {lastWeeklyActionResult.tagline ? (
-                <Text className="mt-2 text-sm font-semibold text-premium-accent">{lastWeeklyActionResult.tagline}</Text>
-              ) : null}
-              {lastWeeklyActionResult.description ? (
-                <Text className="mt-3 text-sm leading-6 text-premium-muted">{lastWeeklyActionResult.description}</Text>
-              ) : null}
-              <View className="mt-5 gap-2 rounded-2xl bg-premium-bg p-4">
-                {formatWeeklyActionResultLines(lastWeeklyActionResult).map((line) => (
-                  <Text key={line} className="text-sm font-medium text-white">
-                    {line}
-                  </Text>
-                ))}
-              </View>
-              <Pressable
-                className="mt-5 items-center rounded-xl bg-sky-600 px-4 py-3"
-                onPress={dismissWeeklyActionResult}
-              >
-                <Text className="text-base font-semibold text-white">Continue</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-      ) : null}
     </SafeAreaView>
   );
 }

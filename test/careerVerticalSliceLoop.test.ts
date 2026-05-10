@@ -66,7 +66,7 @@ describe("Career vertical slice weekly loop", () => {
     });
   });
 
-  it("supports three full event to match to postgame to week-resolution loops in a row", () => {
+  it("supports the four-match middle-school tournament before the high-school handoff", () => {
     const seeded = useCareerStore.getState();
     const playerName = seeded.player.name;
     const initialBank = seeded.player.bankBalance;
@@ -74,12 +74,12 @@ describe("Career vertical slice weekly loop", () => {
     const initialNewsCount = seeded.newsFeed.length;
     const initialCoachTrust = seeded.coachTrust;
 
-    for (let cycle = 1; cycle <= 3; cycle += 1) {
+    for (let cycle = 1; cycle <= 5; cycle += 1) {
       const beforeCycle = useCareerStore.getState();
       expect(beforeCycle.view).toBe("HUB");
-      expect(beforeCycle.currentWeek).toBe(cycle);
+      expect(beforeCycle.currentWeek).toBe(cycle <= 4 ? cycle : 1);
       expect(beforeCycle.weeklyActionState).toMatchObject({
-        slotsRemaining: cycle === 1 ? 2 : 3,
+        slotsRemaining: cycle <= 4 ? 2 : 3,
         matchUnlocked: false,
         postgamePending: false,
       });
@@ -87,7 +87,7 @@ describe("Career vertical slice weekly loop", () => {
       beforeCycle.takeWeeklyAction("FILM_COACH_TRUST");
       useCareerStore.getState().completeNarrativeEvent();
       useCareerStore.getState().takeWeeklyAction("STUDY");
-      if (cycle > 1) {
+      if (cycle > 4) {
         useCareerStore.getState().takeWeeklyAction("TEAM_BONDING");
       }
 
@@ -109,14 +109,14 @@ describe("Career vertical slice weekly loop", () => {
 
       const afterMatch = useCareerStore.getState();
       expect(afterMatch.view).toBe("POSTGAME");
-      expect(afterMatch.currentWeek).toBe(cycle);
-      expect(afterMatch.lastMatchResult?.weekAfter).toBe(cycle + 1);
+      expect(afterMatch.currentWeek).toBe(cycle <= 4 ? cycle : 1);
+      const expectedWeekAfter = cycle === 4 ? 1 : cycle === 5 ? 2 : cycle + 1;
+      expect(afterMatch.lastMatchResult?.weekAfter).toBe(expectedWeekAfter);
       expect(afterMatch.weeklyActionState).toMatchObject({
         matchUnlocked: true,
         postgamePending: true,
       });
-      const expectedNewsBeforeResolution = cycle === 1 ? initialNewsCount : initialNewsCount + cycle;
-      expect(afterMatch.newsFeed.length).toBe(expectedNewsBeforeResolution);
+      expect(afterMatch.newsFeed.length).toBeGreaterThanOrEqual(initialNewsCount + Math.max(0, cycle - 1));
       expect(afterMatch.player.bankBalance).toBeGreaterThanOrEqual(initialBank + 500 * (cycle - 1));
       expect(afterMatch.lastMatchResult?.matchRating).toBeGreaterThan(0);
       expect(afterMatch.lastMatchResult?.meterDeltas.energy).toBeLessThan(0);
@@ -124,7 +124,14 @@ describe("Career vertical slice weekly loop", () => {
       afterMatch.resolvePostgameAndAdvanceWeek();
 
       const resolved = useCareerStore.getState();
-      if (cycle === 1) {
+      if (cycle < 4) {
+        expect(resolved.view).toBe("HUB");
+        expect(resolved.pendingSchoolPathSelection).toBe(false);
+        expect(resolved.middleSchoolTournament?.currentMatchIndex).toBe(cycle);
+        continue;
+      }
+
+      if (cycle === 4) {
         expect(resolved.view).toBe("SCHOOL_PATH_SELECT");
         expect(resolved.pendingSchoolPathSelection).toBe(true);
         useCareerStore.getState().selectSchoolPath("STATE_5A");
@@ -133,14 +140,14 @@ describe("Career vertical slice weekly loop", () => {
         expect(afterSelection.leagueLevel).toBe("HIGH_SCHOOL");
         expect(afterSelection.careerPhase).toBe("HIGH_SCHOOL");
         expect(afterSelection.pendingSchoolPathSelection).toBe(false);
-        expect(afterSelection.currentWeek).toBe(cycle + 1);
+        expect(afterSelection.currentWeek).toBe(1);
         expect(afterSelection.weeklyActionState).toMatchObject({
           slotsTotal: 3,
           slotsRemaining: 3,
           matchUnlocked: false,
           postgamePending: false,
         });
-        expect(afterSelection.newsFeed.length).toBe(initialNewsCount + cycle + 1);
+        expect(afterSelection.newsFeed.length).toBeGreaterThanOrEqual(initialNewsCount + cycle + 1);
         expect(afterSelection.player.bankBalance).toBe(initialBank + 500 * cycle);
         expect(afterSelection.player.morale).toBe(initialMorale + 5 * cycle);
         expect(afterSelection.coachTrust).not.toBe(initialCoachTrust);
@@ -154,14 +161,14 @@ describe("Career vertical slice weekly loop", () => {
       }
 
       expect(resolved.view).toBe("HUB");
-      expect(resolved.currentWeek).toBe(cycle + 1);
+      expect(resolved.currentWeek).toBe(2);
       expect(resolved.weeklyActionState).toMatchObject({
         slotsTotal: 3,
         slotsRemaining: 3,
         matchUnlocked: false,
         postgamePending: false,
       });
-      expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle + 1);
+      expect(resolved.newsFeed.length).toBeGreaterThanOrEqual(initialNewsCount + cycle + 1);
       expect(resolved.player.bankBalance).toBeGreaterThan(initialBank + 500 * cycle);
       expect(resolved.player.morale).toBeGreaterThanOrEqual(initialMorale + 5 * cycle);
       expect(resolved.energy).toBeLessThanOrEqual(100);

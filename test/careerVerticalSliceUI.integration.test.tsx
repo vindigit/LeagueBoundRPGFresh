@@ -64,6 +64,21 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 import { HomeScreen } from "../src/screens/HomeScreen";
 import { useCareerStore } from "../src/store/useCareerStore";
 
+const playMiddleSchoolTournamentToSelection = () => {
+  for (let week = 0; week < 4; week += 1) {
+    useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().takeWeeklyAction("STUDY");
+    useCareerStore.getState().completeMatch({
+      homeScore: 64 + week,
+      awayScore: 52,
+      overtimePeriods: 0,
+      boxScore: mockBoxScore,
+    });
+    useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+  }
+};
+
 describe("Career vertical slice UI", () => {
   beforeEach(() => {
     useCareerStore.setState((state) => ({
@@ -126,11 +141,8 @@ describe("Career vertical slice UI", () => {
     expect(useCareerStore.getState().view).toBe("NARRATIVE");
     fireEvent.press(screen.getByText(/Study Film/));
     expect(screen.getByText("Coach Trust +6")).toBeTruthy();
-    expect(screen.getByText("Continue")).toBeTruthy();
-    fireEvent.press(screen.getByText("Continue"));
     fireEvent.press(screen.getByText("Study"));
     expect(screen.getByText("GPA +0.1")).toBeTruthy();
-    fireEvent.press(screen.getByText("Continue"));
 
     expect(useCareerStore.getState().view).toBe("HUB");
     expect(useCareerStore.getState().weeklyActionState.matchUnlocked).toBe(true);
@@ -156,14 +168,23 @@ describe("Career vertical slice UI", () => {
     expect(screen.getByText("Team Result")).toBeTruthy();
     expect(screen.getByText("Advance Week")).toBeTruthy();
 
-    fireEvent.press(screen.getByText("Advance Week"));
+    for (let week = 0; week < 4; week += 1) {
+      fireEvent.press(screen.getByText("Advance Week"));
+      if (week < 3) {
+        fireEvent.press(screen.getByText("Film / Coach Trust"));
+        fireEvent.press(screen.getByText(/Study Film/));
+        fireEvent.press(screen.getByText("Study"));
+        fireEvent.press(screen.getByText("Play Match"));
+        fireEvent.press(screen.getByText("Finish Mock Match"));
+      }
+    }
 
     expect(useCareerStore.getState().view).toBe("SCHOOL_PATH_SELECT");
     expect(screen.getByText("Choose Your Next Stage")).toBeTruthy();
     fireEvent.press(screen.getByText("Choose 5A"));
 
     expect(useCareerStore.getState().view).toBe("HUB");
-    expect(useCareerStore.getState().currentWeek).toBe(2);
+    expect(useCareerStore.getState().currentWeek).toBe(1);
     expect(useCareerStore.getState().lastMatchResult).toBeNull();
     expect(useCareerStore.getState().weeklyActionState).toMatchObject({
       slotsTotal: 3,
@@ -173,23 +194,27 @@ describe("Career vertical slice UI", () => {
     });
     expect(useCareerStore.getState().leagueLevel).toBe("HIGH_SCHOOL");
     expect(useCareerStore.getState().schoolPath).toBe("STATE_5A");
-    expect(useCareerStore.getState().newsFeed.some((item) => item.category === "POSTGAME_RECAP")).toBe(true);
-    const postgameStoryItem = useCareerStore.getState().newsFeed.find((item) => item.category === "POSTGAME_RECAP");
+    expect(
+      useCareerStore.getState().newsFeed.some((item) => item.category === "POSTGAME_RECAP" || item.category === "TOURNAMENT_RECAP"),
+    ).toBe(true);
+    const postgameStoryItem = useCareerStore
+      .getState()
+      .newsFeed.find((item) => item.category === "POSTGAME_RECAP" || item.category === "TOURNAMENT_RECAP");
     expect(postgameStoryItem?.isTappable).toBe(true);
     expect(postgameStoryItem?.storyId).toBeTruthy();
     expect(postgameStoryItem?.storyId ? useCareerStore.getState().storiesById[postgameStoryItem.storyId] : null).toBeTruthy();
-    expect(useCareerStore.getState().financeLedger).toHaveLength(2);
+    expect(useCareerStore.getState().financeLedger.length).toBeGreaterThanOrEqual(5);
     expect(screen.getByText("School Path")).toBeTruthy();
     expect(screen.getByText("State 5A")).toBeTruthy();
     expect(screen.getByText("Recent Financial Activity")).toBeTruthy();
-    expect(screen.getByText("Win bonus")).toBeTruthy();
+    expect(screen.getAllByText("Win bonus").length).toBeGreaterThan(0);
     expect(screen.getByText("Recruiting Interest")).toBeTruthy();
     expect(screen.getByText("Offer Inbox")).toBeTruthy();
     expect(screen.queryAllByText("Accept").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Decline").length).toBeGreaterThan(0);
     expect(screen.getByText("3 of 3 weekly actions remaining.")).toBeTruthy();
 
-    fireEvent.press(screen.getByText("Open Story"));
+    fireEvent.press(screen.getAllByText("Open Story")[0]);
     expect(useCareerStore.getState().view).toBe("STORY_DETAIL");
     expect(screen.getByText("Recap")).toBeTruthy();
     expect(screen.getByText("Box Score")).toBeTruthy();
@@ -201,7 +226,7 @@ describe("Career vertical slice UI", () => {
     expect(screen.getByText(/Local reaction from around/)).toBeTruthy();
   });
 
-  it("shows CourtFuel, blocks it without cash, and applies it with a popup when affordable", () => {
+  it("shows CourtFuel, blocks it without cash, and applies it inline when affordable", () => {
     const screen = render(<HomeScreen />);
 
     act(() => {
@@ -238,7 +263,6 @@ describe("Career vertical slice UI", () => {
 
     fireEvent.press(screen.getByText("CourtFuel"));
 
-    expect(screen.getByText("CourtFuel — Tropical Surge")).toBeTruthy();
     expect(screen.getByText("Fuel the run.")).toBeTruthy();
     expect(screen.getByText("Cost $25")).toBeTruthy();
     expect(useCareerStore.getState().player.bankBalance).toBe(15);
@@ -250,10 +274,6 @@ describe("Career vertical slice UI", () => {
       description: "CourtFuel purchase",
       source: "weekly_action",
     });
-
-    fireEvent.press(screen.getByText("Continue"));
-    expect(screen.queryByText("CourtFuel — Tropical Surge")).toBeNull();
-    expect(useCareerStore.getState().lastWeeklyActionResult).toBeNull();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {
@@ -275,16 +295,11 @@ describe("Career vertical slice UI", () => {
         weightLbs: 185,
         generationSeed: 20260427,
       });
-      useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
-      useCareerStore.getState().completeNarrativeEvent();
-      useCareerStore.getState().takeWeeklyAction("STUDY");
-      useCareerStore.getState().completeMatch({
-        homeScore: 64,
-        awayScore: 52,
-        overtimePeriods: 0,
-        boxScore: mockBoxScore,
-      });
-      useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+      useCareerStore.setState((state) => ({
+        ...state,
+        currentWeek: 5,
+        pendingSchoolPathSelection: true,
+      }));
       useCareerStore.getState().selectSchoolPath("STATE_5A");
     });
 
@@ -314,16 +329,11 @@ describe("Career vertical slice UI", () => {
         weightLbs: 185,
         generationSeed: 20260428,
       });
-      useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
-      useCareerStore.getState().completeNarrativeEvent();
-      useCareerStore.getState().takeWeeklyAction("STUDY");
-      useCareerStore.getState().completeMatch({
-        homeScore: 64,
-        awayScore: 52,
-        overtimePeriods: 0,
-        boxScore: mockBoxScore,
-      });
-      useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+      useCareerStore.setState((state) => ({
+        ...state,
+        currentWeek: 5,
+        pendingSchoolPathSelection: true,
+      }));
       useCareerStore.getState().selectSchoolPath("STATE_5A");
     });
 

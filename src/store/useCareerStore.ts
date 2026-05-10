@@ -349,25 +349,6 @@ const applyTournamentResult = (
   return next;
 };
 
-const getTournamentPathBadge = (tournament: MiddleSchoolTournamentState | null, path: SchoolPath): string | null => {
-  if (!tournament) {
-    return null;
-  }
-  if (tournament.schoolPathRecommendations[0] === path) {
-    return "Recommended";
-  }
-  if (path === "LOCAL_3A" && tournament.localBuzz >= tournament.scoutBuzz) {
-    return "Local buzz strongest";
-  }
-  if (path === "PREP" && tournament.scoutBuzz >= 20) {
-    return "Scouts noticed upside";
-  }
-  if (path === "STATE_5A") {
-    return "Best fit for current run";
-  }
-  return null;
-};
-
 const deriveStarRating = (player: Player): StarRating => {
   const overall = computeOverall(player.attributes, player.position);
   const potential = player.dna?.potential ?? overall;
@@ -683,6 +664,10 @@ const syncSeasonScheduleWeek = (seasonSchedule: SeasonSchedule, currentWeek: num
     windows: week.windows.map((window) => ({
       ...window,
       isActive: currentWeek >= window.startWeek && currentWeek <= window.endWeek,
+    })),
+    matchups: week.matchups.map((matchup) => ({
+      ...matchup,
+      completed: currentWeek > week.weekNumber,
     })),
   })),
 });
@@ -1217,7 +1202,7 @@ const seedHighSchoolRecruitingState = (
     player: state.player,
     scoutVisibility: state.scoutVisibility + tournamentBonus.visibility,
     starRating: state.starRating,
-    schoolPathExposureBoost: profile.immediateExposureBoost + tournamentBonus.visibility,
+    schoolPathExposureBoost: profile.immediateExposureBoost + tournamentBonus.visibility + 12,
   });
 
   return {
@@ -1541,6 +1526,7 @@ export const useCareerStore = create<CareerStore>()(
             leagueLevel: level,
             careerPhase,
             scoutVisibility: defaultScoutVisibilityForPhase(careerPhase),
+            middleSchoolTournament: careerPhase === "MIDDLE_SCHOOL_AAU" ? state.middleSchoolTournament ?? createDefaultMiddleSchoolTournament() : null,
             seasonSchedule: createDefaultSeasonSchedule(
               state.currentYear,
               state.seasonNumber,
@@ -1853,6 +1839,7 @@ export const useCareerStore = create<CareerStore>()(
             currentWeek: state.currentWeek,
             consequences,
           });
+          const tournamentMatch = getCurrentTournamentMatch(state.middleSchoolTournament);
 
           return {
             view: "POSTGAME",
@@ -1863,6 +1850,21 @@ export const useCareerStore = create<CareerStore>()(
               matchUnlocked: true,
               postgamePending: true,
             },
+            middleSchoolTournament:
+              state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.middleSchoolTournament
+                ? {
+                    ...state.middleSchoolTournament,
+                    matches: state.middleSchoolTournament.matches.map((match, index) =>
+                      tournamentMatch && index === state.middleSchoolTournament.currentMatchIndex && match.stage === "FINAL_OR_PLACEMENT"
+                        ? {
+                            ...match,
+                            label: didWin ? "Final" : "Placement Game",
+                            stakesTag: "CHAMPIONSHIP",
+                          }
+                        : match,
+                    ),
+                  }
+                : state.middleSchoolTournament,
           };
         });
       },
@@ -1894,6 +1896,11 @@ export const useCareerStore = create<CareerStore>()(
             state.leagueLevel === LeagueLevel.HIGH_SCHOOL
               ? getSchoolPathProfile(state.schoolPath).weeklyExposureGain + (state.lastMatchResult.didWin ? 2 : 1)
               : 0;
+          const nextTournamentState =
+            state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.middleSchoolTournament
+              ? applyTournamentResult(state.middleSchoolTournament, state.lastMatchResult)
+              : state.middleSchoolTournament;
+          const currentTournamentMatch = getCurrentTournamentMatch(state.middleSchoolTournament);
           const nextScoutVisibility = clampVisibility(state.scoutVisibility + visibilityGain);
           const storyDetail =
             state.player.identity
@@ -1903,14 +1910,18 @@ export const useCareerStore = create<CareerStore>()(
                   leagueLevel: state.leagueLevel,
                   currentYear: state.currentYear,
                   currentWeek: state.currentWeek,
+                  tournamentMatch: currentTournamentMatch,
                 })
               : null;
           const newsFeed =
             state.player.identity && storyDetail
-              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, state.lastMatchResult, storyDetail.id))
+              ? appendNewsItem(
+                  state.newsFeed,
+                  createPostgameNewsItem(state.player.identity, state.lastMatchResult, storyDetail.id, currentTournamentMatch),
+                )
               : state.newsFeed;
           const pendingSchoolPathSelection =
-            state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek === 1;
+            state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && Boolean(nextTournamentState?.completed);
           const nextInterestById =
             state.leagueLevel === LeagueLevel.HIGH_SCHOOL && Object.keys(state.teamInterestById).length > 0
               ? buildInterestDeltaFromMatch({
@@ -1947,6 +1958,19 @@ export const useCareerStore = create<CareerStore>()(
           const financeUpdate = matchRewardTransaction ? buildFinanceTransactionState(state, matchRewardTransaction) : null;
           const nextMeterState = applyCareerMeterDeltas(state, state.lastMatchResult.meterDeltas);
           const nextRecentRatingTrend = clampRecentRatingTrend(state.recentRatingTrend + Math.sign(state.lastMatchResult.ratingDelta));
+          const tournamentScoutVisibility =
+            state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL ? Math.round((nextTournamentState?.scoutBuzz ?? 0) / 6) : 0;
+          const tournamentFeed =
+            state.player.identity && pendingSchoolPathSelection && nextTournamentState
+              ? appendNewsItem(
+                  newsFeed,
+                  createTournamentPathOutlookNewsItem(
+                    state.player.identity,
+                    nextTournamentState.schoolPathRecommendations,
+                    nextState.currentWeek,
+                  ),
+                )
+              : newsFeed;
 
           return {
             currentWeek: nextState.currentWeek,
@@ -1962,10 +1986,10 @@ export const useCareerStore = create<CareerStore>()(
             financeLedger: financeUpdate?.financeLedger ?? state.financeLedger,
             lastMatchResult: null,
             lastWeeklyActionResult: null,
-            newsFeed,
+            newsFeed: tournamentFeed,
             storiesById: storyDetail ? { ...state.storiesById, [storyDetail.id]: storyDetail } : state.storiesById,
             selectedStoryId: null,
-            scoutVisibility: nextScoutVisibility,
+            scoutVisibility: clampVisibility(nextScoutVisibility + tournamentScoutVisibility),
             coachTrust: nextMeterState.coachTrust,
             fans: nextMeterState.fans,
             teammates: nextMeterState.teammates,
@@ -1975,6 +1999,7 @@ export const useCareerStore = create<CareerStore>()(
             teamInterestById: recruitingState.teamInterestById,
             offers: recruitingState.offers,
             pendingSchoolPathSelection,
+            middleSchoolTournament: nextTournamentState,
             ...nextHealthState,
             weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
           };
@@ -1989,7 +2014,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 17,
+      version: 18,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -2082,6 +2107,10 @@ export const useCareerStore = create<CareerStore>()(
         const migratedTeamInterestById = typedState.teamInterestById ?? progressionState.teamInterestById;
         const shouldBackfillHighSchoolRecruiting =
           leagueLevel === LeagueLevel.HIGH_SCHOOL && Object.keys(migratedTeamInterestById).length === 0;
+        const migratedMiddleSchoolTournament =
+          leagueLevel === LeagueLevel.MIDDLE_SCHOOL
+            ? typedState.middleSchoolTournament ?? progressionState.middleSchoolTournament
+            : null;
         const highSchoolRecruitingState = shouldBackfillHighSchoolRecruiting
           ? seedHighSchoolRecruitingState(
               {
@@ -2089,6 +2118,7 @@ export const useCareerStore = create<CareerStore>()(
                 scoutVisibility: clampVisibility(typedState.scoutVisibility ?? progressionState.scoutVisibility),
                 starRating: typedState.starRating ?? progressionState.starRating,
                 currentWeek,
+                middleSchoolTournament: migratedMiddleSchoolTournament,
               },
               typedState.schoolPath ?? progressionState.schoolPath,
             )
@@ -2127,6 +2157,7 @@ export const useCareerStore = create<CareerStore>()(
           recentRatingTrend: clampRecentRatingTrend(typedState.recentRatingTrend ?? progressionState.recentRatingTrend),
           teamInterestById: highSchoolRecruitingState?.teamInterestById ?? migratedTeamInterestById,
           schoolPath: typedState.schoolPath ?? progressionState.schoolPath,
+          middleSchoolTournament: migratedMiddleSchoolTournament,
           offers: migratedOffers,
           seasonSchedule: typedState.seasonSchedule ?? progressionState.seasonSchedule,
           relationships: typedState.relationships ?? progressionState.relationships,
@@ -2167,6 +2198,7 @@ export const useCareerStore = create<CareerStore>()(
         recentRatingTrend: state.recentRatingTrend,
         teamInterestById: state.teamInterestById,
         schoolPath: state.schoolPath,
+        middleSchoolTournament: state.middleSchoolTournament,
         pendingSchoolPathSelection: state.pendingSchoolPathSelection,
         offers: state.offers,
         seasonSchedule: state.seasonSchedule,

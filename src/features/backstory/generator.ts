@@ -393,6 +393,7 @@ export const createBuildBackstorySeed = (input: BuildBackstoryInput): number =>
       input.height.feet,
       input.height.inches,
       input.weightLbs,
+      input.archetypeId ?? "",
       ...ALL_ATTRIBUTE_KEYS.map((key) => input.buildAttributes[key]),
     ].join("|"),
   );
@@ -405,6 +406,22 @@ const clampAttributesToCaps = (attributes: PlayerAttributes, caps: PlayerAttribu
   }
 
   return clamped;
+};
+
+export const buildAgeAdjustedBuildAttributes = (
+  attributes: PlayerAttributes,
+  ageStartedBand: PlayerIdentity["ageStartedBand"],
+  caps: PlayerAttributes,
+): PlayerAttributes => {
+  const ageOffset = AGE_BAND_OFFSETS[ageStartedBand];
+  const adjusted = {} as PlayerAttributes;
+
+  for (const key of ALL_ATTRIBUTE_KEYS) {
+    const clamped = clampAttribute(attributes[key] + ageOffset);
+    adjusted[key] = Math.min(clamped, caps[key]) as PlayerAttributes[typeof key];
+  }
+
+  return adjusted;
 };
 
 const buildBuilderProfile = (
@@ -575,7 +592,7 @@ export const generateBackstoryFromBuildInput = (
     heightPreset,
     weightPreset,
   );
-  const startingAttributes = clampAttributesToCaps(rawInput.buildAttributes, caps);
+  const startingAttributes = buildAgeAdjustedBuildAttributes(rawInput.buildAttributes, ageStartedBand, caps);
   const builderProfile = buildBuilderProfile(startingAttributes, caps, primaryPosition);
   const identity: PlayerIdentity = {
     firstName,
@@ -587,6 +604,9 @@ export const generateBackstoryFromBuildInput = (
     bodyFrame: rawInput.bodyFrame,
     dominantHand: rawInput.dominantHand,
     archetype: builderProfile.classification.legacyArchetype,
+    archetypeId: rawInput.archetypeId,
+    archetypeLabel: rawInput.archetypeLabel ?? builderProfile.classification.legacyArchetype,
+    roleLabel: rawInput.roleLabel ?? builderProfile.classification.taxonomy.label,
     primaryPosition,
     secondaryPosition,
     height: normalizedHeight,

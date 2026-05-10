@@ -4,6 +4,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 
 import { useCareerStore } from "../src/store/useCareerStore";
 import { getDefaultBuildPreset } from "../src/builder/presets";
+import { generateBackstoryFromBuildInput } from "../src/features/backstory/generator";
 import type { BuildBackstoryInput } from "../src/types/backstory";
 import type { PlayerAttributes } from "../src/types/player";
 
@@ -54,16 +55,37 @@ describe("Career store builder integration", () => {
     expect(Array.isArray(player.dna?.builderProfile?.badges)).toBe(true);
   });
 
-  it("uses selected preset attributes as the initialized player attributes", () => {
+  it("uses generated build starting attributes as the initialized player attributes", () => {
     const preset = getDefaultBuildPreset("C");
-    useCareerStore.getState().initializeCareer({
+    const input: BuildBackstoryInput = {
       ...buildInput,
       primaryPosition: "C",
       secondaryPosition: "PF",
       buildAttributes: preset.attributes,
-    });
+    };
+    const expected = generateBackstoryFromBuildInput(input, { seedOverride: input.generationSeed }).startingAttributes;
+    useCareerStore.getState().initializeCareer(input);
 
-    expect(useCareerStore.getState().player.attributes).toEqual(preset.attributes);
+    expect(useCareerStore.getState().player.attributes).toEqual(expected);
+  });
+
+  it("changes initialized build attributes when age started changes", () => {
+    const earlyInput = { ...buildInput, ageStarted: 5 };
+    const lateInput = { ...buildInput, ageStarted: 12 };
+
+    useCareerStore.getState().initializeCareer(earlyInput);
+    const earlyAttributes = useCareerStore.getState().player.attributes;
+
+    useCareerStore.getState().initializeCareer(lateInput);
+    const lateAttributes = useCareerStore.getState().player.attributes;
+
+    expect(earlyAttributes.handle).toBeGreaterThan(lateAttributes.handle);
+    expect(earlyAttributes).toEqual(
+      generateBackstoryFromBuildInput(earlyInput, { seedOverride: earlyInput.generationSeed }).startingAttributes,
+    );
+    expect(lateAttributes).toEqual(
+      generateBackstoryFromBuildInput(lateInput, { seedOverride: lateInput.generationSeed }).startingAttributes,
+    );
   });
 
   it("lazy-backfills missing builder profile during migration", () => {

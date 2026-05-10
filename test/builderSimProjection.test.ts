@@ -1,4 +1,6 @@
 import { buildSimProjection } from "../src/builder/simProjection";
+import { isBadgeSystemAvailable } from "../src/builder/badges/availability";
+import { LeagueLevel } from "../src/types/career";
 import type { PlayerAttributes } from "../src/types/player";
 
 const makeAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
@@ -98,5 +100,25 @@ describe("builder sim projection", () => {
 
     expect(projection.badgeWatch.some((badge) => badge.label === "Catch and Shoot" && badge.status === "nearby")).toBe(true);
     expect(projection.badgeWatch.some((badge) => badge.label === "Deep Range" && badge.status === "nearby")).toBe(true);
+  });
+
+  it("can suppress badges for early career projections", () => {
+    const projection = buildSimProjection({
+      attributes: makeAttributes({ handle: 80, passing: 80, vision: 80 }),
+      position: "PG",
+      caps: makeAttributes({ handle: 99, passing: 99, vision: 99 }),
+      badgesEnabled: false,
+    });
+
+    expect(projection.badges).toEqual([]);
+    expect(projection.badgeWatch).toEqual([]);
+  });
+
+  it("unlocks the badge system in high school year 4 and later phases", () => {
+    expect(isBadgeSystemAvailable(LeagueLevel.MIDDLE_SCHOOL, 4)).toBe(false);
+    expect(isBadgeSystemAvailable(LeagueLevel.HIGH_SCHOOL, 3)).toBe(false);
+    expect(isBadgeSystemAvailable(LeagueLevel.HIGH_SCHOOL, 4)).toBe(true);
+    expect(isBadgeSystemAvailable(LeagueLevel.COLLEGE, 1)).toBe(true);
+    expect(isBadgeSystemAvailable(LeagueLevel.PRO, 1)).toBe(true);
   });
 });

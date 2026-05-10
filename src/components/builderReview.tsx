@@ -15,7 +15,10 @@ export interface BuilderReviewSummary {
   growthOutlook: string;
   archetypeConfidence: string;
   hasStandoutStrength: boolean;
-  legacyArchetype: string;
+  legacyArchetype?: string;
+  archetypeLabel?: string;
+  roleLabel?: string;
+  position?: string;
 }
 
 const STRENGTH_LABELS: Record<StrengthKey, string> = {
@@ -27,7 +30,7 @@ const STRENGTH_LABELS: Record<StrengthKey, string> = {
   physicalRating: "Physical Tools",
 };
 
-const EMPTY_BADGES_LABEL = "No badges unlocked at the current build thresholds.";
+const EMPTY_BADGES_LABEL = "No badges unlocked at the current thresholds.";
 const NO_STANDOUT_LABEL = "No standout strengths yet. Raise 2-3 core attributes to define your playstyle.";
 
 const formatBadgeTier = (tier: ResolvedBuilderBadge["tier"]): string =>
@@ -44,6 +47,8 @@ export const buildBuilderReviewSummary = (dna: PlayerDNA | null | undefined): Bu
     classification: classification.taxonomy.label,
     archetypeFit: classification.legacyArchetype,
     legacyArchetype: classification.legacyArchetype,
+    archetypeLabel: undefined,
+    roleLabel: undefined,
     topStrengths: classification.taxonomy.hasStandoutStrength
       ? [
           STRENGTH_LABELS[classification.taxonomy.primaryStrength],
@@ -93,6 +98,7 @@ interface BuilderReviewSectionProps {
   variant?: keyof typeof THEME_BY_VARIANT;
   title?: string;
   className?: string;
+  showBadges?: boolean;
 }
 
 const TENDENCY_LABELS: Record<keyof BuildSimProjection["tendencies"], string> = {
@@ -117,6 +123,7 @@ export function BuilderReviewSection({
   variant = "premium",
   title = "Current-Level Sim Projection",
   className = "",
+  showBadges = true,
 }: BuilderReviewSectionProps) {
   if (!summary) {
     return null;
@@ -130,19 +137,15 @@ export function BuilderReviewSection({
 
       <View className="mt-3 gap-3">
         <View>
-          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Projected Role</Text>
-          <Text className={`mt-1 text-sm font-semibold ${theme.valueClassName}`}>{projection?.projectedRole ?? summary.classification}</Text>
+          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Role</Text>
+          <Text className={`mt-1 text-sm font-semibold ${theme.valueClassName}`}>{projection?.role ?? summary.classification}</Text>
           <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{projection?.identityNote ?? (summary.hasStandoutStrength ? `Confidence: ${summary.archetypeConfidence}` : NO_STANDOUT_LABEL)}</Text>
         </View>
 
         <View className="flex-row gap-2">
           <View className={`flex-1 rounded-lg border px-2 py-2 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
-            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Sim Classification</Text>
-            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{summary.classification}</Text>
-          </View>
-          <View className={`flex-1 rounded-lg border px-2 py-2 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
-            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Legacy Archetype</Text>
-            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{summary.legacyArchetype}</Text>
+            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Archetype</Text>
+            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{projection?.archetype ?? summary.archetypeFit}</Text>
           </View>
         </View>
 
@@ -194,27 +197,29 @@ export function BuilderReviewSection({
           </View>
         </View>
 
-        <View>
-          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Badge Watch</Text>
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {projection?.badgeWatch.length ? (
-              projection.badgeWatch.map((badge) => (
-                <View key={`${badge.id}-${badge.status}`} className={`rounded-lg border px-3 py-2 ${theme.badgeBorderClassName} ${theme.badgeBackgroundClassName}`}>
-                  <Text className={`text-xs font-semibold ${theme.badgeTextClassName}`}>{formatBadgeWatch(badge)}</Text>
-                  <Text className={`mt-1 text-[11px] ${theme.valueClassName}`}>{badge.summary}</Text>
-                </View>
-              ))
-            ) : summary.badges.length > 0 ? (
-              summary.badges.map((badge) => (
-                <View key={badge.id} className={`rounded-full border px-3 py-1 ${theme.badgeBorderClassName} ${theme.badgeBackgroundClassName}`}>
-                  <Text className={`text-xs font-semibold ${theme.badgeTextClassName}`}>{badge.label} {formatBadgeTier(badge.tier)}</Text>
-                </View>
-              ))
-            ) : (
-              <Text className={`text-xs ${theme.valueClassName}`}>{summary.emptyBadgesLabel}</Text>
-            )}
+        {showBadges ? (
+          <View>
+            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Badge Watch</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {projection?.badgeWatch.length ? (
+                projection.badgeWatch.map((badge) => (
+                  <View key={`${badge.id}-${badge.status}`} className={`rounded-lg border px-3 py-2 ${theme.badgeBorderClassName} ${theme.badgeBackgroundClassName}`}>
+                    <Text className={`text-xs font-semibold ${theme.badgeTextClassName}`}>{formatBadgeWatch(badge)}</Text>
+                    <Text className={`mt-1 text-[11px] ${theme.valueClassName}`}>{badge.summary}</Text>
+                  </View>
+                ))
+              ) : summary.badges.length > 0 ? (
+                summary.badges.map((badge) => (
+                  <View key={badge.id} className={`rounded-full border px-3 py-1 ${theme.badgeBorderClassName} ${theme.badgeBackgroundClassName}`}>
+                    <Text className={`text-xs font-semibold ${theme.badgeTextClassName}`}>{badge.label} {formatBadgeTier(badge.tier)}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text className={`text-xs ${theme.valueClassName}`}>{summary.emptyBadgesLabel}</Text>
+              )}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <View>
           <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Growth Outlook</Text>

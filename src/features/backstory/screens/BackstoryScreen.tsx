@@ -1,9 +1,18 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
-import { applyAllocation } from "../../../builder/allocate";
-import { BUILD_PRESETS_BY_POSITION, getDefaultBuildPreset, type BuildPreset } from "../../../builder/presets";
+import {
+  Animated,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
+import { ARCHETYPE_PROFILES_BY_POSITION, getDefaultArchetypeProfile, type ArchetypeProfile } from "../../../builder/presets";
 import { buildSimProjection } from "../../../builder/simProjection";
-import { getTotalBuildCost } from "../../../builder/progression";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "../../../components/builderReview";
 import { useCareerStore } from "../../../store/useCareerStore";
 import type { BuildBackstoryInput, BodyFrame, DominantHand, StateOption } from "../../../types/backstory";
@@ -17,9 +26,11 @@ const BODY_FRAMES: readonly BodyFrame[] = ["Lean", "Athletic", "Stocky"];
 const DOMINANT_HANDS: readonly DominantHand[] = ["Right", "Left"];
 const MAX_HOMETOWN_RESULTS = 24;
 const MAX_STATE_RESULTS = 12;
-const BUILD_POINT_BUDGET = 120;
-const ATTRIBUTE_FLOOR = 25;
-
+const BUILD_PRESET_SIDE_PADDING = 32;
+const BUILD_PRESET_CARD_GAP = 12;
+const BUILD_PRESET_PEEK_WIDTH = 36;
+const BUILD_PRESET_SWIPE_TRACK_WIDTH = 132;
+const BUILD_PRESET_SWIPE_THUMB_WIDTH = 38;
 const MAX_BUILD_CAPS: PlayerAttributes = {
   shortRange: 99,
   dunking: 99,
@@ -37,34 +48,6 @@ const MAX_BUILD_CAPS: PlayerAttributes = {
   speed: 99,
   strength: 99,
   stamina: 99,
-};
-
-const ATTRIBUTE_GROUPS: Array<{ title: string; keys: Array<keyof PlayerAttributes> }> = [
-  { title: "Finishing", keys: ["shortRange", "dunking"] },
-  { title: "Shooting", keys: ["midrange", "threePoint"] },
-  { title: "Creation", keys: ["handle", "passing", "vision"] },
-  { title: "Defense", keys: ["perimeterDefense", "interiorDefense", "stealing", "blocking"] },
-  { title: "Rebounding", keys: ["offRebounding", "defRebounding"] },
-  { title: "Physical", keys: ["speed", "strength", "stamina"] },
-];
-
-const ATTRIBUTE_LABELS: Record<keyof PlayerAttributes, string> = {
-  shortRange: "Short Range",
-  dunking: "Dunking",
-  midrange: "Midrange",
-  threePoint: "Three Point",
-  handle: "Handle",
-  passing: "Passing",
-  vision: "Vision",
-  perimeterDefense: "Perimeter Defense",
-  interiorDefense: "Interior Defense",
-  stealing: "Stealing",
-  blocking: "Blocking",
-  offRebounding: "Off Reb",
-  defRebounding: "Def Reb",
-  speed: "Speed",
-  strength: "Strength",
-  stamina: "Stamina",
 };
 
 const clampAgeStarted = (value: number): number => Math.min(12, Math.max(4, Math.round(value)));
@@ -134,34 +117,37 @@ const Stepper = ({
 
 const joinLabels = (values: readonly string[]): string => values.join(", ");
 
-const BuildPresetCard = ({
+const ArchetypeCard = ({
   preset,
   selected,
   projectionRole,
   onSelect,
+  width,
 }: {
-  preset: BuildPreset;
+  preset: ArchetypeProfile;
   selected: boolean;
   projectionRole: string;
   onSelect: () => void;
+  width?: number;
 }) => (
   <Pressable
-    className={`mt-3 rounded-xl border p-3 ${selected ? "border-emerald-400 bg-emerald-400/15" : "border-slate-700 bg-slate-950"}`}
+    className={`rounded-xl border px-3 py-2.5 ${selected ? "border-emerald-400 bg-emerald-400/15" : "border-slate-700 bg-slate-950"}`}
     onPress={onSelect}
+    style={width ? { width } : undefined}
   >
     <View className="flex-row items-start justify-between gap-3">
       <View className="flex-1">
         <Text className={`text-base font-bold ${selected ? "text-emerald-100" : "text-white"}`}>{preset.label}</Text>
-        <Text className="mt-1 text-xs text-slate-300">{preset.description}</Text>
+        <Text numberOfLines={2} className="mt-1 text-xs text-slate-300">{preset.description}</Text>
       </View>
       {selected ? (
-        <View className="rounded-full border border-emerald-300/50 bg-emerald-300/15 px-2 py-1">
-          <Text className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100">Selected</Text>
+        <View className="rounded-full border border-emerald-300/50 bg-emerald-300/15 px-1 py-0.5">
+          <Text className="text-[8px] font-semibold uppercase text-emerald-100">Selected</Text>
         </View>
       ) : null}
     </View>
 
-    <View className="mt-3 gap-2">
+    <View className="mt-2 gap-1.5">
       <Text className="text-[11px] text-slate-300">
         <Text className="font-semibold text-emerald-200">Strengths: </Text>
         {joinLabels(preset.strengths)}
@@ -171,20 +157,15 @@ const BuildPresetCard = ({
         {joinLabels(preset.weaknesses)}
       </Text>
       <Text className="text-[11px] text-slate-300">
-        <Text className="font-semibold text-cyan-200">Projected sim identity: </Text>
+        <Text className="font-semibold text-cyan-200">Role: </Text>
         {projectionRole}
       </Text>
-      {preset.tradeoffNote ? (
-        <Text className="text-[11px] text-slate-400">
-          <Text className="font-semibold text-amber-200">Tradeoff: </Text>
-          {preset.tradeoffNote}
-        </Text>
-      ) : null}
     </View>
   </Pressable>
 );
 
 export function BackstoryScreen() {
+  const { width: windowWidth } = useWindowDimensions();
   const initializeCareer = useCareerStore((state) => state.initializeCareer);
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState("");
@@ -194,17 +175,17 @@ export function BackstoryScreen() {
   const [stateCode, setStateCode] = useState<string>(getDefaultStateCode());
   const [citySlug, setCitySlug] = useState<string>(() => getDefaultCityForState(getDefaultStateCode()).slug);
   const [primaryPosition, setPrimaryPosition] = useState<Position>("PG");
-  const [selectedPresetId, setSelectedPresetId] = useState(getDefaultBuildPreset("PG").id);
+  const [selectedPresetId, setSelectedPresetId] = useState(getDefaultArchetypeProfile("PG").id);
   const [heightFeet, setHeightFeet] = useState(6);
   const [heightInches, setHeightInches] = useState(2);
   const [weightLbs, setWeightLbs] = useState(185);
   const [bodyFrame, setBodyFrame] = useState<BodyFrame>("Athletic");
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
   const [ageStarted, setAgeStarted] = useState(8);
-  const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(getDefaultBuildPreset("PG").attributes);
-  const [isAdvancedEditOpen, setIsAdvancedEditOpen] = useState(false);
-  const [hasCustomizedAttributes, setHasCustomizedAttributes] = useState(false);
+  const [buildAttributes, setBuildAttributes] = useState<PlayerAttributes>(getDefaultArchetypeProfile("PG").attributes);
   const stepTransition = useRef(new Animated.Value(1)).current;
+  const buildPresetCardWidth = Math.max(260, Math.min(460, windowWidth - BUILD_PRESET_SIDE_PADDING * 2 - BUILD_PRESET_PEEK_WIDTH));
+  const buildPresetSnapInterval = buildPresetCardWidth + BUILD_PRESET_CARD_GAP;
 
   const setClampedHeight = (nextFeet: number, nextInches: number): void => {
     const normalized = clampHeight({
@@ -255,41 +236,42 @@ export function BackstoryScreen() {
   const normalizedHeight = useMemo(() => clampHeight({ feet: heightFeet, inches: heightInches }), [heightFeet, heightInches]);
   const normalizedWeight = useMemo(() => clampWeight(weightLbs), [weightLbs]);
   const selectedPreset = useMemo(
-    () => BUILD_PRESETS_BY_POSITION[primaryPosition].find((preset) => preset.id === selectedPresetId) ?? getDefaultBuildPreset(primaryPosition),
+    () => ARCHETYPE_PROFILES_BY_POSITION[primaryPosition].find((preset) => preset.id === selectedPresetId) ?? getDefaultArchetypeProfile(primaryPosition),
     [primaryPosition, selectedPresetId],
   );
+  const selectedBuildPresetIndex = Math.max(
+    0,
+    ARCHETYPE_PROFILES_BY_POSITION[primaryPosition].findIndex((preset) => preset.id === selectedPreset.id),
+  );
+  const buildPresetSwipeThumbOffset =
+    ARCHETYPE_PROFILES_BY_POSITION[primaryPosition].length > 1
+      ? (selectedBuildPresetIndex / (ARCHETYPE_PROFILES_BY_POSITION[primaryPosition].length - 1)) *
+        (BUILD_PRESET_SWIPE_TRACK_WIDTH - BUILD_PRESET_SWIPE_THUMB_WIDTH)
+      : 0;
   const safeSecondaryPosition = getDefaultSecondaryPosition(primaryPosition);
-  const currentBuildCost = useMemo(() => getTotalBuildCost(buildAttributes, selectedPreset.attributes), [buildAttributes, selectedPreset.attributes]);
-  const remainingBuildPoints = BUILD_POINT_BUDGET - currentBuildCost;
+  const selectedRoleLabel = selectedPreset.roleLabelByPosition?.[primaryPosition] ?? selectedPreset.defaultRoleLabel;
 
   const selectPrimaryPosition = (position: Position): void => {
-    const preset = getDefaultBuildPreset(position);
+    const preset = getDefaultArchetypeProfile(position);
     setPrimaryPosition(position);
     setSelectedPresetId(preset.id);
     setBuildAttributes(preset.attributes);
-    setIsAdvancedEditOpen(false);
-    setHasCustomizedAttributes(false);
   };
 
-  const selectBuildPreset = (preset: BuildPreset): void => {
+  const selectBuildPreset = (preset: ArchetypeProfile): void => {
     setSelectedPresetId(preset.id);
     setBuildAttributes(preset.attributes);
-    setIsAdvancedEditOpen(false);
-    setHasCustomizedAttributes(false);
   };
 
-  const adjustAttribute = (attribute: keyof PlayerAttributes, delta: number): void => {
-    const allocation = applyAllocation({
-      attributes: buildAttributes,
-      caps: MAX_BUILD_CAPS,
-      availablePoints: remainingBuildPoints,
-      changes: { [attribute]: delta },
-      minAttribute: ATTRIBUTE_FLOOR,
-    });
-
-    if (allocation.success) {
-      setBuildAttributes(allocation.attributes);
-      setHasCustomizedAttributes(true);
+  const selectVisibleBuildPreset = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const presets = ARCHETYPE_PROFILES_BY_POSITION[primaryPosition];
+    const nextIndex = Math.min(
+      presets.length - 1,
+      Math.max(0, Math.round(event.nativeEvent.contentOffset.x / buildPresetSnapInterval)),
+    );
+    const nextPreset = presets[nextIndex];
+    if (nextPreset && nextPreset.id !== selectedPresetId) {
+      selectBuildPreset(nextPreset);
     }
   };
 
@@ -307,6 +289,9 @@ export function BackstoryScreen() {
       height: normalizedHeight,
       weightLbs: normalizedWeight,
       buildAttributes,
+      archetypeId: selectedPreset.id,
+      archetypeLabel: selectedPreset.label,
+      roleLabel: selectedRoleLabel,
     }),
     [
       firstName,
@@ -321,6 +306,9 @@ export function BackstoryScreen() {
       normalizedHeight,
       normalizedWeight,
       buildAttributes,
+      selectedPreset.id,
+      selectedPreset.label,
+      selectedRoleLabel,
     ],
   );
 
@@ -330,13 +318,15 @@ export function BackstoryScreen() {
   const buildProjection = useMemo(
     () =>
       buildSimProjection({
-        attributes: buildAttributes,
+        attributes: preview.startingAttributes,
         position: primaryPosition,
-        caps: MAX_BUILD_CAPS,
+        caps: preview.dna.caps,
         height: normalizedHeight,
         weightLbs: normalizedWeight,
+        archetypeProfile: selectedPreset,
+        badgesEnabled: false,
       }),
-    [buildAttributes, primaryPosition, normalizedHeight, normalizedWeight],
+    [preview.startingAttributes, preview.dna.caps, primaryPosition, normalizedHeight, normalizedWeight, selectedPreset],
   );
 
   const canAdvanceFromName = firstName.trim().length > 0 && lastName.trim().length > 0;
@@ -485,33 +475,62 @@ export function BackstoryScreen() {
     if (step === 3) {
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-          <Text className="text-sm font-semibold text-white">Step 3: Build Profile</Text>
+          <Text className="text-sm font-semibold text-white">Step 3: Archetype</Text>
           <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Primary Position</Text>
           <SelectGroup options={POSITIONS} selected={primaryPosition} onSelect={selectPrimaryPosition} />
 
           <View className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
-            <Text className="text-xs font-semibold text-cyan-100">Choose a starting build. Your final sim identity still comes from the attributes you take into your career.</Text>
+            <Text className="text-xs font-semibold text-cyan-100">Choose an archetype. Your current role still comes from the attributes you take into your career.</Text>
           </View>
 
-          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Build Preset</Text>
-          {BUILD_PRESETS_BY_POSITION[primaryPosition].map((preset) => {
-            const projection = buildSimProjection({
-              attributes: preset.attributes,
-              position: preset.position,
-              caps: MAX_BUILD_CAPS,
-              height: normalizedHeight,
-              weightLbs: normalizedWeight,
-            });
-            return (
-              <BuildPresetCard
-                key={preset.id}
-                preset={preset}
-                selected={preset.id === selectedPreset.id}
-                projectionRole={projection.projectedRole}
-                onSelect={() => selectBuildPreset(preset)}
+          <Text className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Archetype</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={buildPresetSnapInterval}
+            snapToAlignment="start"
+            onMomentumScrollEnd={selectVisibleBuildPreset}
+            contentContainerStyle={{ gap: BUILD_PRESET_CARD_GAP, paddingRight: BUILD_PRESET_SIDE_PADDING }}
+            className="mt-3 -mr-4"
+          >
+            {ARCHETYPE_PROFILES_BY_POSITION[primaryPosition].map((preset) => {
+              const projection = buildSimProjection({
+                attributes: preset.attributes,
+                position: preset.position,
+                caps: MAX_BUILD_CAPS,
+                height: normalizedHeight,
+                weightLbs: normalizedWeight,
+                archetypeProfile: preset,
+                badgesEnabled: false,
+              });
+              return (
+                <ArchetypeCard
+                  key={preset.id}
+                  preset={preset}
+                  selected={preset.id === selectedPreset.id}
+                  projectionRole={projection.projectedRole}
+                  onSelect={() => selectBuildPreset(preset)}
+                  width={buildPresetCardWidth}
+                />
+              );
+            })}
+          </ScrollView>
+          <View className="mt-2 flex-row items-center justify-center gap-3">
+            <Text className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Swipe</Text>
+            <View
+              className="h-1.5 rounded-full bg-slate-700"
+              style={{ width: BUILD_PRESET_SWIPE_TRACK_WIDTH }}
+            >
+              <View
+                className="h-1.5 rounded-full bg-emerald-400"
+                style={{
+                  width: BUILD_PRESET_SWIPE_THUMB_WIDTH,
+                  transform: [{ translateX: buildPresetSwipeThumbOffset }],
+                }}
               />
-            );
-          })}
+            </View>
+          </View>
 
           <Stepper
             label="Height - Feet"
@@ -544,58 +563,24 @@ export function BackstoryScreen() {
     }
 
     if (step === 4) {
-      const projectedClassification = buildProjection.classification.taxonomy.label;
-      const hasDivergedFromPreset =
-        hasCustomizedAttributes &&
-        Object.keys(buildAttributes).some((key) => {
-          const attributeKey = key as keyof PlayerAttributes;
-          return buildAttributes[attributeKey] !== selectedPreset.attributes[attributeKey];
-        });
       return (
         <Animated.View style={stepCardStyle} className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-          <Text className="text-sm font-semibold text-white">Step 4: Review And Customize</Text>
-          <Text className="mt-2 text-xs text-slate-400">Review the starting package, then open advanced edits if you want to tune the numbers.</Text>
+          <Text className="text-sm font-semibold text-white">Step 4: Review Prospect Profile</Text>
+          <Text className="mt-2 text-xs text-slate-400">Review your position, archetype, role, and current-level projection.</Text>
           <View className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Starting Build</Text>
+            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Archetype</Text>
             <Text className="mt-1 text-lg font-bold text-white">{selectedPreset.label}</Text>
             <Text className="mt-1 text-xs text-slate-200">{selectedPreset.tradeoffNote}</Text>
           </View>
-          {hasDivergedFromPreset ? (
-            <View className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2">
-              <Text className="text-xs font-semibold text-amber-100">Your edits now project closer to {projectedClassification}.</Text>
-            </View>
-          ) : null}
-          <View className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Customization Points Remaining</Text>
-            <Text className="mt-1 text-lg font-bold text-white">{remainingBuildPoints}</Text>
-          </View>
 
-          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-4" title="Current-Level Sim Projection" />
-
-          <Pressable
-            className="mt-4 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3"
-            onPress={() => setIsAdvancedEditOpen((value) => !value)}
-          >
-            <Text className="text-sm font-semibold text-white">{isAdvancedEditOpen ? "Hide Customize Attributes" : "Customize Attributes"}</Text>
-            <Text className="mt-1 text-xs text-slate-400">Advanced Edit: tune individual ratings from the selected starting build.</Text>
-          </Pressable>
-
-          {isAdvancedEditOpen
-            ? ATTRIBUTE_GROUPS.map((group) => (
-                <View key={group.title} className="mt-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
-                  {group.keys.map((key) => (
-                    <Stepper
-                      key={key}
-                      label={ATTRIBUTE_LABELS[key]}
-                      value={buildAttributes[key]}
-                      onDec={() => adjustAttribute(key, -1)}
-                      onInc={() => adjustAttribute(key, 1)}
-                    />
-                  ))}
-                </View>
-              ))
-            : null}
+          <BuilderReviewSection
+            summary={previewBuilderReview}
+            projection={buildProjection}
+            variant="slate"
+            className="mt-4"
+            title="Current-Level Sim Projection"
+            showBadges={false}
+          />
 
           <Text className="mt-4 text-xs text-slate-400">Age started determines growth curve and early starting profile. Range: 4 to 12.</Text>
           <View className="mt-4 flex-row items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 py-3">
@@ -634,7 +619,14 @@ export function BackstoryScreen() {
             </View>
           </View>
 
-          <BuilderReviewSection summary={previewBuilderReview} projection={buildProjection} variant="slate" className="mt-3" title="Current-Level Sim Projection" />
+          <BuilderReviewSection
+            summary={previewBuilderReview}
+            projection={buildProjection}
+            variant="slate"
+            className="mt-3"
+            title="Current-Level Sim Projection"
+            showBadges={false}
+          />
 
           <Pressable
             className="mt-3 items-center justify-center rounded-xl bg-emerald-500 py-4"
@@ -653,7 +645,7 @@ export function BackstoryScreen() {
     <SafeAreaView className="flex-1 bg-slate-950">
       <ScrollView contentContainerClassName="px-5 pb-8 pt-8">
         <Text className="text-xs font-semibold uppercase tracking-widest text-emerald-300">Backstory Generator</Text>
-        <Text className="mt-2 text-3xl font-bold text-white">Build Your Prospect DNA</Text>
+        <Text className="mt-2 text-3xl font-bold text-white">Create Your Prospect DNA</Text>
         <StepPill current={step} total={5} />
 
         {renderStepContent()}

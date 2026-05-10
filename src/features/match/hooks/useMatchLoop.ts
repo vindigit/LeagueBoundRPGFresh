@@ -11,6 +11,7 @@ import type { MatchEngineStoreState } from "../../../matchEngineStore";
 import { useCareerStore } from "../../../store/useCareerStore";
 import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
+import { isBadgeSystemAvailable } from "../../../builder/badges/availability";
 
 const REAL_SECONDS_PER_TICK = 1;
 const GAME_SECONDS_PER_TICK = 10;
@@ -148,6 +149,7 @@ const buildRuntimeTeams = (
   leagueLevel: LeagueLevel,
   schoolPath: SchoolPath,
   performanceMultiplier: number,
+  badgesEnabled: boolean,
 ): {
   home: Team;
   away: Team;
@@ -169,7 +171,15 @@ const buildRuntimeTeams = (
         morale: userPlayer.morale,
         secondaryPosition: userPlayer.secondaryPosition,
         identity: userPlayer.identity,
-        dna: userPlayer.dna,
+        dna: badgesEnabled || !userPlayer.dna?.builderProfile
+          ? userPlayer.dna
+          : {
+              ...userPlayer.dna,
+              builderProfile: {
+                ...userPlayer.dna.builderProfile,
+                badges: [],
+              },
+            },
       });
     }
 
@@ -302,6 +312,7 @@ export const useMatchLoop = (): void => {
   const playerAttributes = useCareerStore((state) => state.player.attributes);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const schoolPath = useCareerStore((state) => state.schoolPath);
+  const seasonNumber = useCareerStore((state) => state.seasonNumber);
   const injury = useCareerStore((state) => state.injury);
   const addMatchConsequences = useMatchStore((state) => state.addMatchConsequences);
 
@@ -316,6 +327,7 @@ export const useMatchLoop = (): void => {
         leagueLevel,
         schoolPath,
         injury?.performanceMultiplier ?? 1,
+        isBadgeSystemAvailable(leagueLevel, seasonNumber),
       ),
     [
       careerPlayer,
@@ -341,6 +353,7 @@ export const useMatchLoop = (): void => {
       playerName,
       playerPosition,
       schoolPath,
+      seasonNumber,
     ],
   );
 

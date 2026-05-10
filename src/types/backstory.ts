@@ -46,6 +46,9 @@ export interface PlayerIdentity {
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   archetype: PlayerArchetype;
+  archetypeId?: string;
+  archetypeLabel?: string;
+  roleLabel?: string;
   primaryPosition: Position;
   secondaryPosition: Position;
   height: ExactHeight;
@@ -93,6 +96,9 @@ export interface BuildBackstoryInput {
   height: ExactHeight;
   weightLbs: number;
   buildAttributes: PlayerAttributes;
+  archetypeId?: string;
+  archetypeLabel?: string;
+  roleLabel?: string;
   generationSeed?: number;
 }
 

@@ -5,6 +5,7 @@ import { BUILDER_BADGE_CATALOG, type BuilderBadgeCatalogEntry, type BuilderBadge
 import { resolveBuilderBadges, type ResolvedBuilderBadge } from "./badges/resolve";
 import { classifyBuilderBuild, type BuilderClassification } from "./classify";
 import { derivePlayerRoleTendencies, toShotProfile, toTendencyLabels, type TendencyLabel } from "./roleTendencies";
+import type { ArchetypeProfile } from "./presets";
 
 type AttributeKey = keyof PlayerAttributes;
 
@@ -35,8 +36,13 @@ export interface BadgeWatchItem {
 
 export interface BuildSimProjection {
   classification: BuilderClassification;
+  archetype: string;
+  role: string;
   projectedRole: string;
   identityNote: string;
+  strengths: string[];
+  weaknesses: string[];
+  developmentPath: string;
   tendencies: BuildTendencyProjection;
   shotProfile: BuildShotProfileProjection;
   badges: ResolvedBuilderBadge[];
@@ -51,6 +57,8 @@ export interface BuildSimProjectionInput {
   height?: ExactHeight;
   weightLbs?: number;
   leagueLevel?: LeagueLevel;
+  archetypeProfile?: ArchetypeProfile;
+  badgesEnabled?: boolean;
 }
 
 const NEAR_BADGE_THRESHOLD_DISTANCE = 5;
@@ -125,6 +133,18 @@ const isClassificationMatch = (entry: BuilderBadgeCatalogEntry, classification: 
   return true;
 };
 
+const attributesMatchProfile = (
+  attributes: PlayerAttributes,
+  position: Position,
+  archetypeProfile: ArchetypeProfile | undefined,
+): boolean => {
+  const startingAttributes = archetypeProfile?.startingAttributesByPosition[position] ?? archetypeProfile?.attributes;
+  if (!startingAttributes) {
+    return false;
+  }
+  return (Object.keys(attributes) as Array<keyof PlayerAttributes>).every((key) => attributes[key] === startingAttributes[key]);
+};
+
 const buildBadgeWatch = (
   attributes: PlayerAttributes,
   classification: BuilderClassification,
@@ -164,7 +184,13 @@ const buildBadgeWatch = (
         summary: entry.hookSummary,
       };
     })
-    .filter((entry): entry is BadgeWatchItem => entry !== null)
+    .filter((entry): entry is {
+      id: BuilderBadgeCatalogEntry["id"];
+      label: string;
+      tier: ResolvedBuilderBadge["tier"];
+      status: "nearby";
+      summary: string;
+    } => entry !== null)
     .slice(0, 3);
 
   return [...unlocked, ...nearby].slice(0, 6);
@@ -173,7 +199,7 @@ const buildBadgeWatch = (
 export const buildSimProjection = (input: BuildSimProjectionInput): BuildSimProjection => {
   const { attributes, position, caps, height, weightLbs, leagueLevel = LeagueLevel.MIDDLE_SCHOOL } = input;
   const classification = classifyBuilderBuild(attributes, position);
-  const badges = resolveBuilderBadges({ attributes, caps, classification });
+  const badges = input.badgesEnabled === false ? [] : resolveBuilderBadges({ attributes, caps, classification });
   const roleTendencies = derivePlayerRoleTendencies({
     attributes,
     position,
@@ -181,18 +207,33 @@ export const buildSimProjection = (input: BuildSimProjectionInput): BuildSimProj
     weightLbs,
     badges,
     leagueLevel,
+    archetypeProfile: input.archetypeProfile,
   });
   const tendencies = toTendencyLabels(roleTendencies);
   const shotProfile = toShotProfile(roleTendencies);
 
+  const selectedRole = input.archetypeProfile?.roleLabelByPosition?.[position] ?? input.archetypeProfile?.defaultRoleLabel;
+  const role =
+    input.archetypeProfile && !attributesMatchProfile(attributes, position, input.archetypeProfile)
+      ? getProjectedRole(classification, tendencies)
+      : selectedRole ?? getProjectedRole(classification, tendencies);
+  const archetype = input.archetypeProfile?.label ?? classification.legacyArchetype;
+
   return {
     classification,
-    projectedRole: getProjectedRole(classification, tendencies),
-    identityNote: getIdentityNote(classification),
+    archetype,
+    role,
+    projectedRole: role,
+    identityNote: input.archetypeProfile
+      ? `Current ${leagueLevel.toLowerCase().replace("_", " ")} role reflects your attributes and selected archetype.`
+      : getIdentityNote(classification),
+    strengths: input.archetypeProfile?.strengths ?? [],
+    weaknesses: input.archetypeProfile?.weaknesses ?? [],
+    developmentPath: input.archetypeProfile?.tradeoffNote ?? "Training can shift your current role as attributes change.",
     tendencies,
     shotProfile,
     badges,
-    badgeWatch: buildBadgeWatch(attributes, classification, caps, badges),
+    badgeWatch: input.badgesEnabled === false ? [] : buildBadgeWatch(attributes, classification, caps, badges),
     explanations: [
       `Current ${leagueLevel.toLowerCase().replace("_", " ")} role tendencies project three volume to ${shotProfile.three}%.`,
       `Handle, vision, and passing drive touches, creation, ball security, and assist chances.`,

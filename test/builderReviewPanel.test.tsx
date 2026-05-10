@@ -39,7 +39,7 @@ describe("BuilderReviewSection projection panel", () => {
     const projection = buildSimProjection({ attributes: makeAttributes(), position: "PG", caps: makeAttributes() });
     const screen = render(<BuilderReviewSection summary={makeSummary(projection)} projection={projection} variant="slate" />);
 
-    expect(screen.getByText("Projected Sim Identity")).toBeTruthy();
+    expect(screen.getByText("Current-Level Sim Projection")).toBeTruthy();
     expect(screen.getByText("Balanced Guard")).toBeTruthy();
     expect(screen.getByText("No standout strengths yet. Raise 2-3 core attributes to define your playstyle.")).toBeTruthy();
     expect(screen.getByText("Expected Sim Tendencies")).toBeTruthy();
@@ -54,5 +54,21 @@ describe("BuilderReviewSection projection panel", () => {
     expect(screen.getByText("Badge Watch")).toBeTruthy();
     expect(screen.getByText(/Deep Range/)).toBeTruthy();
     expect(screen.getByText("Three")).toBeTruthy();
+  });
+
+  it("hides badge watch when badges are gated off", () => {
+    const attributes = makeAttributes({ threePoint: 78, midrange: 72, vision: 68 });
+    const projection = buildSimProjection({ attributes, position: "SG", caps: makeAttributes({ threePoint: 99, midrange: 99, vision: 99 }) });
+    const screen = render(
+      <BuilderReviewSection
+        summary={makeSummary(projection)}
+        projection={projection}
+        variant="slate"
+        showBadges={false}
+      />,
+    );
+
+    expect(screen.queryByText("Badge Watch")).toBeNull();
+    expect(screen.queryByText(/Deep Range/)).toBeNull();
   });
 });

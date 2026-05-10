@@ -23,10 +23,31 @@ export interface BuildPreset {
   id: BuildPresetId;
   label: string;
   position: Position;
+  validPositions?: Position[];
   description: string;
+  defaultRoleLabel?: string;
+  roleLabelByPosition?: Partial<Record<Position, string>>;
   strengths: string[];
   weaknesses: string[];
   attributes: PlayerAttributes;
+  startingAttributesByPosition?: Partial<Record<Position, PlayerAttributes>>;
+  growthWeights?: Partial<Record<keyof PlayerAttributes, number>>;
+  roleTendencies?: {
+    touchWeight: number;
+    shotCreationWeight: number;
+    offBallShotWeight: number;
+    passCreationWeight: number;
+    threeVolumeWeight: number;
+    rimPressureWeight: number;
+    midrangeWeight: number;
+    reboundWeight: number;
+    offensiveReboundWeight: number;
+    defensiveReboundWeight: number;
+    stealWeight: number;
+    blockWeight: number;
+    contestWeight: number;
+    fatigueLoadWeight: number;
+  };
   intendedTendencies: {
     touches: BuildTendencyIntent;
     rimAttempts: BuildTendencyIntent;
@@ -41,6 +62,15 @@ export interface BuildPreset {
   tradeoffNote?: string;
 }
 
+export type ArchetypeProfile = BuildPreset & {
+  defaultRoleLabel: string;
+  validPositions: Position[];
+  startingAttributesByPosition: Partial<Record<Position, PlayerAttributes>>;
+};
+
+const growth = (weights: Partial<Record<keyof PlayerAttributes, number>>) => weights;
+const role = (roleTendencies: NonNullable<BuildPreset["roleTendencies"]>) => roleTendencies;
+
 const attrs = (attributes: PlayerAttributes): PlayerAttributes => attributes;
 
 export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]> = {
@@ -53,7 +83,7 @@ export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]>
       strengths: ["Handle", "Passing", "Vision", "Stamina", "Ball security"],
       weaknesses: ["Rebounding", "Strength", "Interior defense", "Shooting efficiency needs investment"],
       attributes: attrs({
-        shortRange: 66, dunking: 50, midrange: 68, threePoint: 70, handle: 84, passing: 82, vision: 80,
+        shortRange: 66, dunking: 50, midrange: 68, threePoint: 70, handle: 84, passing: 90, vision: 90,
         perimeterDefense: 66, interiorDefense: 46, stealing: 64, blocking: 38, offRebounding: 40, defRebounding: 48,
         speed: 78, strength: 52, stamina: 82,
       }),
@@ -72,7 +102,7 @@ export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]>
       strengths: ["Three point", "Midrange", "Handle", "Stamina"],
       weaknesses: ["Lower assist rate", "Average rim pressure", "Defense depends on investment"],
       attributes: attrs({
-        shortRange: 62, dunking: 46, midrange: 80, threePoint: 84, handle: 78, passing: 64, vision: 66,
+        shortRange: 62, dunking: 46, midrange: 80, threePoint: 84, handle: 78, passing: 58, vision: 60,
         perimeterDefense: 60, interiorDefense: 44, stealing: 58, blocking: 36, offRebounding: 38, defRebounding: 46,
         speed: 74, strength: 50, stamina: 78,
       }),
@@ -340,5 +370,95 @@ export const BUILD_PRESETS_BY_POSITION: Record<Position, readonly BuildPreset[]>
     },
   ],
 };
+
+const ROLE_LABEL_BY_PRESET_ID: Record<BuildPresetId, string> = {
+  pg_primary_creator: "Lead creator",
+  pg_shotmaking_guard: "Pull-up scorer",
+  pg_rim_pressure_guard: "Downhill attacker",
+  sg_movement_shooter: "Off-ball scorer",
+  sg_slashing_scorer: "Rim-pressure scorer",
+  sg_point_of_attack_defender: "Point-of-attack stopper",
+  sf_two_way_wing: "Versatile wing",
+  sf_scoring_wing: "Scoring wing",
+  sf_point_forward: "Frontcourt creator",
+  pf_stretch_four: "Stretch forward",
+  pf_athletic_finisher: "Athletic finisher",
+  pf_glass_defender: "Glass cleaner",
+  c_paint_beast: "Interior finisher",
+  c_rim_protector: "Defensive anchor",
+  c_stretch_big: "Stretch big",
+};
+
+const ARCHETYPE_LABEL_BY_PRESET_ID: Record<BuildPresetId, string> = {
+  pg_primary_creator: "Playmaker",
+  pg_shotmaking_guard: "Sharpshooter",
+  pg_rim_pressure_guard: "Slasher",
+  sg_movement_shooter: "Sharpshooter",
+  sg_slashing_scorer: "Slasher",
+  sg_point_of_attack_defender: "Lockdown Defender",
+  sf_two_way_wing: "Swingman",
+  sf_scoring_wing: "Sharpshooter",
+  sf_point_forward: "Point Forward",
+  pf_stretch_four: "Stretch Forward",
+  pf_athletic_finisher: "Slasher",
+  pf_glass_defender: "Rebounder",
+  c_paint_beast: "Paint Beast",
+  c_rim_protector: "Rim Protector",
+  c_stretch_big: "Stretch Big",
+};
+
+const GROWTH_WEIGHTS_BY_LABEL: Record<string, Partial<Record<keyof PlayerAttributes, number>>> = {
+  Playmaker: growth({ handle: 1.2, passing: 1.25, vision: 1.2, stamina: 0.8 }),
+  Sharpshooter: growth({ threePoint: 1.3, midrange: 1.05, stamina: 0.85, vision: 0.55 }),
+  Slasher: growth({ shortRange: 1.1, dunking: 1.25, speed: 1.15, handle: 0.75, stamina: 0.75 }),
+  "Lockdown Defender": growth({ perimeterDefense: 1.25, stealing: 1.1, stamina: 0.95, speed: 0.8 }),
+  Swingman: growth({ perimeterDefense: 0.9, shortRange: 0.85, threePoint: 0.85, speed: 0.75 }),
+  "Point Forward": growth({ passing: 1.2, vision: 1.2, handle: 1, strength: 0.65 }),
+  "Stretch Forward": growth({ threePoint: 1.2, midrange: 1, defRebounding: 0.65, stamina: 0.75 }),
+  Rebounder: growth({ offRebounding: 1.25, defRebounding: 1.3, strength: 1, interiorDefense: 0.75 }),
+  "Post Scorer": growth({ shortRange: 1.25, strength: 1, dunking: 0.8, passing: 0.45 }),
+  "Rim Protector": growth({ blocking: 1.3, interiorDefense: 1.25, defRebounding: 0.9, strength: 0.8 }),
+  "Paint Beast": growth({ shortRange: 1.15, dunking: 1.15, offRebounding: 1, strength: 1.05 }),
+  "Stretch Big": growth({ threePoint: 1.2, midrange: 1, defRebounding: 0.65, blocking: 0.55 }),
+};
+
+const ROLE_TENDENCIES_BY_LABEL: Record<string, NonNullable<BuildPreset["roleTendencies"]>> = {
+  Playmaker: role({ touchWeight: 0.84, shotCreationWeight: 0.64, offBallShotWeight: 0.42, passCreationWeight: 0.9, threeVolumeWeight: 0.48, rimPressureWeight: 0.52, midrangeWeight: 0.46, reboundWeight: 0.18, offensiveReboundWeight: 0.12, defensiveReboundWeight: 0.22, stealWeight: 0.44, blockWeight: 0.12, contestWeight: 0.42, fatigueLoadWeight: 0.58 }),
+  Sharpshooter: role({ touchWeight: 0.56, shotCreationWeight: 0.52, offBallShotWeight: 0.9, passCreationWeight: 0.38, threeVolumeWeight: 0.92, rimPressureWeight: 0.22, midrangeWeight: 0.72, reboundWeight: 0.28, offensiveReboundWeight: 0.18, defensiveReboundWeight: 0.28, stealWeight: 0.28, blockWeight: 0.18, contestWeight: 0.34, fatigueLoadWeight: 0.5 }),
+  Slasher: role({ touchWeight: 0.66, shotCreationWeight: 0.66, offBallShotWeight: 0.42, passCreationWeight: 0.36, threeVolumeWeight: 0.22, rimPressureWeight: 0.9, midrangeWeight: 0.32, reboundWeight: 0.42, offensiveReboundWeight: 0.42, defensiveReboundWeight: 0.38, stealWeight: 0.38, blockWeight: 0.34, contestWeight: 0.42, fatigueLoadWeight: 0.8 }),
+  "Lockdown Defender": role({ touchWeight: 0.38, shotCreationWeight: 0.28, offBallShotWeight: 0.38, passCreationWeight: 0.32, threeVolumeWeight: 0.36, rimPressureWeight: 0.42, midrangeWeight: 0.3, reboundWeight: 0.36, offensiveReboundWeight: 0.28, defensiveReboundWeight: 0.42, stealWeight: 0.9, blockWeight: 0.62, contestWeight: 0.92, fatigueLoadWeight: 0.58 }),
+  Swingman: role({ touchWeight: 0.58, shotCreationWeight: 0.58, offBallShotWeight: 0.58, passCreationWeight: 0.42, threeVolumeWeight: 0.55, rimPressureWeight: 0.58, midrangeWeight: 0.5, reboundWeight: 0.5, offensiveReboundWeight: 0.42, defensiveReboundWeight: 0.52, stealWeight: 0.5, blockWeight: 0.45, contestWeight: 0.56, fatigueLoadWeight: 0.52 }),
+  "Point Forward": role({ touchWeight: 0.78, shotCreationWeight: 0.58, offBallShotWeight: 0.42, passCreationWeight: 0.86, threeVolumeWeight: 0.36, rimPressureWeight: 0.48, midrangeWeight: 0.42, reboundWeight: 0.5, offensiveReboundWeight: 0.38, defensiveReboundWeight: 0.55, stealWeight: 0.42, blockWeight: 0.38, contestWeight: 0.48, fatigueLoadWeight: 0.66 }),
+  Rebounder: role({ touchWeight: 0.28, shotCreationWeight: 0.22, offBallShotWeight: 0.24, passCreationWeight: 0.24, threeVolumeWeight: 0.12, rimPressureWeight: 0.48, midrangeWeight: 0.18, reboundWeight: 0.94, offensiveReboundWeight: 0.92, defensiveReboundWeight: 0.96, stealWeight: 0.36, blockWeight: 0.62, contestWeight: 0.72, fatigueLoadWeight: 0.46 }),
+  "Rim Protector": role({ touchWeight: 0.24, shotCreationWeight: 0.2, offBallShotWeight: 0.18, passCreationWeight: 0.24, threeVolumeWeight: 0.1, rimPressureWeight: 0.44, midrangeWeight: 0.16, reboundWeight: 0.82, offensiveReboundWeight: 0.62, defensiveReboundWeight: 0.88, stealWeight: 0.36, blockWeight: 0.96, contestWeight: 0.94, fatigueLoadWeight: 0.48 }),
+  "Paint Beast": role({ touchWeight: 0.48, shotCreationWeight: 0.36, offBallShotWeight: 0.22, passCreationWeight: 0.22, threeVolumeWeight: 0.06, rimPressureWeight: 0.9, midrangeWeight: 0.12, reboundWeight: 0.86, offensiveReboundWeight: 0.86, defensiveReboundWeight: 0.82, stealWeight: 0.28, blockWeight: 0.72, contestWeight: 0.76, fatigueLoadWeight: 0.62 }),
+  "Stretch Big": role({ touchWeight: 0.46, shotCreationWeight: 0.36, offBallShotWeight: 0.76, passCreationWeight: 0.36, threeVolumeWeight: 0.86, rimPressureWeight: 0.2, midrangeWeight: 0.72, reboundWeight: 0.52, offensiveReboundWeight: 0.36, defensiveReboundWeight: 0.58, stealWeight: 0.22, blockWeight: 0.38, contestWeight: 0.48, fatigueLoadWeight: 0.44 }),
+  "Stretch Forward": role({ touchWeight: 0.5, shotCreationWeight: 0.38, offBallShotWeight: 0.82, passCreationWeight: 0.38, threeVolumeWeight: 0.88, rimPressureWeight: 0.24, midrangeWeight: 0.72, reboundWeight: 0.46, offensiveReboundWeight: 0.32, defensiveReboundWeight: 0.5, stealWeight: 0.28, blockWeight: 0.34, contestWeight: 0.44, fatigueLoadWeight: 0.46 }),
+  "Post Scorer": role({ touchWeight: 0.56, shotCreationWeight: 0.44, offBallShotWeight: 0.2, passCreationWeight: 0.26, threeVolumeWeight: 0.08, rimPressureWeight: 0.82, midrangeWeight: 0.34, reboundWeight: 0.68, offensiveReboundWeight: 0.66, defensiveReboundWeight: 0.66, stealWeight: 0.24, blockWeight: 0.54, contestWeight: 0.6, fatigueLoadWeight: 0.58 }),
+};
+
+const toArchetypeProfile = (preset: BuildPreset): ArchetypeProfile => ({
+  ...preset,
+  label: ARCHETYPE_LABEL_BY_PRESET_ID[preset.id],
+  validPositions: [preset.position],
+  defaultRoleLabel: ROLE_LABEL_BY_PRESET_ID[preset.id],
+  roleLabelByPosition: { [preset.position]: ROLE_LABEL_BY_PRESET_ID[preset.id] },
+  startingAttributesByPosition: { [preset.position]: preset.attributes },
+  growthWeights: GROWTH_WEIGHTS_BY_LABEL[ARCHETYPE_LABEL_BY_PRESET_ID[preset.id]] ?? {},
+  roleTendencies: ROLE_TENDENCIES_BY_LABEL[ARCHETYPE_LABEL_BY_PRESET_ID[preset.id]] ?? ROLE_TENDENCIES_BY_LABEL.Swingman,
+});
+
+export const ARCHETYPE_PROFILES_BY_POSITION: Record<Position, readonly ArchetypeProfile[]> = {
+  PG: BUILD_PRESETS_BY_POSITION.PG.map(toArchetypeProfile),
+  SG: BUILD_PRESETS_BY_POSITION.SG.map(toArchetypeProfile),
+  SF: BUILD_PRESETS_BY_POSITION.SF.map(toArchetypeProfile),
+  PF: BUILD_PRESETS_BY_POSITION.PF.map(toArchetypeProfile),
+  C: BUILD_PRESETS_BY_POSITION.C.map(toArchetypeProfile),
+};
+
+export const getDefaultArchetypeProfile = (position: Position): ArchetypeProfile => ARCHETYPE_PROFILES_BY_POSITION[position][0];
+
+export const getArchetypeProfileById = (position: Position, id: string): ArchetypeProfile =>
+  ARCHETYPE_PROFILES_BY_POSITION[position].find((profile) => profile.id === id) ?? getDefaultArchetypeProfile(position);
 
 export const getDefaultBuildPreset = (position: Position): BuildPreset => BUILD_PRESETS_BY_POSITION[position][0];

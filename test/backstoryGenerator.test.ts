@@ -1,4 +1,26 @@
-import { generateBackstoryFromInput } from "../src/features/backstory/generator";
+import { generateBackstoryFromBuildInput, generateBackstoryFromInput } from "../src/features/backstory/generator";
+import type { BuildBackstoryInput } from "../src/types/backstory";
+import type { PlayerAttributes } from "../src/types/player";
+
+const makeBuildAttributes = (overrides: Partial<PlayerAttributes> = {}): PlayerAttributes => ({
+  shortRange: 60,
+  dunking: 60,
+  midrange: 60,
+  threePoint: 60,
+  handle: 60,
+  passing: 60,
+  vision: 60,
+  perimeterDefense: 60,
+  interiorDefense: 60,
+  stealing: 60,
+  blocking: 60,
+  offRebounding: 60,
+  defRebounding: 60,
+  speed: 60,
+  strength: 60,
+  stamina: 60,
+  ...overrides,
+});
 
 describe("Backstory generator", () => {
   const baseInput = {
@@ -109,5 +131,42 @@ describe("Backstory generator", () => {
     expect(firstTier.length).toBeGreaterThan(0);
     expect(secondTier.length).toBeGreaterThan(0);
     expect(firstTier).not.toBe(secondTier);
+  });
+
+  it("applies age started offsets to build-input starting attributes without mutating the base build", () => {
+    const buildAttributes = makeBuildAttributes();
+    const originalBuildAttributes = { ...buildAttributes };
+    const baseBuildInput: BuildBackstoryInput = {
+      firstName: "Builder",
+      lastName: "Age",
+      stateCode: "TX",
+      citySlug: "houston-tx",
+      ageStarted: 8,
+      bodyFrame: "Athletic",
+      dominantHand: "Right",
+      primaryPosition: "PG",
+      secondaryPosition: "SG",
+      height: { feet: 6, inches: 2 },
+      weightLbs: 185,
+      buildAttributes,
+      archetypeId: "test-profile",
+      archetypeLabel: "Test Profile",
+      roleLabel: "Test Role",
+    };
+
+    const early = generateBackstoryFromBuildInput({ ...baseBuildInput, ageStarted: 5 }, { seedOverride: 20260503 });
+    const standard = generateBackstoryFromBuildInput(baseBuildInput, { seedOverride: 20260503 });
+    const late = generateBackstoryFromBuildInput({ ...baseBuildInput, ageStarted: 12 }, { seedOverride: 20260503 });
+
+    expect(early.startingAttributes.handle).toBeGreaterThan(standard.startingAttributes.handle);
+    expect(late.startingAttributes.handle).toBeLessThan(standard.startingAttributes.handle);
+    expect(buildAttributes).toEqual(originalBuildAttributes);
+
+    const keys = Object.keys(early.startingAttributes) as Array<keyof PlayerAttributes>;
+    for (const generated of [early, standard, late]) {
+      for (const key of keys) {
+        expect(generated.startingAttributes[key]).toBeLessThanOrEqual(generated.dna.caps[key]);
+      }
+    }
   });
 });

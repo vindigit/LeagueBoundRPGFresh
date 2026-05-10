@@ -48,6 +48,7 @@ import {
   LeagueLevel,
   type CareerActions,
   type CareerState,
+  type CourtFuelEconomyState,
   type ExileStatus,
   type WeeklyActionDefinitionId,
   type WeeklyActionEntry,
@@ -93,6 +94,9 @@ const clampMeter = (value: number): number => Math.min(100, Math.max(0, Math.rou
 const clampRecentRatingTrend = (value: number): number => Math.min(3, Math.max(-3, Math.round(value)));
 
 const isAcademicPhase = (leagueLevel: LeagueLevel): boolean => leagueLevel !== LeagueLevel.PRO;
+const COURTFUEL_WEEKLY_MULTIPLIER_STEP = 0.35;
+const COURTFUEL_SEASON_MULTIPLIER_STEP = 0.04;
+const COURTFUEL_SEASON_MULTIPLIER_CAP = 0.6;
 
 const isAcademicallyEligible = (gpa: number, leagueLevel: LeagueLevel): boolean =>
   !isAcademicPhase(leagueLevel) || clampGpa(gpa) >= 2;
@@ -402,6 +406,59 @@ const createDefaultFinanceState = (): FinanceState => ({
   lastNilWeek: undefined,
   lastUpdatedAt: Date.now(),
 });
+
+const createDefaultCourtFuelEconomyState = (): CourtFuelEconomyState => ({
+  weeklyBought: 0,
+  seasonBought: 0,
+  lastPurchaseWeek: null,
+  lastPurchaseSeason: null,
+});
+
+const getCourtFuelBasePrice = (leagueLevel: LeagueLevel): number => {
+  switch (leagueLevel) {
+    case LeagueLevel.COLLEGE:
+      return 12;
+    case LeagueLevel.PRO:
+      return 20;
+    case LeagueLevel.HIGH_SCHOOL:
+    case LeagueLevel.MIDDLE_SCHOOL:
+    default:
+      return 6;
+  }
+};
+
+const syncCourtFuelEconomyWindow = (
+  economy: CourtFuelEconomyState,
+  currentWeek: number,
+  seasonNumber: number,
+): CourtFuelEconomyState => ({
+  weeklyBought: economy.lastPurchaseWeek === currentWeek ? economy.weeklyBought : 0,
+  seasonBought: economy.lastPurchaseSeason === seasonNumber ? economy.seasonBought : 0,
+  lastPurchaseWeek: economy.lastPurchaseWeek,
+  lastPurchaseSeason: economy.lastPurchaseSeason,
+});
+
+const getCourtFuelPriceForState = (
+  state: Pick<CareerState, "leagueLevel" | "courtFuelEconomy" | "currentWeek" | "seasonNumber">,
+): number => {
+  const basePrice = getCourtFuelBasePrice(state.leagueLevel);
+  const economy = syncCourtFuelEconomyWindow(state.courtFuelEconomy, state.currentWeek, state.seasonNumber);
+  const weeklyDemandMultiplier = 1 + COURTFUEL_WEEKLY_MULTIPLIER_STEP * economy.weeklyBought;
+  const seasonPressureMultiplier = 1 + Math.min(COURTFUEL_SEASON_MULTIPLIER_CAP, COURTFUEL_SEASON_MULTIPLIER_STEP * economy.seasonBought);
+  return Math.round(basePrice * weeklyDemandMultiplier * seasonPressureMultiplier);
+};
+
+const consumeCourtFuelEconomy = (
+  state: Pick<CareerState, "courtFuelEconomy" | "currentWeek" | "seasonNumber">,
+): CourtFuelEconomyState => {
+  const economy = syncCourtFuelEconomyWindow(state.courtFuelEconomy, state.currentWeek, state.seasonNumber);
+  return {
+    weeklyBought: economy.weeklyBought + 1,
+    seasonBought: economy.seasonBought + 1,
+    lastPurchaseWeek: state.currentWeek,
+    lastPurchaseSeason: state.seasonNumber,
+  };
+};
 
 const createDefaultCareerMeterState = () => ({
   coachTrust: 50,
@@ -835,23 +892,26 @@ const buildTournamentPathSeedBonus = (
 const hasTakenWeeklyAction = (weeklyActionState: WeeklyActionState, actionId: WeeklyActionDefinitionId): boolean =>
   weeklyActionState.actionsTaken.some((action) => action.id === actionId);
 
+const isRepeatableWeeklyAction = (actionId: WeeklyActionDefinitionId): boolean => actionId === "COURTFUEL";
+
 const canAffordWeeklyAction = (
-  state: Pick<CareerState, "player" | "leagueLevel">,
+  state: Pick<CareerState, "player" | "leagueLevel" | "courtFuelEconomy" | "currentWeek" | "seasonNumber">,
   actionId: WeeklyActionDefinitionId,
 ): boolean => {
   const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel: state.leagueLevel });
-  return state.player.bankBalance + (entry.moneyDelta ?? 0) >= 0;
+  const moneyDelta = actionId === "COURTFUEL" ? -getCourtFuelPriceForState(state) : (entry.moneyDelta ?? 0);
+  return state.player.bankBalance + moneyDelta >= 0;
 };
 
 const canTakeWeeklyAction = (
-  state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel">,
+  state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel" | "courtFuelEconomy" | "currentWeek" | "seasonNumber">,
   actionId: WeeklyActionDefinitionId,
 ): boolean =>
   !state.weeklyActionState.postgamePending &&
   !state.weeklyActionState.matchUnlocked &&
   state.weeklyActionState.slotsRemaining > 0 &&
   state.weeklyActionState.availableActionIds.includes(actionId) &&
-  !hasTakenWeeklyAction(state.weeklyActionState, actionId) &&
+  (isRepeatableWeeklyAction(actionId) || !hasTakenWeeklyAction(state.weeklyActionState, actionId)) &&
   canAffordWeeklyAction(state, actionId);
 
 const canStartNarrative = (state: Pick<CareerState, "weeklyActionState">): boolean =>
@@ -918,6 +978,7 @@ const buildWeeklyActionResult = (entry: WeeklyActionEntry): WeeklyActionResult =
     gpaDelta: entry.gpaDelta,
     moneyDelta: entry.moneyDelta,
     scoutVisibilityDelta: entry.scoutVisibilityDelta,
+    courtFuelPrice: entry.id === "COURTFUEL" ? Math.abs(entry.moneyDelta ?? 0) : undefined,
   };
 };
 
@@ -932,6 +993,7 @@ const applyWeeklyActionToState = (state: CareerState, entry: WeeklyActionEntry):
     scoutVisibility: clampVisibility(state.scoutVisibility + (entry.scoutVisibilityDelta ?? 0)),
     gpa: clampGpa(state.gpa + (entry.gpaDelta ?? 0)),
     wearTear: entry.id === "REST_RECOVERY" ? Math.max(0, state.wearTear - 8) : state.wearTear,
+    courtFuelEconomy: entry.id === "COURTFUEL" ? consumeCourtFuelEconomy(state) : state.courtFuelEconomy,
     weeklyActionState: {
       ...state.weeklyActionState,
       slotsRemaining: Math.max(0, state.weeklyActionState.slotsRemaining - 1),
@@ -1117,6 +1179,7 @@ const initialCareerState: CareerState = {
   wearTear: 0,
   financeState: createDefaultFinanceState(),
   financeLedger: [],
+  courtFuelEconomy: createDefaultCourtFuelEconomyState(),
   legacyPerks: [],
   isGoatPath: false,
   view: getInitialCareerView(),
@@ -1463,6 +1526,7 @@ export const useCareerStore = create<CareerStore>()(
       recordFinanceTransaction: (input) => {
         set((state) => buildFinanceTransactionState(state, input) ?? state);
       },
+      getCourtFuelPrice: () => getCourtFuelPriceForState(get()),
       updateBankBalance: (amount) => {
         const transaction = buildFinanceTransactionFromDelta(amount, {
           category: "misc",
@@ -1503,6 +1567,13 @@ export const useCareerStore = create<CareerStore>()(
             currentYear: nextState.currentYear,
             seasonNumber: nextState.seasonNumber,
             seasonSchedule: nextState.seasonSchedule,
+            courtFuelEconomy:
+              nextState.seasonNumber !== state.seasonNumber
+                ? createDefaultCourtFuelEconomyState()
+                : {
+                    ...state.courtFuelEconomy,
+                    weeklyBought: 0,
+                  },
             ...nextHealthState,
           };
         });
@@ -1517,6 +1588,7 @@ export const useCareerStore = create<CareerStore>()(
             state.careerPhase,
             1,
           ),
+          courtFuelEconomy: createDefaultCourtFuelEconomyState(),
         }));
       },
       updateLeagueLevel: (level) => {
@@ -1657,6 +1729,7 @@ export const useCareerStore = create<CareerStore>()(
             ),
             view: "HUB",
             weeklyActionState: createDefaultWeeklyActionState(LeagueLevel.HIGH_SCHOOL),
+            courtFuelEconomy: createDefaultCourtFuelEconomyState(),
           };
         });
       },
@@ -1670,6 +1743,10 @@ export const useCareerStore = create<CareerStore>()(
         set((state) => ({
           weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
           lastWeeklyActionResult: null,
+          courtFuelEconomy: {
+            ...state.courtFuelEconomy,
+            weeklyBought: 0,
+          },
         }));
       },
       dismissWeeklyActionResult: () => {
@@ -1694,7 +1771,14 @@ export const useCareerStore = create<CareerStore>()(
           }
 
           const entry = definition.buildEntry({ leagueLevel: state.leagueLevel });
-          return applyWeeklyActionToState(state, entry);
+          const resolvedEntry =
+            actionId === "COURTFUEL"
+              ? {
+                  ...entry,
+                  moneyDelta: -getCourtFuelPriceForState(state),
+                }
+              : entry;
+          return applyWeeklyActionToState(state, resolvedEntry);
         });
       },
       unlockMatchIfReady: () => {
@@ -1734,8 +1818,15 @@ export const useCareerStore = create<CareerStore>()(
           }
 
           const entry = getWeeklyActionDefinition(pendingActionId).buildEntry({ leagueLevel: state.leagueLevel });
+          const resolvedEntry =
+            pendingActionId === "COURTFUEL"
+              ? {
+                  ...entry,
+                  moneyDelta: -getCourtFuelPriceForState(state),
+                }
+              : entry;
           return {
-            ...applyWeeklyActionToState(state, entry),
+            ...applyWeeklyActionToState(state, resolvedEntry),
             view: "HUB",
             currentNarrativeFile: "",
           };
@@ -1984,6 +2075,13 @@ export const useCareerStore = create<CareerStore>()(
             },
             financeState: financeUpdate?.financeState ?? state.financeState,
             financeLedger: financeUpdate?.financeLedger ?? state.financeLedger,
+            courtFuelEconomy:
+              nextState.seasonNumber !== state.seasonNumber
+                ? createDefaultCourtFuelEconomyState()
+                : {
+                    ...state.courtFuelEconomy,
+                    weeklyBought: 0,
+                  },
             lastMatchResult: null,
             lastWeeklyActionResult: null,
             newsFeed: tournamentFeed,
@@ -2014,7 +2112,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 18,
+      version: 19,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -2061,6 +2159,7 @@ export const useCareerStore = create<CareerStore>()(
             weeklyActionState: createDefaultWeeklyActionState(fallbackLeagueLevel),
             pendingSchoolPathSelection: false,
             financeLedger: [],
+            courtFuelEconomy: createDefaultCourtFuelEconomyState(),
             ovrBudget: typedState.ovrBudget ?? 60,
             ...progressionState,
           };
@@ -2170,6 +2269,7 @@ export const useCareerStore = create<CareerStore>()(
           wearTear: migratedWearTear,
           financeState: typedState.financeState ?? progressionState.financeState,
           financeLedger: typedState.financeLedger ?? [],
+          courtFuelEconomy: typedState.courtFuelEconomy ?? createDefaultCourtFuelEconomyState(),
           legacyPerks: typedState.legacyPerks ?? progressionState.legacyPerks,
           ovrBudget: typedState.ovrBudget ?? 60,
           exileState: existingExileState,
@@ -2208,6 +2308,7 @@ export const useCareerStore = create<CareerStore>()(
         wearTear: state.wearTear,
         financeState: state.financeState,
         financeLedger: state.financeLedger,
+        courtFuelEconomy: state.courtFuelEconomy,
         legacyPerks: state.legacyPerks,
         isGoatPath: state.isGoatPath,
         view: state.view,

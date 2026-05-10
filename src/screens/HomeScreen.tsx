@@ -58,8 +58,13 @@ const getInterestStrengthLabel = (interestLevel: number): string => {
   return "Warm";
 };
 
-const formatActionPreview = (actionId: WeeklyActionDefinitionId, leagueLevel: LeagueLevel): string => {
+const formatActionPreview = (
+  actionId: WeeklyActionDefinitionId,
+  leagueLevel: LeagueLevel,
+  courtFuelPrice: number,
+): string => {
   const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel });
+  const resolvedMoneyDelta = actionId === "COURTFUEL" ? -courtFuelPrice : entry.moneyDelta;
   const parts = [
     entry.energyDelta !== 0 ? `Energy ${entry.energyDelta > 0 ? "+" : ""}${entry.energyDelta}` : null,
     entry.conditionDelta !== 0 ? `Condition ${entry.conditionDelta > 0 ? "+" : ""}${entry.conditionDelta}` : null,
@@ -67,7 +72,7 @@ const formatActionPreview = (actionId: WeeklyActionDefinitionId, leagueLevel: Le
     entry.coachTrustDelta ? `Trust +${entry.coachTrustDelta}` : null,
     entry.fansDelta ? `Fans +${entry.fansDelta}` : null,
     entry.teammatesDelta ? `Team +${entry.teammatesDelta}` : null,
-    entry.moneyDelta ? `$${Math.abs(entry.moneyDelta)}` : null,
+    resolvedMoneyDelta ? `$${Math.abs(resolvedMoneyDelta)}` : null,
   ].filter(Boolean);
 
   return parts.join(" | ");
@@ -141,6 +146,7 @@ export function HomeScreen() {
   const weeklyActionState = useCareerStore((state) => state.weeklyActionState);
   const middleSchoolTournament = useCareerStore((state) => state.middleSchoolTournament);
   const lastWeeklyActionResult = useCareerStore((state) => state.lastWeeklyActionResult);
+  const courtFuelPrice = useCareerStore((state) => state.getCourtFuelPrice());
   const openStoryDetail = useCareerStore((state) => state.openStoryDetail);
   const takeWeeklyAction = useCareerStore((state) => state.takeWeeklyAction);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
@@ -164,6 +170,7 @@ export function HomeScreen() {
         ? "Action plan complete. Match unlocked."
         : `${weeklyActionState.slotsRemaining} of ${weeklyActionState.slotsTotal} weekly actions remaining.`;
   const visibleActionIds = weeklyActionState.availableActionIds.filter((actionId) =>
+    actionId === "COURTFUEL" ||
     weeklyActionState.optionalNarrativeActionId === actionId ||
     !weeklyActionState.actionsTaken.some((action) => action.id === actionId),
   );
@@ -434,9 +441,10 @@ export function HomeScreen() {
             <View className="mt-4 gap-3">
               {visibleActionIds.map((actionId) => {
                 const definition = getWeeklyActionDefinition(actionId);
-                const isTaken = weeklyActionState.actionsTaken.some((action) => action.id === actionId);
+                const isTaken = actionId === "COURTFUEL" ? false : weeklyActionState.actionsTaken.some((action) => action.id === actionId);
                 const entry = definition.buildEntry({ leagueLevel });
-                const needsMoney = (entry.moneyDelta ?? 0) < 0 && bankBalance < Math.abs(entry.moneyDelta ?? 0);
+                const resolvedPrice = actionId === "COURTFUEL" ? courtFuelPrice : Math.abs(entry.moneyDelta ?? 0);
+                const needsMoney = resolvedPrice > 0 && bankBalance < resolvedPrice;
                 const disabled =
                   isTaken ||
                   weeklyActionState.postgamePending ||
@@ -464,8 +472,8 @@ export function HomeScreen() {
                       ) : null}
                     </View>
                     <Text className="mt-1 text-sm text-premium-muted">{definition.description}</Text>
-                    <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId, leagueLevel)}</Text>
-                    {needsMoney ? <Text className="mt-2 text-xs font-semibold text-amber-300">Need $25</Text> : null}
+                    <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId, leagueLevel, courtFuelPrice)}</Text>
+                    {needsMoney ? <Text className="mt-2 text-xs font-semibold text-amber-300">Need ${resolvedPrice}</Text> : null}
                   </Pressable>
                 );
               })}

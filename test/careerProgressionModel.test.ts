@@ -30,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(18);
+    expect(version).toBe(19);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -58,6 +58,12 @@ describe("Career progression domain model", () => {
     expect(state.wearTear).toBe(0);
     expect(state.financeState.ledger.nilEarnings).toBe(0);
     expect(state.financeLedger).toEqual([]);
+    expect(state.courtFuelEconomy).toEqual({
+      weeklyBought: 0,
+      seasonBought: 0,
+      lastPurchaseWeek: null,
+      lastPurchaseSeason: null,
+    });
     expect(state.legacyPerks).toEqual([]);
     expect(state.exileState.currentMode).toBe("NONE");
     expect(state.exile).toBeNull();
@@ -156,6 +162,7 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("wearTear");
     expect(partial).toHaveProperty("financeState");
     expect(partial).toHaveProperty("financeLedger");
+    expect(partial).toHaveProperty("courtFuelEconomy");
     expect(partial).toHaveProperty("legacyPerks");
     expect(partial).toHaveProperty("exileState");
     expect(partial).toHaveProperty("weeklyActionState");

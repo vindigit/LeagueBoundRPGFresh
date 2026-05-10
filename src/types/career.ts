@@ -100,6 +100,14 @@ export interface WeeklyActionResult {
   gpaDelta?: number;
   moneyDelta?: number;
   scoutVisibilityDelta?: number;
+  courtFuelPrice?: number;
+}
+
+export interface CourtFuelEconomyState {
+  weeklyBought: number;
+  seasonBought: number;
+  lastPurchaseWeek: number | null;
+  lastPurchaseSeason: number | null;
 }
 
 export interface WeeklyActionState {
@@ -146,6 +154,7 @@ export interface CareerState {
   wearTear: number;
   financeState: FinanceState;
   financeLedger: FinanceLedgerEntry[];
+  courtFuelEconomy: CourtFuelEconomyState;
   legacyPerks: LegacyPerk[];
   isGoatPath: boolean;
   view: CareerView;
@@ -166,6 +175,7 @@ export interface CareerActions {
   applyAttributeGain(attr: keyof PlayerAttributes, amount: number, source?: AttributeGainSource): void;
   updateAttribute(attr: keyof PlayerAttributes, amount: number): void;
   recordFinanceTransaction(input: RecordFinanceTransactionInput): void;
+  getCourtFuelPrice(): number;
   updateBankBalance(amount: number): void;
   adjustGpa(delta: number, source?: "STUDY" | "NARRATIVE" | "SYSTEM"): void;
   advanceWeek(): void;

@@ -248,7 +248,7 @@ describe("Career vertical slice UI", () => {
     });
 
     expect(screen.getByText("CourtFuel")).toBeTruthy();
-    expect(screen.getByText("Need $25")).toBeTruthy();
+    expect(screen.getByText("Need $6")).toBeTruthy();
     fireEvent.press(screen.getByText("CourtFuel"));
     expect(useCareerStore.getState().weeklyActionState.actionsTaken).toHaveLength(0);
 
@@ -264,8 +264,8 @@ describe("Career vertical slice UI", () => {
     fireEvent.press(screen.getByText("CourtFuel"));
 
     expect(screen.getByText("Fuel the run.")).toBeTruthy();
-    expect(screen.getByText("Cost $25")).toBeTruthy();
-    expect(useCareerStore.getState().player.bankBalance).toBe(15);
+    expect(screen.getByText("Cost $6")).toBeTruthy();
+    expect(useCareerStore.getState().player.bankBalance).toBe(34);
     expect(useCareerStore.getState().energy).toBe(100);
     expect(useCareerStore.getState().condition).toBe(100);
     expect(useCareerStore.getState().financeLedger.at(-1)).toMatchObject({
@@ -273,7 +273,9 @@ describe("Career vertical slice UI", () => {
       category: "misc",
       description: "CourtFuel purchase",
       source: "weekly_action",
+      amount: 6,
     });
+    expect(screen.getByText("Energy +18 | Condition +3 | $8")).toBeTruthy();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {

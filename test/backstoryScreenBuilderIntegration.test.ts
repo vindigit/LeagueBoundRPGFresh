@@ -21,6 +21,7 @@ describe("Backstory screen builder integration", () => {
     expect(source).toContain("caps: preview.dna.caps");
     expect(source).toContain("getDefaultSecondaryPosition(primaryPosition)");
     expect(source).toContain("fuzzyScoutingSummary");
+    expect(source).not.toContain("Archetype-adjusted preview");
     expect(source).not.toContain("ARCHETYPE_PROFILES_BY_POSITION");
     expect(source).not.toContain("Basketball Background");
     expect(source).not.toContain("Potential Tier");

@@ -8,10 +8,19 @@ const buildContext = (
   focus: KeyMomentContext["focus"] = "balanced",
   extras: Partial<Pick<KeyMomentContext, "coachTrust" | "staminaRating">> = {},
 ): KeyMomentContext => ({
+  ...(() => {
+    const periodLength = 720;
+    const elapsed = Math.max(0, 2880 - timeRemaining);
+    const quarter = Math.min(4, Math.floor(elapsed / periodLength) + 1) as 1 | 2 | 3 | 4;
+    const elapsedInQuarter = elapsed - (quarter - 1) * periodLength;
+    const periodTimeRemaining = Math.max(0, periodLength - elapsedInQuarter);
+    return {
+      periodKey: `Q${quarter}` as const,
+      quarter,
+      timeRemaining: periodTimeRemaining,
+    };
+  })(),
   id: `ctx-${possessionIndex}`,
-  periodKey: "Q1",
-  quarter: 1,
-  timeRemaining,
   offense: possessionIndex % 2 === 0 ? "home" : "away",
   defense: possessionIndex % 2 === 0 ? "away" : "home",
   userTeam: "home",
@@ -26,7 +35,7 @@ const buildContext = (
 });
 
 describe("KeyMomentScheduler", () => {
-  it("keeps whole-match pacing in the 3-7 moment range", () => {
+  it("keeps whole-match pacing within a sane multi-quarter range", () => {
     const run = (workRate: KeyMomentContext["workRate"]): number[] => {
       const scheduler = createKeyMomentScheduler();
       const triggeredAt: number[] = [];
@@ -48,8 +57,31 @@ describe("KeyMomentScheduler", () => {
     };
 
     const normalTriggered = run("normal");
-    expect(normalTriggered.length).toBeGreaterThanOrEqual(3);
-    expect(normalTriggered.length).toBeLessThanOrEqual(7);
+    expect(normalTriggered.length).toBeGreaterThanOrEqual(8);
+    expect(normalTriggered.length).toBeLessThanOrEqual(20);
+  });
+
+  it("does not front-load moments into the first quarter", () => {
+    const scheduler = createKeyMomentScheduler();
+    const byQuarter = [0, 0, 0, 0];
+
+    for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
+      const elapsed = possessionIndex * 10;
+      const timeRemaining = Math.max(0, 2880 - elapsed);
+      const context = buildContext(timeRemaining, possessionIndex, "normal");
+      const response = scheduler.onPossessionBoundary({
+        context,
+        periodTotalSeconds: 720,
+        matchTotalSeconds: 2880,
+      });
+      if (response.trigger) {
+        byQuarter[context.quarter - 1] += 1;
+      }
+    }
+
+    expect(byQuarter[0]).toBeLessThanOrEqual(4);
+    expect(byQuarter[1]).toBeGreaterThanOrEqual(1);
+    expect(byQuarter[2]).toBeGreaterThanOrEqual(1);
   });
 
   it("suppresses opportunities for low trust and low stamina profiles", () => {
@@ -97,7 +129,7 @@ describe("KeyMomentScheduler", () => {
       forceTrigger: true,
     });
 
-    expect(first.trigger).toBe(true);
+    expect(first.trigger).toBe(false);
     expect(cooledDownBlocked.trigger).toBe(false);
     expect(critical.trigger).toBe(true);
   });

@@ -181,7 +181,7 @@ const renderTeamTotals = (label: string, totals: TeamBoxScoreTotals) => (
   <View className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
     <Text className="text-sm font-semibold text-white">{label}</Text>
     <Text className="mt-2 text-xs text-slate-300">
-      PTS {totals.pts} | REB {totals.reb} | AST {totals.ast} | STL {totals.stl} | BLK {totals.blk} | TO {totals.to} | FG {totals.fgm}-{totals.fga}
+      PTS {totals.pts} | REB {totals.reb} | AST {totals.ast} | STL {totals.stl} | BLK {totals.blk} | TO {totals.to} | 3PT {totals.tpm ?? 0}-{totals.tpa ?? 0} | FT {totals.ftm}-{totals.fta} | FG {totals.fgm}-{totals.fga}
     </Text>
   </View>
 );
@@ -204,6 +204,8 @@ const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => 
     <Text className="w-8 text-right text-xs text-slate-300">{player.stl}</Text>
     <Text className="w-8 text-right text-xs text-slate-300">{player.blk}</Text>
     <Text className="w-8 text-right text-xs text-slate-300">{player.to}</Text>
+    <Text className="w-14 text-right text-xs text-slate-300">{player.tpm ?? 0}-{player.tpa ?? 0}</Text>
+    <Text className="w-14 text-right text-xs text-slate-300">{player.ftm}-{player.fta}</Text>
     <Text className="w-14 text-right text-xs text-slate-300">{player.fgm}-{player.fga}</Text>
   </View>
 );
@@ -218,9 +220,24 @@ const renderMomentSummaryCard = (item: MatchMomentSummary) => (
     </View>
     <Text className="mt-2 text-sm font-semibold text-white">{item.promptText}</Text>
     <Text className="mt-2 text-sm text-slate-300">{item.resultText}</Text>
-    <Text className={`mt-3 text-xs font-semibold ${item.ratingDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-      Rating {item.ratingDelta >= 0 ? "+" : ""}{item.ratingDelta.toFixed(1)}
+    <Text className={`mt-3 text-xs font-semibold uppercase tracking-wide ${item.success ? "text-emerald-300" : "text-red-300"}`}>
+      {item.success ? "Success" : "Fail"}
     </Text>
+  </View>
+);
+
+const BoxScoreHeader = () => (
+  <View className="mt-2 flex-row items-center justify-between px-3">
+    <Text className="w-28 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Name</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">PTS</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">REB</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">AST</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">STL</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">BLK</Text>
+    <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">TO</Text>
+    <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">3PT</Text>
+    <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">FT</Text>
+    <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">FG</Text>
   </View>
 );
 
@@ -348,52 +365,25 @@ export function MatchScreen() {
       <View className="flex-1 px-4 pb-4 pt-3">
         {activeTab === "moment" ? (
           <ScrollView contentContainerClassName="gap-3 pb-4">
-            <View className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+            <View className="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
               <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                {momentPhase === "pregame" ? "Moment Mode" : momentPhase === "postgame" ? "Match Complete" : "Live Match"}
+                {momentPhase === "pregame" ? "Moment Mode" : momentPhase === "postgame" ? "Match Complete" : keyMomentPending ? "Moment Live" : "Waiting For Next Moment"}
               </Text>
-              <Text className="mt-2 text-xl font-bold text-white">
-                {momentPhase === "pregame"
-                  ? "Quick context, then your key possessions."
-                  : momentPhase === "postgame"
-                    ? "Your moment run is done."
-                    : keyMomentPending
-                      ? "A player-focused moment is live."
-                      : "The sim is moving between your big moments."}
-              </Text>
-              <Text className="mt-2 text-sm text-slate-300">
-                {momentPhase === "pregame"
-                  ? "Start the game to jump into the New Star Soccer-style flow. The full broadcast log and box score are still available any time."
-                  : latestMomentSummary
-                    ? latestMomentSummary.resultText
-                    : "Stay in Moment Mode to finish the match without watching the full possession log."}
-              </Text>
-              <View className="mt-4 flex-row gap-3">
-                <View className="flex-1 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Moments</Text>
-                  <Text className="mt-1 text-lg font-bold text-white">{momentHistory.length}</Text>
-                </View>
-                <View className="flex-1 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Your Line</Text>
-                  <Text className="mt-1 text-sm font-semibold text-white">
-                    {userLine ? `${userLine.pts} PTS | ${userLine.ast} AST | ${userLine.reb} REB` : "No stats yet"}
-                  </Text>
-                </View>
-              </View>
+              <Text className="mt-1 text-sm font-semibold text-white">{userLine ? `${userLine.pts} PTS | ${userLine.ast} AST | ${userLine.reb} REB` : "No stats yet"}</Text>
             </View>
 
             {keyMomentFeedback && !keyMomentPending ? (
-              <View className="rounded-2xl border border-amber-400/40 bg-slate-900 p-4">
-                <Text className={`text-lg font-bold ${keyMomentFeedback.success ? "text-emerald-300" : "text-red-300"}`}>
-                  {keyMomentFeedback.success ? "Positive swing" : "Missed chance"}
+              <View className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <Text className={`text-xs font-semibold uppercase tracking-wide ${keyMomentFeedback.success ? "text-emerald-300" : "text-red-300"}`}>
+                  {keyMomentFeedback.success ? "Success" : "Fail"}
                 </Text>
                 <Text className="mt-2 text-sm text-white">{keyMomentFeedback.text}</Text>
               </View>
             ) : null}
 
             {momentHistory.length > 0 ? momentHistory.slice().reverse().map(renderMomentSummaryCard) : (
-              <View className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                <Text className="text-sm text-slate-300">Your resolved key moments will stack here as the match unfolds.</Text>
+              <View className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <Text className="text-sm text-slate-300">Your key moments will stack here once the game starts.</Text>
               </View>
             )}
           </ScrollView>
@@ -415,10 +405,12 @@ export function MatchScreen() {
             {renderTeamTotals(AWAY_NAME, matchBoxScore.awayTotals)}
             <View className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <Text className="text-sm font-semibold text-white">Home Players</Text>
+              <BoxScoreHeader />
               {matchBoxScore.homePlayers.map((player) => renderPlayerRow(player, player.id === "home-0"))}
             </View>
             <View className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <Text className="text-sm font-semibold text-white">Away Players</Text>
+              <BoxScoreHeader />
               {matchBoxScore.awayPlayers.map((player) => renderPlayerRow(player, false))}
             </View>
           </ScrollView>

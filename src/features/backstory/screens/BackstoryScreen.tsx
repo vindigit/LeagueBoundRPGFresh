@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Animated, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
+import { Animated, Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
 import {
   BASE_PUBLIC_ATTRIBUTES,
   PUBLIC_ATTRIBUTE_BUDGET,
@@ -40,6 +40,16 @@ const ATTRIBUTE_LABELS: Record<PublicAttributeKey, string> = {
   rebounding: "Rebounding",
   athleticism: "Athleticism",
   stamina: "Stamina",
+};
+
+const ATTRIBUTE_HELP_COPY: Record<PublicAttributeKey, string> = {
+  shooting: "Affects jumpers and shot consistency.",
+  finishing: "Affects layups, dunks, and scoring through contact.",
+  playmaking: "Affects ball handling, passing, and creating looks.",
+  defending: "Affects contests, stops, steals, and blocks.",
+  rebounding: "Affects securing misses on both ends.",
+  athleticism: "Affects burst, movement, and physical tools.",
+  stamina: "Affects fatigue and how long you stay effective.",
 };
 
 const clampFeet = (value: number): number => Math.min(7, Math.max(5, Math.round(value)));
@@ -163,6 +173,7 @@ export function BackstoryScreen() {
   const [dominantHand, setDominantHand] = useState<DominantHand>("Right");
   const [startingArchetypeId, setStartingArchetypeId] = useState<StartingArchetypeId>("all_around");
   const [publicAttributes, setPublicAttributes] = useState<PublicAttributes>(BASE_PUBLIC_ATTRIBUTES);
+  const [activeAttributeHelp, setActiveAttributeHelp] = useState<PublicAttributeKey | null>(null);
   const stepTransition = useRef(new Animated.Value(1)).current;
 
   const setClampedHeight = (nextFeet: number, nextInches: number): void => {
@@ -289,6 +300,12 @@ export function BackstoryScreen() {
     Animated.timing(stepTransition, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [step, stepTransition]);
 
+  useEffect(() => {
+    if (step !== 4) {
+      setActiveAttributeHelp(null);
+    }
+  }, [step]);
+
   const stepCardStyle = {
     opacity: stepTransition,
     transform: [{ translateY: stepTransition.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
@@ -397,15 +414,26 @@ export function BackstoryScreen() {
               return (
                 <View key={key} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
                   <View className="flex-row items-center justify-between">
-                    <View>
-                      <Text className="text-sm font-semibold text-white">{ATTRIBUTE_LABELS[key]}</Text>
-                      <Text className="mt-1 text-[11px] text-slate-400">Archetype-adjusted preview: {previewPublicAttributes[key]}</Text>
+                    <View className="mr-3 flex-1">
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-sm font-semibold text-white">{ATTRIBUTE_LABELS[key]}</Text>
+                        <Pressable
+                          accessibilityLabel={`Explain ${ATTRIBUTE_LABELS[key]}`}
+                          accessibilityRole="button"
+                          className="h-6 w-6 items-center justify-center rounded-full border border-slate-600 bg-slate-800"
+                          hitSlop={8}
+                          onPress={() => setActiveAttributeHelp(key)}
+                          testID={`attribute-help-${key}`}
+                        >
+                          <Text className="text-xs font-bold text-emerald-200">i</Text>
+                        </Pressable>
+                      </View>
                     </View>
                     <View className="flex-row items-center gap-3">
                       <Pressable disabled={!canDecrease} className={`rounded-md border px-3 py-2 ${canDecrease ? "border-slate-600 bg-slate-800" : "border-slate-800 bg-slate-900"}`} onPress={() => changePublicAttribute(key, -1)}>
                         <Text className="text-sm font-semibold text-white">-</Text>
                       </Pressable>
-                      <Text className="w-8 text-center text-lg font-bold text-emerald-300">{value}</Text>
+                      <Text className="w-8 text-center text-lg font-bold text-emerald-300">{previewPublicAttributes[key]}</Text>
                       <Pressable disabled={!canIncrease} className={`rounded-md border px-3 py-2 ${canIncrease ? "border-slate-600 bg-slate-800" : "border-slate-800 bg-slate-900"}`} onPress={() => changePublicAttribute(key, 1)}>
                         <Text className="text-sm font-semibold text-white">+</Text>
                       </Pressable>
@@ -470,6 +498,42 @@ export function BackstoryScreen() {
           ) : null}
         </View>
       </ScrollView>
+      <Modal
+        transparent
+        visible={activeAttributeHelp !== null}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setActiveAttributeHelp(null)}
+        testID="attribute-help-modal"
+      >
+        <Pressable className="flex-1 items-center justify-center bg-black/80 px-6" onPress={() => setActiveAttributeHelp(null)}>
+          <Pressable
+            accessibilityViewIsModal
+            className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5"
+            onPress={(event) => event.stopPropagation()}
+          >
+            {activeAttributeHelp ? (
+              <>
+                <View className="flex-row items-start justify-between gap-3">
+                  <View className="flex-1">
+                    <Text className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Attribute Info</Text>
+                    <Text className="mt-2 text-lg font-bold text-white">{ATTRIBUTE_LABELS[activeAttributeHelp]}</Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Close attribute explanation"
+                    accessibilityRole="button"
+                    className="rounded-full border border-slate-600 bg-slate-800 px-3 py-1"
+                    onPress={() => setActiveAttributeHelp(null)}
+                  >
+                    <Text className="text-sm font-semibold text-white">Close</Text>
+                  </Pressable>
+                </View>
+                <Text className="mt-3 text-sm leading-5 text-slate-200">{ATTRIBUTE_HELP_COPY[activeAttributeHelp]}</Text>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -34,6 +34,8 @@ export interface PlayerBoxScoreLine {
   to: number;
   fgm: number;
   fga: number;
+  tpm?: number;
+  tpa?: number;
   ftm: number;
   fta: number;
   pf: number;
@@ -48,6 +50,8 @@ export interface TeamBoxScoreTotals {
   to: number;
   fgm: number;
   fga: number;
+  tpm?: number;
+  tpa?: number;
   ftm: number;
   fta: number;
   pf: number;
@@ -108,6 +112,7 @@ interface MatchActions {
     points?: number;
     shotAttempted?: boolean;
     shotMade?: boolean;
+    wasThreePointAttempt?: boolean;
     assisterIndex?: number;
     turnoverTeam?: "home" | "away";
     turnoverPlayerIndex?: number;
@@ -135,6 +140,8 @@ const emptyTeamTotals = (): TeamBoxScoreTotals => ({
   to: 0,
   fgm: 0,
   fga: 0,
+  tpm: 0,
+  tpa: 0,
   ftm: 0,
   fta: 0,
   pf: 0,
@@ -152,6 +159,8 @@ const createPlayerLine = (id: string, name: string, team: "home" | "away"): Play
   to: 0,
   fgm: 0,
   fga: 0,
+  tpm: 0,
+  tpa: 0,
   ftm: 0,
   fta: 0,
   pf: 0,
@@ -185,6 +194,8 @@ const sumTeamTotals = (players: PlayerBoxScoreLine[]): TeamBoxScoreTotals =>
       to: totals.to + player.to,
       fgm: totals.fgm + player.fgm,
       fga: totals.fga + player.fga,
+      tpm: (totals.tpm ?? 0) + (player.tpm ?? 0),
+      tpa: (totals.tpa ?? 0) + (player.tpa ?? 0),
       ftm: totals.ftm + player.ftm,
       fta: totals.fta + player.fta,
       pf: totals.pf + player.pf,
@@ -195,7 +206,7 @@ const sumTeamTotals = (players: PlayerBoxScoreLine[]): TeamBoxScoreTotals =>
 const withPlayerStatDelta = (
   players: PlayerBoxScoreLine[],
   index: number | undefined,
-  delta: Partial<Pick<PlayerBoxScoreLine, "pts" | "reb" | "ast" | "stl" | "blk" | "to" | "fgm" | "fga" | "ftm" | "fta" | "pf">>,
+  delta: Partial<Pick<PlayerBoxScoreLine, "pts" | "reb" | "ast" | "stl" | "blk" | "to" | "fgm" | "fga" | "tpm" | "tpa" | "ftm" | "fta" | "pf">>,
 ): PlayerBoxScoreLine[] => {
   if (index === undefined || !Number.isInteger(index) || index < 0 || index >= players.length) {
     return players;
@@ -216,6 +227,8 @@ const withPlayerStatDelta = (
       to: player.to + (delta.to ?? 0),
       fgm: player.fgm + (delta.fgm ?? 0),
       fga: player.fga + (delta.fga ?? 0),
+      tpm: player.tpm + (delta.tpm ?? 0),
+      tpa: player.tpa + (delta.tpa ?? 0),
       ftm: player.ftm + (delta.ftm ?? 0),
       fta: player.fta + (delta.fta ?? 0),
       pf: player.pf + (delta.pf ?? 0),
@@ -341,6 +354,8 @@ export const useMatchStore = create<MatchStore>((set) => ({
           pts: event.points ?? 0,
           fga: event.shotAttempted ? 1 : 0,
           fgm: event.shotMade ? 1 : 0,
+          tpa: event.wasThreePointAttempt ? 1 : 0,
+          tpm: event.wasThreePointAttempt && event.shotMade ? 1 : 0,
           ftm: event.freeThrowMade ?? 0,
           fta: event.freeThrowAttempted ?? 0,
         });
@@ -354,6 +369,8 @@ export const useMatchStore = create<MatchStore>((set) => ({
           pts: event.points ?? 0,
           fga: event.shotAttempted ? 1 : 0,
           fgm: event.shotMade ? 1 : 0,
+          tpa: event.wasThreePointAttempt ? 1 : 0,
+          tpm: event.wasThreePointAttempt && event.shotMade ? 1 : 0,
           ftm: event.freeThrowMade ?? 0,
           fta: event.freeThrowAttempted ?? 0,
         });

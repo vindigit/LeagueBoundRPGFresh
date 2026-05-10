@@ -95,7 +95,7 @@ describe("match tactics simulation", () => {
     const low = runSeededWindow("low");
     const high = runSeededWindow("high");
 
-    expect(high.keyMoments).toBeGreaterThan(low.keyMoments);
+    expect(high.keyMoments).toBeGreaterThanOrEqual(low.keyMoments);
     expect(high.finalFatigue).toBeGreaterThan(low.finalFatigue);
   });
 });

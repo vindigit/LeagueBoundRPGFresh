@@ -10,6 +10,7 @@ import type {
 interface SchedulerState {
   triggeredCount: number;
   lastTriggeredPossessionIndex: number;
+  periodKey?: string;
 }
 
 export interface KeyMomentSchedulerConfig {
@@ -77,20 +78,20 @@ const getFocusAlignmentBonus = (input: KeyMomentSchedulerInput): number => {
   const userOnOffense = input.context.offense === input.context.userTeam;
   if (userOnOffense) {
     if (input.context.focus === "offense") {
-      return 0.2;
+      return 0.28;
     }
     if (input.context.focus === "defense") {
-      return -0.16;
+      return -0.24;
     }
   } else {
     if (input.context.focus === "defense") {
-      return 0.2;
+      return 0.28;
     }
     if (input.context.focus === "offense") {
-      return -0.16;
+      return -0.24;
     }
   }
-  return 0.04;
+  return 0.02;
 };
 
 const pickScheduledPending = (input: KeyMomentSchedulerInput, seedValue: number): KeyMomentPending | undefined => {
@@ -153,26 +154,38 @@ export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}):
   const state: SchedulerState = {
     triggeredCount: 0,
     lastTriggeredPossessionIndex: -999,
+    periodKey: undefined,
   };
 
   const onPossessionBoundary = (input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput => {
+    if (state.periodKey !== input.context.periodKey) {
+      state.periodKey = input.context.periodKey;
+      state.triggeredCount = 0;
+      state.lastTriggeredPossessionIndex = -999;
+    }
+
     const targetPerPeriod = getTargetPerPeriod(input, config);
     const cooldownPossessions = getCooldown(input, config);
     const possessionsSinceLast = input.context.possessionIndex - state.lastTriggeredPossessionIndex;
-    const matchTotalSeconds = input.matchTotalSeconds ?? input.periodTotalSeconds * 4;
     const secondsRemaining = input.possessionState?.secondsRemaining ?? input.context.timeRemaining;
-    const elapsedShare = 1 - secondsRemaining / Math.max(1, matchTotalSeconds);
+    const elapsedShare = 1 - secondsRemaining / Math.max(1, input.periodTotalSeconds);
     const expectedByNow = Math.floor(targetPerPeriod * elapsedShare);
     const phasePressure = expectedByNow - state.triggeredCount;
     const seedValue = input.context.possessionIndex * 17 + state.triggeredCount * 13 + Math.round(elapsedShare * 100);
     const trust = input.context.coachTrust ?? 50;
     const fatiguePenalty = input.context.fatigue >= 0.72 ? 0.14 : input.context.fatigue >= 0.5 ? 0.07 : 0;
     const trustBonus = trust >= 75 ? 0.08 : trust <= 35 ? -0.08 : 0;
+    const userOnOffense = input.context.offense === input.context.userTeam;
+    const alignedToFocus =
+      input.context.focus === "balanced" ||
+      (input.context.focus === "offense" && userOnOffense) ||
+      (input.context.focus === "defense" && !userOnOffense);
     const triggerChance =
       0.16 +
       getFocusAlignmentBonus(input) +
       getLeverageBonus(input) +
       trustBonus -
+      (alignedToFocus ? 0 : 0.2) -
       fatiguePenalty +
       Math.max(0, phasePressure) * 0.2;
 
@@ -203,6 +216,7 @@ export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}):
     reset: () => {
       state.triggeredCount = 0;
       state.lastTriggeredPossessionIndex = -999;
+      state.periodKey = undefined;
     },
     onPossessionBoundary,
   };

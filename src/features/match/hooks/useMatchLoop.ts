@@ -434,6 +434,7 @@ export const useMatchLoop = (): void => {
       points: trace.result.points ?? 0,
       shotAttempted,
       shotMade,
+      wasThreePointAttempt: trace.result.shotZone === "three",
       assisterIndex: shotMade ? trace.result.assisterIndex : undefined,
       turnoverTeam,
       turnoverPlayerIndex: turnoverTeam ? trace.beforeState.ballHandlerIndex : undefined,

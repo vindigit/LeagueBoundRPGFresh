@@ -13,10 +13,17 @@ const formatCurrencyDelta = (amount: number): string => {
 
 const formatMoraleDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}${amount}`;
 const formatFg = (fgm: number, fga: number): string => `${fgm}-${fga}`;
+const formatThree = (tpm: number, tpa: number): string => `${tpm}-${tpa}`;
 const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} remaining`;
 const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
 const formatMeterDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}${amount}`;
 const clampMeter = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
+const formatRatingDeltaLabel = (amount: number): string => {
+  if (amount === 0) {
+    return "No rating change";
+  }
+  return `${amount > 0 ? "Rating up" : "Rating down"} ${amount > 0 ? "+" : ""}${amount.toFixed(1)}`;
+};
 
 const getRatingLabel = (rating: number): string => {
   if (rating >= 8.5) {
@@ -38,7 +45,7 @@ const renderTeamTotals = (label: string, totals: TeamBoxScoreTotals) => (
   <View className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
     <Text className="text-sm font-semibold text-white">{label}</Text>
     <Text className="mt-2 text-xs text-slate-300">
-      PTS {totals.pts} | REB {totals.reb} | AST {totals.ast} | STL {totals.stl} | BLK {totals.blk} | TO {totals.to} | FG{" "}
+      PTS {totals.pts} | REB {totals.reb} | AST {totals.ast} | STL {totals.stl} | BLK {totals.blk} | TO {totals.to} | 3PT {formatThree(totals.tpm ?? 0, totals.tpa ?? 0)} | FT {formatFg(totals.ftm, totals.fta)} | FG{" "}
       {formatFg(totals.fgm, totals.fga)}
     </Text>
   </View>
@@ -62,6 +69,8 @@ const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => 
     <Text className="w-8 text-right text-xs text-slate-300">{player.stl}</Text>
     <Text className="w-8 text-right text-xs text-slate-300">{player.blk}</Text>
     <Text className="w-8 text-right text-xs text-slate-300">{player.to}</Text>
+    <Text className="w-14 text-right text-xs text-slate-300">{formatThree(player.tpm ?? 0, player.tpa ?? 0)}</Text>
+    <Text className="w-14 text-right text-xs text-slate-300">{formatFg(player.ftm, player.fta)}</Text>
     <Text className="w-14 text-right text-xs text-slate-300">{formatFg(player.fgm, player.fga)}</Text>
   </View>
 );
@@ -110,10 +119,7 @@ export function PostgameScreen() {
               <Text className="text-4xl font-bold text-emerald-300">{result.matchRating.toFixed(1)}</Text>
               <Text className="mt-1 text-sm font-semibold uppercase tracking-wide text-slate-200">{ratingLabel}</Text>
             </View>
-            <Text className={`text-sm font-semibold ${result.ratingDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-              {result.ratingDelta >= 0 ? "+" : ""}
-              {result.ratingDelta.toFixed(1)} trend
-            </Text>
+            <Text className={`text-sm font-semibold ${result.ratingDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>{formatRatingDeltaLabel(result.ratingDelta)}</Text>
           </View>
         </View>
 
@@ -161,6 +167,8 @@ export function PostgameScreen() {
                   <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">STL</Text>
                   <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">BLK</Text>
                   <Text className="w-8 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">TO</Text>
+                  <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">3PT</Text>
+                  <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">FT</Text>
                   <Text className="w-14 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">FG</Text>
                 </View>
                 {selectedPlayers.map((player) => renderPlayerRow(player, isHomeSelected && player.id === "home-0"))}
@@ -197,31 +205,31 @@ export function PostgameScreen() {
             <View className="mt-3 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Coach Trust</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.coachTrust >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.coachTrust)} to {clampMeter(coachTrust + result.meterDeltas.coachTrust)}
+                {formatMeterDelta(result.meterDeltas.coachTrust)} → {clampMeter(coachTrust + result.meterDeltas.coachTrust)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Fans</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.fans >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.fans)} to {clampMeter(fans + result.meterDeltas.fans)}
+                {formatMeterDelta(result.meterDeltas.fans)} → {clampMeter(fans + result.meterDeltas.fans)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Teammates</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.teammates >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.teammates)} to {clampMeter(teammates + result.meterDeltas.teammates)}
+                {formatMeterDelta(result.meterDeltas.teammates)} → {clampMeter(teammates + result.meterDeltas.teammates)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Energy</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.energy >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.energy)} to {clampMeter(energy + result.meterDeltas.energy)}
+                {formatMeterDelta(result.meterDeltas.energy)} → {clampMeter(energy + result.meterDeltas.energy)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Condition</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.condition >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.condition)} to {clampMeter(condition + result.meterDeltas.condition)}
+                {formatMeterDelta(result.meterDeltas.condition)} → {clampMeter(condition + result.meterDeltas.condition)}
               </Text>
             </View>
           </View>

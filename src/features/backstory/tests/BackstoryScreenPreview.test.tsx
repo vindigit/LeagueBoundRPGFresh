@@ -60,4 +60,32 @@ describe("BackstoryScreen preview", () => {
     expect(screen.queryByText(/Compatibility Archetype:/)).toBeNull();
     expect(screen.queryByText(/PG\/SG/)).toBeNull();
   });
+
+  it("shows effective attribute values and opens attribute help in Step 4", () => {
+    const screen = render(<BackstoryScreen />);
+
+    const nameInputs = screen.getAllByDisplayValue("");
+    fireEvent.changeText(nameInputs[0], "Jordan");
+    fireEvent.changeText(nameInputs[1], "Rivers");
+
+    fireEvent.press(screen.getByText("Next"));
+    fireEvent.press(screen.getByText("Next"));
+    fireEvent.press(screen.getByText("Playmaker"));
+    fireEvent.press(screen.getByText("Next"));
+
+    expect(screen.getByText("Step 4: Allocate Attributes")).toBeTruthy();
+    expect(screen.queryByText(/Archetype-adjusted preview/i)).toBeNull();
+    expect(screen.getByText("58")).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId("attribute-help-playmaking"));
+
+    expect(screen.getByTestId("attribute-help-modal")).toBeTruthy();
+    expect(screen.getByText("Attribute Info")).toBeTruthy();
+    expect(screen.getAllByText("Playmaking")).toHaveLength(2);
+    expect(screen.getByText("Affects ball handling, passing, and creating looks.")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Close"));
+
+    expect(screen.queryByText("Affects ball handling, passing, and creating looks.")).toBeNull();
+  });
 });

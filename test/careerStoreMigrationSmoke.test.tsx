@@ -113,6 +113,11 @@ describe("Career store migration smoke", () => {
     expect(state.player.position).toBe("SG");
     expect(state.careerPhase).toBe("HIGH_SCHOOL");
     expect(state.scoutVisibility).toBeGreaterThan(0);
+    expect(state.coachTrust).toBe(50);
+    expect(state.fans).toBe(50);
+    expect(state.teammates).toBe(50);
+    expect(state.energy).toBe(100);
+    expect(state.condition).toBe(100);
     expect(state.gpa).toBe(2.5);
     expect(state.pendingSchoolPathSelection).toBe(false);
     expect(Object.keys(state.teamInterestById).length).toBeGreaterThan(0);

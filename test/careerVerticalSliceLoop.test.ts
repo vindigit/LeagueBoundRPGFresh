@@ -71,6 +71,7 @@ describe("Career vertical slice weekly loop", () => {
     const initialBank = seeded.player.bankBalance;
     const initialMorale = seeded.player.morale;
     const initialNewsCount = seeded.newsFeed.length;
+    const initialCoachTrust = seeded.coachTrust;
 
     for (let cycle = 1; cycle <= 3; cycle += 1) {
       const beforeCycle = useCareerStore.getState();
@@ -114,6 +115,8 @@ describe("Career vertical slice weekly loop", () => {
       const expectedNewsBeforeResolution = cycle === 1 ? initialNewsCount : initialNewsCount + cycle;
       expect(afterMatch.newsFeed.length).toBe(expectedNewsBeforeResolution);
       expect(afterMatch.player.bankBalance).toBeGreaterThanOrEqual(initialBank + 500 * (cycle - 1));
+      expect(afterMatch.lastMatchResult?.matchRating).toBeGreaterThan(0);
+      expect(afterMatch.lastMatchResult?.meterDeltas.energy).toBeLessThan(0);
 
       afterMatch.resolvePostgameAndAdvanceWeek();
 
@@ -137,6 +140,7 @@ describe("Career vertical slice weekly loop", () => {
         expect(afterSelection.newsFeed.length).toBe(initialNewsCount + cycle + 1);
         expect(afterSelection.player.bankBalance).toBe(initialBank + 500 * cycle);
         expect(afterSelection.player.morale).toBe(initialMorale + 5 * cycle);
+        expect(afterSelection.coachTrust).not.toBe(initialCoachTrust);
         expect(afterSelection.financeLedger).toHaveLength(cycle);
         expect(afterSelection.financeLedger.at(-1)).toMatchObject({
           type: "income",
@@ -157,6 +161,8 @@ describe("Career vertical slice weekly loop", () => {
       expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle + 1);
       expect(resolved.player.bankBalance).toBeGreaterThan(initialBank + 500 * cycle);
       expect(resolved.player.morale).toBeGreaterThanOrEqual(initialMorale + 5 * cycle);
+      expect(resolved.energy).toBeLessThanOrEqual(100);
+      expect(resolved.condition).toBeLessThanOrEqual(100);
       expect(resolved.financeLedger).toHaveLength(cycle);
       expect(resolved.financeLedger.at(-1)).toMatchObject({
         type: "income",

@@ -7,7 +7,6 @@ import {
   buildInterestDeltaFromMatch,
   generateHighSchoolOffers,
   HIGH_SCHOOL_RECRUITING_PROGRAMS,
-  type RecruitingProgram,
   seedHighSchoolTeamInterest,
 } from "../features/career/recruiting";
 import { calculatePersonalMatchRating, type CareerMeterDeltas } from "../features/career/matchRating";

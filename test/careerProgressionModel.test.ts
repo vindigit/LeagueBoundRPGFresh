@@ -30,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(13);
+    expect(version).toBe(14);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -40,6 +40,12 @@ describe("Career progression domain model", () => {
     expect(state.starRating).toBeGreaterThanOrEqual(1);
     expect(state.starRating).toBeLessThanOrEqual(5);
     expect(typeof state.scoutVisibility).toBe("number");
+    expect(state.coachTrust).toBe(50);
+    expect(state.fans).toBe(50);
+    expect(state.teammates).toBe(50);
+    expect(state.energy).toBe(100);
+    expect(state.condition).toBe(100);
+    expect(state.recentRatingTrend).toBe(0);
     expect(state.gpa).toBe(2.5);
     expect(state.teamInterestById).toEqual({});
     expect(state.schoolPath).toBe("LOCAL_3A");
@@ -92,6 +98,12 @@ describe("Career progression domain model", () => {
     expect(migrated.starRating).toBeGreaterThanOrEqual(1);
     expect(migrated.starRating).toBeLessThanOrEqual(5);
     expect(migrated.scoutVisibility).toBeGreaterThan(0);
+    expect(migrated.coachTrust).toBe(50);
+    expect(migrated.fans).toBe(50);
+    expect(migrated.teammates).toBe(50);
+    expect(migrated.energy).toBe(100);
+    expect(migrated.condition).toBe(100);
+    expect(migrated.recentRatingTrend).toBe(0);
     expect(migrated.gpa).toBe(2.5);
     expect(migrated.schoolPath).toBe("LOCAL_3A");
     expect(migrated.pendingSchoolPathSelection).toBe(false);
@@ -126,6 +138,12 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("careerPhase");
     expect(partial).toHaveProperty("starRating");
     expect(partial).toHaveProperty("scoutVisibility");
+    expect(partial).toHaveProperty("coachTrust");
+    expect(partial).toHaveProperty("fans");
+    expect(partial).toHaveProperty("teammates");
+    expect(partial).toHaveProperty("energy");
+    expect(partial).toHaveProperty("condition");
+    expect(partial).toHaveProperty("recentRatingTrend");
     expect(partial).toHaveProperty("gpa");
     expect(partial).toHaveProperty("teamInterestById");
     expect(partial).toHaveProperty("schoolPath");
@@ -345,6 +363,8 @@ describe("Career progression domain model", () => {
     });
     expect(injured.wearTear).toBe(10);
     expect(injured.lastMatchResult?.consequences).toEqual(consequences);
+    expect(injured.lastMatchResult?.matchRating).toBeLessThanOrEqual(10);
+    expect(injured.lastMatchResult?.meterDeltas.condition).toBeLessThan(0);
 
     const partialize = (useCareerStore as unknown as { persist: { getOptions: () => { partialize?: (state: unknown) => unknown } } })
       .persist
@@ -359,6 +379,7 @@ describe("Career progression domain model", () => {
     const afterOneWeek = useCareerStore.getState();
     expect(afterOneWeek.injury?.weeksRemaining).toBe(2);
     expect(afterOneWeek.wearTear).toBe(5);
+    expect(afterOneWeek.condition).toBeLessThan(100);
 
     useCareerStore.getState().advanceWeek();
     const afterTwoWeeks = useCareerStore.getState();
@@ -369,6 +390,72 @@ describe("Career progression domain model", () => {
     const recovered = useCareerStore.getState();
     expect(recovered.injury).toBeNull();
     expect(recovered.wearTear).toBe(0);
+  });
+
+  it("keeps personal rating separate from team result", () => {
+    useCareerStore.getState().completeMatch({
+      homeScore: 55,
+      awayScore: 62,
+      overtimePeriods: 0,
+      boxScore: {
+        homePlayers: [
+          {
+            id: "home-0",
+            name: useCareerStore.getState().player.name,
+            team: "home",
+            pts: 28,
+            reb: 6,
+            ast: 8,
+            stl: 2,
+            blk: 0,
+            to: 2,
+            fgm: 10,
+            fga: 17,
+            ftm: 0,
+            fta: 0,
+            pf: 1,
+          },
+        ],
+        awayPlayers: [],
+        homeTotals: { pts: 55, reb: 22, ast: 16, stl: 5, blk: 1, to: 10, fgm: 23, fga: 49, ftm: 0, fta: 0, pf: 8 },
+        awayTotals: { pts: 62, reb: 21, ast: 14, stl: 4, blk: 2, to: 9, fgm: 25, fga: 48, ftm: 0, fta: 0, pf: 9 },
+      },
+    });
+    const strongLossRating = useCareerStore.getState().lastMatchResult?.matchRating ?? 0;
+
+    useCareerStore.getState().resolvePostgameAndAdvanceWeek();
+    useCareerStore.getState().completeNarrativeEvent();
+    useCareerStore.getState().completeMatch({
+      homeScore: 61,
+      awayScore: 58,
+      overtimePeriods: 0,
+      boxScore: {
+        homePlayers: [
+          {
+            id: "home-0",
+            name: useCareerStore.getState().player.name,
+            team: "home",
+            pts: 8,
+            reb: 2,
+            ast: 1,
+            stl: 0,
+            blk: 0,
+            to: 5,
+            fgm: 3,
+            fga: 13,
+            ftm: 0,
+            fta: 0,
+            pf: 2,
+          },
+        ],
+        awayPlayers: [],
+        homeTotals: { pts: 61, reb: 22, ast: 12, stl: 4, blk: 1, to: 12, fgm: 24, fga: 52, ftm: 0, fta: 0, pf: 8 },
+        awayTotals: { pts: 58, reb: 20, ast: 11, stl: 3, blk: 1, to: 11, fgm: 22, fga: 50, ftm: 0, fta: 0, pf: 10 },
+      },
+    });
+    const poorWinRating = useCareerStore.getState().lastMatchResult?.matchRating ?? 10;
+
+    expect(strongLossRating).toBeGreaterThan(poorWinRating);
   });
 });
 

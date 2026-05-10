@@ -139,6 +139,9 @@ describe("Career vertical slice UI", () => {
 
     expect(useCareerStore.getState().view).toBe("POSTGAME");
     expect(screen.getByText("Postgame Report")).toBeTruthy();
+    expect(screen.getByText("Match Rating")).toBeTruthy();
+    expect(screen.getByText("Career Meters")).toBeTruthy();
+    expect(screen.getByText("Team Result")).toBeTruthy();
     expect(screen.getByText("Advance Week")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Advance Week"));

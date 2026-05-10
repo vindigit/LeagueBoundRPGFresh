@@ -16,6 +16,7 @@ const formatFg = (fgm: number, fga: number): string => `${fgm}-${fga}`;
 const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} remaining`;
 const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
 const formatMeterDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}${amount}`;
+const clampMeter = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
 
 const getRatingLabel = (rating: number): string => {
   if (rating >= 8.5) {
@@ -69,6 +70,11 @@ export function PostgameScreen() {
   const result = useCareerStore((state) => state.lastMatchResult);
   const injury = useCareerStore((state) => state.injury);
   const playerIdentity = useCareerStore((state) => state.player.identity);
+  const coachTrust = useCareerStore((state) => state.coachTrust);
+  const fans = useCareerStore((state) => state.fans);
+  const teammates = useCareerStore((state) => state.teammates);
+  const energy = useCareerStore((state) => state.energy);
+  const condition = useCareerStore((state) => state.condition);
   const resolvePostgameAndAdvanceWeek = useCareerStore((state) => state.resolvePostgameAndAdvanceWeek);
   const localHeadline = result && playerIdentity ? createPostgameNewsItem(playerIdentity, result).headline : undefined;
   const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home");
@@ -191,31 +197,31 @@ export function PostgameScreen() {
             <View className="mt-3 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Coach Trust</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.coachTrust >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.coachTrust)}
+                {formatMeterDelta(result.meterDeltas.coachTrust)} to {clampMeter(coachTrust + result.meterDeltas.coachTrust)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Fans</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.fans >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.fans)}
+                {formatMeterDelta(result.meterDeltas.fans)} to {clampMeter(fans + result.meterDeltas.fans)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Teammates</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.teammates >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.teammates)}
+                {formatMeterDelta(result.meterDeltas.teammates)} to {clampMeter(teammates + result.meterDeltas.teammates)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Energy</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.energy >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.energy)}
+                {formatMeterDelta(result.meterDeltas.energy)} to {clampMeter(energy + result.meterDeltas.energy)}
               </Text>
             </View>
             <View className="mt-2 flex-row items-center justify-between">
               <Text className="text-sm text-slate-300">Condition</Text>
               <Text className={`text-sm font-semibold ${result.meterDeltas.condition >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {formatMeterDelta(result.meterDeltas.condition)}
+                {formatMeterDelta(result.meterDeltas.condition)} to {clampMeter(condition + result.meterDeltas.condition)}
               </Text>
             </View>
           </View>

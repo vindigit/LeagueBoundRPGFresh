@@ -93,6 +93,8 @@ export interface MatchEngineAdapterOptions {
   keyMomentRngChance?: number;
   enableKeyMoments?: boolean;
   debugBadges?: boolean;
+  coachTrust?: number;
+  staminaRating?: number;
 }
 
 const normalizeTeamInput = (team: TeamInput): Team => {
@@ -198,6 +200,8 @@ export const createMatchEngineAdapter = (
   const leagueLevel = options.leagueLevel ?? LeagueLevel.PRO;
   const enableKeyMoments = options.enableKeyMoments ?? true;
   const totalSeconds = options.secondsRemaining ?? 20 * 60;
+  const coachTrust = Math.max(0, Math.min(100, Math.round(options.coachTrust ?? 50)));
+  const staminaRating = Math.max(0, Math.min(99, Math.round(options.staminaRating ?? 70)));
   const userLocation = getPlayerLocation(context, options.userPlayerId);
   const keyMomentScheduler = createKeyMomentScheduler();
   let state = initializePossession(context, leagueLevel, rng, totalSeconds);
@@ -336,10 +340,14 @@ export const createMatchEngineAdapter = (
       workRate: userMatchState?.workRate ?? "normal",
       focus: userMatchState?.focus ?? "balanced",
       fatigue: userMatchState?.fatigue ?? 0,
+      coachTrust,
+      staminaRating,
+      leverage: critical ? "clutch" : periodState.quarter >= 4 && Math.abs(previousState.score.home - previousState.score.away) <= 10 ? "high" : "normal",
     };
     const scheduled = keyMomentScheduler.onPossessionBoundary({
       context: contextArgs,
       periodTotalSeconds: Math.max(1, Math.floor(totalSeconds / 4)),
+      matchTotalSeconds: totalSeconds,
       matchContext: context,
       possessionState: previousState,
       userMatchState,

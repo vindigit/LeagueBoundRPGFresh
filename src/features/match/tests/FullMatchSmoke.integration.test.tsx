@@ -93,6 +93,8 @@ describe("Full match smoke flow", () => {
   it("plays a full interactive match from tipoff through key moment resolution and persists postgame results", () => {
     const screen = render(<MatchScreen />);
 
+    expect(screen.getAllByText("Moment Mode").length).toBeGreaterThan(0);
+
     act(() => {
       useMatchStore.getState().setSimSpeed(4);
     });
@@ -131,6 +133,11 @@ describe("Full match smoke flow", () => {
 
     const firstResolvedTraceId = resolvedSnapshot.lastTrace?.id;
     const firstResolvedPossessionCount = resolvedSnapshot.lastStep?.metrics.possessions;
+    expect(screen.getByText("Log")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Log"));
+    expect(screen.getByText("Sim Speed")).toBeTruthy();
+    fireEvent.press(screen.getByText("Moment"));
 
     act(() => {
       useMatchEngineStore.getState().resolveKeyMoment({

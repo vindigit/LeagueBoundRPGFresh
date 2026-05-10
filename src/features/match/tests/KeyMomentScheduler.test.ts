@@ -6,6 +6,7 @@ const buildContext = (
   possessionIndex: number,
   workRate: KeyMomentContext["workRate"],
   focus: KeyMomentContext["focus"] = "balanced",
+  extras: Partial<Pick<KeyMomentContext, "coachTrust" | "staminaRating">> = {},
 ): KeyMomentContext => ({
   id: `ctx-${possessionIndex}`,
   periodKey: "Q1",
@@ -20,20 +21,23 @@ const buildContext = (
   workRate,
   focus,
   fatigue: 0.2,
+  coachTrust: extras.coachTrust ?? 50,
+  staminaRating: extras.staminaRating ?? 78,
 });
 
 describe("KeyMomentScheduler", () => {
-  it("uses higher workRate to schedule more moments per period", () => {
+  it("keeps whole-match pacing in the 3-7 moment range", () => {
     const run = (workRate: KeyMomentContext["workRate"]): number[] => {
       const scheduler = createKeyMomentScheduler();
       const triggeredAt: number[] = [];
 
-      for (let possessionIndex = 1; possessionIndex <= 70; possessionIndex += 1) {
+      for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
         const elapsed = possessionIndex * 10;
-        const timeRemaining = Math.max(0, 720 - elapsed);
+        const timeRemaining = Math.max(0, 2880 - elapsed);
         const response = scheduler.onPossessionBoundary({
           context: buildContext(timeRemaining, possessionIndex, workRate),
           periodTotalSeconds: 720,
+          matchTotalSeconds: 2880,
         });
         if (response.trigger) {
           triggeredAt.push(possessionIndex);
@@ -43,23 +47,23 @@ describe("KeyMomentScheduler", () => {
       return triggeredAt;
     };
 
-    const lowTriggered = run("low");
-    const highTriggered = run("high");
-
-    expect(highTriggered.length).toBeGreaterThan(lowTriggered.length);
+    const normalTriggered = run("normal");
+    expect(normalTriggered.length).toBeGreaterThanOrEqual(3);
+    expect(normalTriggered.length).toBeLessThanOrEqual(7);
   });
 
-  it("uses lower workRate to increase cooldown spacing", () => {
-    const run = (workRate: KeyMomentContext["workRate"]): number[] => {
+  it("suppresses opportunities for low trust and low stamina profiles", () => {
+    const run = (coachTrust: number, staminaRating: number): number[] => {
       const scheduler = createKeyMomentScheduler();
       const triggeredAt: number[] = [];
 
-      for (let possessionIndex = 1; possessionIndex <= 70; possessionIndex += 1) {
+      for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
         const elapsed = possessionIndex * 10;
-        const timeRemaining = Math.max(0, 720 - elapsed);
+        const timeRemaining = Math.max(0, 2880 - elapsed);
         const response = scheduler.onPossessionBoundary({
-          context: buildContext(timeRemaining, possessionIndex, workRate),
+          context: buildContext(timeRemaining, possessionIndex, "normal", "balanced", { coachTrust, staminaRating }),
           periodTotalSeconds: 720,
+          matchTotalSeconds: 2880,
         });
         if (response.trigger) {
           triggeredAt.push(possessionIndex);
@@ -69,27 +73,27 @@ describe("KeyMomentScheduler", () => {
       return triggeredAt;
     };
 
-    const lowTriggered = run("low");
-    const highTriggered = run("high");
-    const minSpacing = (triggers: number[]): number =>
-      triggers.slice(1).reduce((smallest, trigger, index) => Math.min(smallest, trigger - triggers[index]), Number.POSITIVE_INFINITY);
-
-    expect(minSpacing(lowTriggered)).toBeGreaterThanOrEqual(minSpacing(highTriggered));
+    const lowProfile = run(25, 40);
+    const highProfile = run(80, 88);
+    expect(lowProfile.length).toBeLessThan(highProfile.length);
   });
 
   it("allows critical-state forcing even when pacing would otherwise wait", () => {
     const scheduler = createKeyMomentScheduler();
     const first = scheduler.onPossessionBoundary({
-      context: buildContext(710, 1, "low"),
+      context: buildContext(2870, 1, "low"),
       periodTotalSeconds: 720,
+      matchTotalSeconds: 2880,
     });
     const cooledDownBlocked = scheduler.onPossessionBoundary({
-      context: buildContext(700, 2, "low"),
+      context: buildContext(2860, 2, "low"),
       periodTotalSeconds: 720,
+      matchTotalSeconds: 2880,
     });
     const critical = scheduler.onPossessionBoundary({
       context: buildContext(90, 5, "low"),
       periodTotalSeconds: 720,
+      matchTotalSeconds: 2880,
       forceTrigger: true,
     });
 
@@ -102,15 +106,16 @@ describe("KeyMomentScheduler", () => {
     const scheduler = createKeyMomentScheduler();
     const triggeredTypes: string[] = [];
 
-    for (let possessionIndex = 1; possessionIndex <= 70; possessionIndex += 1) {
-      const elapsed = possessionIndex * 10;
-      const timeRemaining = Math.max(0, 720 - elapsed);
-      const response = scheduler.onPossessionBoundary({
-        context: buildContext(timeRemaining, possessionIndex, "high", "defense"),
-        periodTotalSeconds: 720,
-      });
-      if (response.trigger && response.pending && response.pending.context.offense === "away") {
-        triggeredTypes.push(response.pending.type);
+      for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
+        const elapsed = possessionIndex * 10;
+        const timeRemaining = Math.max(0, 2880 - elapsed);
+        const response = scheduler.onPossessionBoundary({
+          context: buildContext(timeRemaining, possessionIndex, "high", "defense"),
+          periodTotalSeconds: 720,
+          matchTotalSeconds: 2880,
+        });
+        if (response.trigger && response.pending && response.pending.context.offense === "away") {
+          triggeredTypes.push(response.pending.type);
       }
     }
 
@@ -118,21 +123,24 @@ describe("KeyMomentScheduler", () => {
   });
 
   it("biases offense focus toward offensive moments and defense focus toward defensive moments", () => {
-    const scheduler = createKeyMomentScheduler();
+    const offenseScheduler = createKeyMomentScheduler();
+    const defenseScheduler = createKeyMomentScheduler();
     const offenseFocusTypes = new Set<string>();
     const defenseFocusTypes = new Set<string>();
 
-    for (let possessionIndex = 1; possessionIndex <= 90; possessionIndex += 1) {
+    for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
       const elapsed = possessionIndex * 10;
-      const timeRemaining = Math.max(0, 720 - elapsed);
-      const offensiveResponse = scheduler.onPossessionBoundary({
+      const timeRemaining = Math.max(0, 2880 - elapsed);
+      const offensiveResponse = offenseScheduler.onPossessionBoundary({
         context: buildContext(timeRemaining, possessionIndex * 2, "normal", "offense"),
         periodTotalSeconds: 720,
+        matchTotalSeconds: 2880,
         defenderTeamFoulsInSegment: possessionIndex % 10,
       });
-      const defensiveResponse = scheduler.onPossessionBoundary({
+      const defensiveResponse = defenseScheduler.onPossessionBoundary({
         context: buildContext(timeRemaining, possessionIndex * 2 + 1, "normal", "defense"),
         periodTotalSeconds: 720,
+        matchTotalSeconds: 2880,
         defenderTeamFoulsInSegment: possessionIndex % 10,
       });
       if (offensiveResponse.trigger && offensiveResponse.pending) {
@@ -145,5 +153,28 @@ describe("KeyMomentScheduler", () => {
 
     expect([...offenseFocusTypes].some((type) => type === "create_shot" || type === "make_the_read" || type === "foul_pressure")).toBe(true);
     expect([...defenseFocusTypes].some((type) => type === "jump_lane" || type === "on_ball_stop" || type === "foul_pressure")).toBe(true);
+  });
+
+  it("gives high-trust players more clutch opportunities", () => {
+    const run = (coachTrust: number): number => {
+      const scheduler = createKeyMomentScheduler();
+      let clutchMoments = 0;
+      for (let possessionIndex = 1; possessionIndex <= 280; possessionIndex += 1) {
+        const elapsed = possessionIndex * 10;
+        const timeRemaining = Math.max(0, 2880 - elapsed);
+        const response = scheduler.onPossessionBoundary({
+          context: buildContext(timeRemaining, possessionIndex, "normal", "balanced", { coachTrust }),
+          periodTotalSeconds: 720,
+          matchTotalSeconds: 2880,
+          forceTrigger: timeRemaining <= 120 && possessionIndex % 12 === 0,
+        });
+        if (response.trigger && timeRemaining <= 240) {
+          clutchMoments += 1;
+        }
+      }
+      return clutchMoments;
+    };
+
+    expect(run(80)).toBeGreaterThanOrEqual(run(25));
   });
 });

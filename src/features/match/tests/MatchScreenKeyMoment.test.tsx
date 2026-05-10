@@ -315,7 +315,31 @@ describe("MatchScreen key moment UI", () => {
     expect(setFocus).toHaveBeenCalledWith("defense");
   });
 
-  it("disables the slider and tactic buttons while a key moment modal is active", () => {
+  it("defaults to Moment mode and switches to Log with the full history view", () => {
+    const screen = render(<MatchScreen />);
+
+    expect(screen.getAllByText("Moment Mode").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Sim Speed")).toBeNull();
+
+    act(() => {
+      useMatchStore.getState().addLog({
+        id: "tipoff",
+        quarter: 1,
+        timeRemaining: 720,
+        isUserAction: false,
+        text: "Tip-off won by Home",
+        type: "info",
+        team: "home",
+      });
+    });
+
+    fireEvent.press(screen.getByText("Log"));
+
+    expect(screen.getByText("Sim Speed")).toBeTruthy();
+    expect(screen.getByText("Tip-off won by Home")).toBeTruthy();
+  });
+
+  it("disables tactic buttons while a key moment modal is active and only exposes speed in log mode", () => {
     const setWorkRate = jest.fn();
     const screen = render(<MatchScreen />);
 
@@ -345,6 +369,9 @@ describe("MatchScreen key moment UI", () => {
 
     fireEvent.press(screen.getAllByText("High")[0]!);
     expect(setWorkRate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Sim Speed")).toBeNull();
+
+    fireEvent.press(screen.getByText("Log"));
     expect(screen.UNSAFE_getByType(require("@react-native-community/slider").default).props.disabled).toBe(true);
   });
 

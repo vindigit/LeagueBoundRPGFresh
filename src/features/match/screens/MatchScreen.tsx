@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
-import { FlatList, Pressable, SafeAreaView, Text, View } from "react-native";
+import { FlatList, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useMatchLoop } from "../hooks/useMatchLoop";
 import { useCareerStore } from "../../../store/useCareerStore";
-import type { PlayLog } from "../store/useMatchStore";
+import type { MatchMomentSummary, PlayLog, PlayerBoxScoreLine, TeamBoxScoreTotals } from "../store/useMatchStore";
 import { useMatchEngineStore } from "../store/useMatchEngineStore";
 import { useMatchStore } from "../store/useMatchStore";
 import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
@@ -157,6 +157,73 @@ const renderLogItem = ({ item }: { item: PlayLog }) => (
   </View>
 );
 
+const MatchTabButton = ({
+  label,
+  active,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) => (
+  <Pressable
+    disabled={disabled}
+    className={`flex-1 rounded-lg border px-3 py-2 ${active ? "border-cyan-300 bg-cyan-400/20" : "border-slate-700 bg-slate-900"} ${disabled ? "opacity-50" : ""}`}
+    onPress={onPress}
+  >
+    <Text className={`text-center text-xs font-semibold uppercase tracking-wide ${active ? "text-cyan-100" : "text-slate-300"}`}>{label}</Text>
+  </Pressable>
+);
+
+const renderTeamTotals = (label: string, totals: TeamBoxScoreTotals) => (
+  <View className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+    <Text className="text-sm font-semibold text-white">{label}</Text>
+    <Text className="mt-2 text-xs text-slate-300">
+      PTS {totals.pts} | REB {totals.reb} | AST {totals.ast} | STL {totals.stl} | BLK {totals.blk} | TO {totals.to} | FG {totals.fgm}-{totals.fga}
+    </Text>
+  </View>
+);
+
+const renderPlayerRow = (player: PlayerBoxScoreLine, isHighlighted: boolean) => (
+  <View key={player.id} className="mt-2 flex-row items-center justify-between rounded-lg bg-slate-950/40 px-3 py-2">
+    <View className="w-28 flex-row items-center gap-1">
+      <Text className={`text-xs font-semibold ${isHighlighted ? "text-yellow-300" : "text-slate-200"}`} numberOfLines={1}>
+        {player.name}
+      </Text>
+      {isHighlighted ? (
+        <View className="rounded-full border border-yellow-300/80 bg-yellow-300/20 px-2 py-0.5">
+          <Text className="text-[10px] font-bold uppercase tracking-wide text-yellow-200">YOU</Text>
+        </View>
+      ) : null}
+    </View>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.pts}</Text>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.reb}</Text>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.ast}</Text>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.stl}</Text>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.blk}</Text>
+    <Text className="w-8 text-right text-xs text-slate-300">{player.to}</Text>
+    <Text className="w-14 text-right text-xs text-slate-300">{player.fgm}-{player.fga}</Text>
+  </View>
+);
+
+const renderMomentSummaryCard = (item: MatchMomentSummary) => (
+  <View key={item.id} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <View className="flex-row items-center justify-between">
+      <Text className="text-xs font-semibold uppercase tracking-wider text-amber-300">Key Moment</Text>
+      <Text className="text-[11px] font-semibold text-slate-400">
+        Q{item.quarter} {formatClock(item.timeRemaining)}
+      </Text>
+    </View>
+    <Text className="mt-2 text-sm font-semibold text-white">{item.promptText}</Text>
+    <Text className="mt-2 text-sm text-slate-300">{item.resultText}</Text>
+    <Text className={`mt-3 text-xs font-semibold ${item.ratingDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+      Rating {item.ratingDelta >= 0 ? "+" : ""}{item.ratingDelta.toFixed(1)}
+    </Text>
+  </View>
+);
+
 export function MatchScreen() {
   useMatchLoop();
   const hasAppliedResultRef = useRef(false);
@@ -177,6 +244,11 @@ export function MatchScreen() {
   const matchBoxScore = useMatchStore((state) => state.matchBoxScore);
   const matchConsequences = useMatchStore((state) => state.matchConsequences);
   const simSpeed = useMatchStore((state) => state.simSpeed);
+  const presentationMode = useMatchStore((state) => state.presentationMode);
+  const activeTab = useMatchStore((state) => state.activeTab);
+  const momentPhase = useMatchStore((state) => state.momentPhase);
+  const momentHistory = useMatchStore((state) => state.momentHistory);
+  const latestMomentSummary = useMatchStore((state) => state.latestMomentSummary);
   const keyMomentPending = useMatchEngineStore((state) => state.snapshot.pendingKeyMoment);
   const userMatchState = useMatchEngineStore((state) => state.snapshot.userMatchState);
   const setWorkRate = useMatchEngineStore((state) => state.setWorkRate);
@@ -187,6 +259,8 @@ export function MatchScreen() {
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const setSimSpeed = useMatchStore((state) => state.setSimSpeed);
+  const setPresentationMode = useMatchStore((state) => state.setPresentationMode);
+  const setActiveTab = useMatchStore((state) => state.setActiveTab);
   const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
   const completeMatch = useCareerStore((state) => state.completeMatch);
   const keyMomentContextSummary = buildKeyMomentContextSummary({
@@ -202,8 +276,10 @@ export function MatchScreen() {
     userMatchState,
   });
   const overlayActive = Boolean(keyMomentPending || keyMomentFeedback);
+  const showBroadcastControls = presentationMode === "broadcast" || activeTab === "log";
   const workRate = userMatchState?.workRate ?? "normal";
   const focus = userMatchState?.focus ?? "balanced";
+  const userLine = matchBoxScore.homePlayers[0];
 
   useEffect(() => {
     hasAppliedResultRef.current = false;
@@ -260,18 +336,98 @@ export function MatchScreen() {
         </View>
       </View>
 
+      <View className="border-b border-slate-800 bg-slate-925 px-4 py-3">
+        <View className="flex-row gap-2">
+          <MatchTabButton label="Moment" active={activeTab === "moment"} onPress={() => { setPresentationMode("moment"); setActiveTab("moment"); }} />
+          <MatchTabButton label="Log" active={activeTab === "log"} onPress={() => { setPresentationMode("broadcast"); setActiveTab("log"); }} />
+          <MatchTabButton label="Box Score" active={activeTab === "box_score"} onPress={() => { setPresentationMode("broadcast"); setActiveTab("box_score"); }} />
+          <MatchTabButton label="Shot Chart" active={activeTab === "shot_chart"} disabled onPress={() => undefined} />
+        </View>
+      </View>
+
       <View className="flex-1 px-4 pb-4 pt-3">
-        <FlatList
-          data={logs}
-          keyExtractor={(item) => item.id}
-          renderItem={renderLogItem}
-          contentContainerClassName="pb-4"
-          ListEmptyComponent={
-            <View className="mt-8 items-center">
-              <Text className="text-sm text-slate-500">Match log will appear here.</Text>
+        {activeTab === "moment" ? (
+          <ScrollView contentContainerClassName="gap-3 pb-4">
+            <View className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                {momentPhase === "pregame" ? "Moment Mode" : momentPhase === "postgame" ? "Match Complete" : "Live Match"}
+              </Text>
+              <Text className="mt-2 text-xl font-bold text-white">
+                {momentPhase === "pregame"
+                  ? "Quick context, then your key possessions."
+                  : momentPhase === "postgame"
+                    ? "Your moment run is done."
+                    : keyMomentPending
+                      ? "A player-focused moment is live."
+                      : "The sim is moving between your big moments."}
+              </Text>
+              <Text className="mt-2 text-sm text-slate-300">
+                {momentPhase === "pregame"
+                  ? "Start the game to jump into the New Star Soccer-style flow. The full broadcast log and box score are still available any time."
+                  : latestMomentSummary
+                    ? latestMomentSummary.resultText
+                    : "Stay in Moment Mode to finish the match without watching the full possession log."}
+              </Text>
+              <View className="mt-4 flex-row gap-3">
+                <View className="flex-1 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Moments</Text>
+                  <Text className="mt-1 text-lg font-bold text-white">{momentHistory.length}</Text>
+                </View>
+                <View className="flex-1 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Your Line</Text>
+                  <Text className="mt-1 text-sm font-semibold text-white">
+                    {userLine ? `${userLine.pts} PTS | ${userLine.ast} AST | ${userLine.reb} REB` : "No stats yet"}
+                  </Text>
+                </View>
+              </View>
             </View>
-          }
-        />
+
+            {keyMomentFeedback && !keyMomentPending ? (
+              <View className="rounded-2xl border border-amber-400/40 bg-slate-900 p-4">
+                <Text className={`text-lg font-bold ${keyMomentFeedback.success ? "text-emerald-300" : "text-red-300"}`}>
+                  {keyMomentFeedback.success ? "Positive swing" : "Missed chance"}
+                </Text>
+                <Text className="mt-2 text-sm text-white">{keyMomentFeedback.text}</Text>
+              </View>
+            ) : null}
+
+            {momentHistory.length > 0 ? momentHistory.slice().reverse().map(renderMomentSummaryCard) : (
+              <View className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                <Text className="text-sm text-slate-300">Your resolved key moments will stack here as the match unfolds.</Text>
+              </View>
+            )}
+          </ScrollView>
+        ) : activeTab === "log" ? (
+          <FlatList
+            data={logs}
+            keyExtractor={(item) => item.id}
+            renderItem={renderLogItem}
+            contentContainerClassName="pb-4"
+            ListEmptyComponent={
+              <View className="mt-8 items-center">
+                <Text className="text-sm text-slate-500">Match log will appear here.</Text>
+              </View>
+            }
+          />
+        ) : activeTab === "box_score" ? (
+          <ScrollView contentContainerClassName="pb-4">
+            {renderTeamTotals(homeDisplayName, matchBoxScore.homeTotals)}
+            {renderTeamTotals(AWAY_NAME, matchBoxScore.awayTotals)}
+            <View className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
+              <Text className="text-sm font-semibold text-white">Home Players</Text>
+              {matchBoxScore.homePlayers.map((player) => renderPlayerRow(player, player.id === "home-0"))}
+            </View>
+            <View className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
+              <Text className="text-sm font-semibold text-white">Away Players</Text>
+              {matchBoxScore.awayPlayers.map((player) => renderPlayerRow(player, false))}
+            </View>
+          </ScrollView>
+        ) : (
+          <View className="flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900 p-6">
+            <Text className="text-base font-semibold text-white">Shot Chart Coming Later</Text>
+            <Text className="mt-2 text-center text-sm text-slate-400">The session model supports this tab, but the live shot chart is still a future phase.</Text>
+          </View>
+        )}
       </View>
 
       <View className="border-t border-slate-800 bg-slate-900 px-4 py-4">
@@ -294,25 +450,32 @@ export function MatchScreen() {
           </View>
         </View>
 
-        <View className="mb-4">
-          <View className="mb-2 flex-row items-center justify-between">
-            <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sim Speed</Text>
-            <Text className="text-sm font-semibold text-white">{formatSpeedLabel(simSpeed)}</Text>
+        {showBroadcastControls ? (
+          <View className="mb-4">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Sim Speed</Text>
+              <Text className="text-sm font-semibold text-white">{formatSpeedLabel(simSpeed)}</Text>
+            </View>
+            <Slider
+              minimumValue={0.5}
+              maximumValue={4}
+              step={0.5}
+              value={simSpeed}
+              minimumTrackTintColor="#22d3ee"
+              maximumTrackTintColor="#334155"
+              thumbTintColor="#f8fafc"
+              disabled={gameFinished || overlayActive}
+              onValueChange={(value) => {
+                setSimSpeed(value);
+              }}
+            />
           </View>
-          <Slider
-            minimumValue={0.5}
-            maximumValue={4}
-            step={0.5}
-            value={simSpeed}
-            minimumTrackTintColor="#22d3ee"
-            maximumTrackTintColor="#334155"
-            thumbTintColor="#f8fafc"
-            disabled={gameFinished || overlayActive}
-            onValueChange={(value) => {
-              setSimSpeed(value);
-            }}
-          />
-        </View>
+        ) : (
+          <View className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-3">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-slate-400">Moment Mode</Text>
+            <Text className="mt-1 text-sm text-slate-300">Broadcast speed stays available when you open the live log or box score tabs.</Text>
+          </View>
+        )}
         {!gameFinished ? (
           isPlaying ? (
             <Pressable className="items-center justify-center rounded-xl bg-amber-500 py-3" onPress={pauseMatch}>
@@ -342,3 +505,4 @@ export function MatchScreen() {
     </SafeAreaView>
   );
 }
+

@@ -314,7 +314,9 @@ export const useMatchLoop = (): void => {
   const schoolPath = useCareerStore((state) => state.schoolPath);
   const seasonNumber = useCareerStore((state) => state.seasonNumber);
   const injury = useCareerStore((state) => state.injury);
+  const coachTrust = useCareerStore((state) => state.coachTrust);
   const addMatchConsequences = useMatchStore((state) => state.addMatchConsequences);
+  const pushMomentSummary = useMatchStore((state) => state.pushMomentSummary);
 
   const runtimeTeams = useMemo(
     () =>
@@ -484,6 +486,15 @@ export const useMatchLoop = (): void => {
 
     if (trace.resolvedKeyMoment) {
       addMatchConsequences(trace.resolvedKeyMoment.consequences);
+      pushMomentSummary({
+        id: trace.resolvedKeyMoment.pendingId,
+        promptText: trace.resolvedKeyMoment.promptText,
+        resultText: trace.resolvedKeyMoment.resultSummaryText,
+        ratingDelta: trace.resolvedKeyMoment.success ? 0.3 : -0.2,
+        success: trace.resolvedKeyMoment.success,
+        quarter: periodState.quarter,
+        timeRemaining: periodState.timeRemaining,
+      });
       setKeyMomentFeedback({
         id: trace.resolvedKeyMoment.pendingId,
         success: trace.resolvedKeyMoment.success,
@@ -512,7 +523,7 @@ export const useMatchLoop = (): void => {
     return () => {
       unsubscribe();
     };
-  }, [addLog, addMatchConsequences, endMatch, pauseMatch, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
+  }, [addLog, addMatchConsequences, endMatch, pauseMatch, pushMomentSummary, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
 
   useEffect(() => {
     const matchState = useMatchStore.getState();
@@ -535,6 +546,8 @@ export const useMatchLoop = (): void => {
       leagueLevel,
       simulationMode,
       totalSeconds: REGULATION_TOTAL_SECONDS,
+      coachTrust,
+      staminaRating: playerAttributes.stamina,
     });
     applyTraceToUi(initialSnapshot);
     projectSnapshotToUi(initialSnapshot);
@@ -544,9 +557,11 @@ export const useMatchLoop = (): void => {
     initializeBoxScore,
     leagueLevel,
     playerId,
+    playerAttributes.stamina,
     resetRuntime,
     runtimeTeams,
     simulationMode,
+    coachTrust,
   ]);
 
   useEffect(() => {

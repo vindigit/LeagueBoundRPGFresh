@@ -5,7 +5,6 @@ import type {
   KeyMomentScheduler,
   KeyMomentSchedulerInput,
   KeyMomentSchedulerOutput,
-  PeriodKey,
 } from "./types";
 
 interface SchedulerState {
@@ -18,46 +17,60 @@ export interface KeyMomentSchedulerConfig {
   cooldownPossessions?: number;
 }
 
-const getPeriodState = (
-  store: Map<PeriodKey, SchedulerState>,
-  periodKey: PeriodKey,
-): SchedulerState => {
-  const existing = store.get(periodKey);
-  if (existing) {
-    return existing;
-  }
-  const next: SchedulerState = {
-    triggeredCount: 0,
-    lastTriggeredPossessionIndex: -999,
-  };
-  store.set(periodKey, next);
-  return next;
-};
-
 const getTargetPerPeriod = (input: KeyMomentSchedulerInput, config: KeyMomentSchedulerConfig): number => {
   if (config.targetPerPeriod) {
     return config.targetPerPeriod;
   }
+  const trust = input.context.coachTrust ?? 50;
+  const fatigue = input.context.fatigue;
+  const stamina = input.context.staminaRating ?? 70;
+  let target = 5;
+
+  if (trust >= 75) {
+    target += 1;
+  } else if (trust <= 35) {
+    target -= 1;
+  }
+
+  if (fatigue >= 0.7 || stamina <= 45) {
+    target -= 1;
+  } else if (fatigue <= 0.3 && stamina >= 75) {
+    target += 1;
+  }
+
   if (input.context.workRate === "high") {
-    return 4;
+    target += 1;
   }
   if (input.context.workRate === "low") {
-    return 2;
+    target -= 1;
   }
-  return 3;
+
+  return Math.max(3, Math.min(7, target));
 };
 
 const getCooldown = (input: KeyMomentSchedulerInput, config: KeyMomentSchedulerConfig): number => {
   if (config.cooldownPossessions) {
     return config.cooldownPossessions;
   }
+  const trust = input.context.coachTrust ?? 50;
+  const fatigue = input.context.fatigue;
+  let cooldown = 16;
+
+  if (trust >= 75) {
+    cooldown -= 2;
+  } else if (trust <= 35) {
+    cooldown += 2;
+  }
   if (input.context.workRate === "high") {
-    return 4;
+    cooldown -= 1;
+  } else if (input.context.workRate === "low") {
+    cooldown += 1;
   }
-  if (input.context.workRate === "low") {
-    return 7;
+  if (fatigue >= 0.7) {
+    cooldown += 2;
   }
-  return 5;
+
+  return Math.max(8, cooldown);
 };
 
 const getFocusAlignmentBonus = (input: KeyMomentSchedulerInput): number => {
@@ -119,19 +132,49 @@ const pickScheduledPending = (input: KeyMomentSchedulerInput, seedValue: number)
   return definition.buildPending(buildArgs);
 };
 
+const getLeverageBonus = (input: KeyMomentSchedulerInput): number => {
+  const trust = input.context.coachTrust ?? 50;
+  const secondsRemaining = input.possessionState?.secondsRemaining ?? input.context.timeRemaining;
+  const score = input.context.score;
+  const scoreDiff = Math.abs(score.home - score.away);
+  const clutchWindow = secondsRemaining <= 120 && scoreDiff <= 8;
+  const highLeverageWindow = secondsRemaining <= 240 && scoreDiff <= 10;
+
+  if (clutchWindow) {
+    return trust >= 70 ? 0.28 : trust <= 35 ? -0.12 : 0.12;
+  }
+  if (highLeverageWindow) {
+    return trust >= 70 ? 0.14 : trust <= 35 ? -0.06 : 0.05;
+  }
+  return 0;
+};
+
 export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}): KeyMomentScheduler => {
-  const periodState = new Map<PeriodKey, SchedulerState>();
+  const state: SchedulerState = {
+    triggeredCount: 0,
+    lastTriggeredPossessionIndex: -999,
+  };
 
   const onPossessionBoundary = (input: KeyMomentSchedulerInput): KeyMomentSchedulerOutput => {
-    const state = getPeriodState(periodState, input.context.periodKey);
     const targetPerPeriod = getTargetPerPeriod(input, config);
     const cooldownPossessions = getCooldown(input, config);
     const possessionsSinceLast = input.context.possessionIndex - state.lastTriggeredPossessionIndex;
-    const elapsedShare = 1 - input.context.timeRemaining / Math.max(1, input.periodTotalSeconds);
+    const matchTotalSeconds = input.matchTotalSeconds ?? input.periodTotalSeconds * 4;
+    const secondsRemaining = input.possessionState?.secondsRemaining ?? input.context.timeRemaining;
+    const elapsedShare = 1 - secondsRemaining / Math.max(1, matchTotalSeconds);
     const expectedByNow = Math.floor(targetPerPeriod * elapsedShare);
     const phasePressure = expectedByNow - state.triggeredCount;
     const seedValue = input.context.possessionIndex * 17 + state.triggeredCount * 13 + Math.round(elapsedShare * 100);
-    const triggerChance = 0.3 + getFocusAlignmentBonus(input) + Math.max(0, phasePressure) * 0.18;
+    const trust = input.context.coachTrust ?? 50;
+    const fatiguePenalty = input.context.fatigue >= 0.72 ? 0.14 : input.context.fatigue >= 0.5 ? 0.07 : 0;
+    const trustBonus = trust >= 75 ? 0.08 : trust <= 35 ? -0.08 : 0;
+    const triggerChance =
+      0.16 +
+      getFocusAlignmentBonus(input) +
+      getLeverageBonus(input) +
+      trustBonus -
+      fatiguePenalty +
+      Math.max(0, phasePressure) * 0.2;
 
     if (input.forceTrigger && possessionsSinceLast > 1) {
       state.triggeredCount += 1;
@@ -158,7 +201,8 @@ export const createKeyMomentScheduler = (config: KeyMomentSchedulerConfig = {}):
 
   return {
     reset: () => {
-      periodState.clear();
+      state.triggeredCount = 0;
+      state.lastTriggeredPossessionIndex = -999;
     },
     onPossessionBoundary,
   };

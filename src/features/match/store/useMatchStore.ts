@@ -12,6 +12,16 @@ export interface PlayLog {
   team: "home" | "away";
 }
 
+export interface MatchMomentSummary {
+  id: string;
+  promptText: string;
+  resultText: string;
+  ratingDelta: number;
+  success: boolean;
+  quarter: 1 | 2 | 3 | 4;
+  timeRemaining: number;
+}
+
 export interface PlayerBoxScoreLine {
   id: string;
   name: string;
@@ -55,6 +65,10 @@ export interface MatchState {
   isPaused: boolean;
   gameFinished: boolean;
   simulationMode: "interactive" | "full_game";
+  presentationMode: "moment" | "broadcast";
+  activeTab: "moment" | "log" | "box_score" | "shot_chart";
+  momentPhase: "pregame" | "live" | "postgame";
+  broadcastUnlocked: boolean;
   homeScore: number;
   awayScore: number;
   quarter: 1 | 2 | 3 | 4;
@@ -64,6 +78,8 @@ export interface MatchState {
   timeRemaining: number;
   possession: "home" | "away";
   keyMomentFeedback?: { id: string; success: boolean; text: string };
+  latestMomentSummary?: MatchMomentSummary;
+  momentHistory: MatchMomentSummary[];
   matchConsequences: MatchConsequence[];
   logs: PlayLog[];
   matchBoxScore: MatchBoxScore;
@@ -76,9 +92,12 @@ interface MatchActions {
   pauseMatch: () => void;
   endMatch: () => void;
   setSimulationMode: (mode: MatchState["simulationMode"]) => void;
+  setPresentationMode: (mode: MatchState["presentationMode"]) => void;
+  setActiveTab: (tab: MatchState["activeTab"]) => void;
   setSimSpeed: (speed: number) => void;
   setKeyMomentFeedback: (feedback: MatchState["keyMomentFeedback"] | undefined) => void;
   clearKeyMomentFeedback: () => void;
+  pushMomentSummary: (summary: MatchMomentSummary) => void;
   addMatchConsequences: (consequences: MatchConsequence[]) => void;
   updateGame: (
     partialState: Partial<Pick<MatchState, "homeScore" | "awayScore" | "quarter" | "isOvertime" | "overtimePeriod" | "timeRemaining" | "possession">>,
@@ -209,6 +228,10 @@ const initialMatchState: MatchState = {
   isPaused: false,
   gameFinished: false,
   simulationMode: "interactive",
+  presentationMode: "moment",
+  activeTab: "moment",
+  momentPhase: "pregame",
+  broadcastUnlocked: false,
   homeScore: 0,
   awayScore: 0,
   quarter: 1,
@@ -218,6 +241,8 @@ const initialMatchState: MatchState = {
   timeRemaining: 720,
   possession: "home",
   keyMomentFeedback: undefined,
+  latestMomentSummary: undefined,
+  momentHistory: [],
   matchConsequences: [],
   logs: [],
   matchBoxScore: createInitialBoxScore(),
@@ -238,10 +263,11 @@ export const useMatchStore = create<MatchStore>((set) => ({
     }));
   },
   startMatch: () => {
-    set(() => ({
+    set((state) => ({
       isPlaying: true,
       isPaused: false,
       gameFinished: false,
+      momentPhase: state.momentHistory.length > 0 ? "live" : "pregame",
     }));
   },
   pauseMatch: () => {
@@ -255,10 +281,25 @@ export const useMatchStore = create<MatchStore>((set) => ({
       isPlaying: false,
       isPaused: false,
       gameFinished: true,
+      momentPhase: "postgame",
     }));
   },
   setSimulationMode: (mode) => {
     set(() => ({ simulationMode: mode }));
+  },
+  setPresentationMode: (mode) => {
+    set(() => ({
+      presentationMode: mode,
+      activeTab: mode === "broadcast" ? "log" : "moment",
+      broadcastUnlocked: true,
+    }));
+  },
+  setActiveTab: (tab) => {
+    set(() => ({
+      activeTab: tab,
+      presentationMode: tab === "moment" ? "moment" : "broadcast",
+      broadcastUnlocked: tab === "moment" ? true : true,
+    }));
   },
   setSimSpeed: (speed) => {
     const clampedSpeed = Math.min(4, Math.max(0.5, speed));
@@ -269,6 +310,14 @@ export const useMatchStore = create<MatchStore>((set) => ({
   },
   clearKeyMomentFeedback: () => {
     set(() => ({ keyMomentFeedback: undefined }));
+  },
+  pushMomentSummary: (summary) => {
+    set((state) => ({
+      latestMomentSummary: summary,
+      momentHistory: [...state.momentHistory, summary].slice(-10),
+      momentPhase: "live",
+      broadcastUnlocked: true,
+    }));
   },
   addMatchConsequences: (consequences) => {
     if (consequences.length === 0) {

@@ -34,6 +34,7 @@ import {
   createPostgameNewsItem,
   createPostgameStoryDetail,
   createSchoolPathCommitmentNewsItem,
+  createTournamentPathOutlookNewsItem,
 } from "../features/backstory/news";
 import { computeOverall } from "../builder/derivedRatings";
 import {
@@ -61,6 +62,9 @@ import type {
   FinanceLedgerEntry,
   FinanceState,
   MatchConsequence,
+  MiddleSchoolPathSignal,
+  MiddleSchoolTournamentMatch,
+  MiddleSchoolTournamentState,
   Offer,
   RecordFinanceTransactionInput,
   SchoolPath,
@@ -184,6 +188,184 @@ const defaultScoutVisibilityForPhase = (careerPhase: CareerPhase): number => {
     default:
       return 90;
   }
+};
+
+const MIDDLE_SCHOOL_TOURNAMENT_NAME = "Future Stars Classic";
+
+const createDefaultMiddleSchoolTournament = (): MiddleSchoolTournamentState => ({
+  eventId: "future-stars-classic",
+  eventName: MIDDLE_SCHOOL_TOURNAMENT_NAME,
+  currentMatchIndex: 0,
+  matches: [
+    {
+      id: "future-stars-pool-opener",
+      stage: "POOL_OPENER",
+      label: "Pool Opener",
+      opponentLabel: "Bay City Juniors",
+      stakesTag: "TOURNAMENT",
+      tutorialFocus: ["Basic shooting", "Pass-and-read moments", "Personal rating"],
+    },
+    {
+      id: "future-stars-rival",
+      stage: "RIVAL_MATCHUP",
+      label: "Rival Matchup",
+      opponentLabel: "Northside Heat",
+      stakesTag: "RIVALRY",
+      tutorialFocus: ["Coach trust", "Shot selection", "Teammate relationship"],
+    },
+    {
+      id: "future-stars-semifinal",
+      stage: "SEMIFINAL_SHOWCASE",
+      label: "Semifinal Showcase",
+      opponentLabel: "Lone Star Elite",
+      stakesTag: "TOURNAMENT",
+      tutorialFocus: ["Defense and rebounding", "Stamina", "Scout buzz"],
+    },
+    {
+      id: "future-stars-final",
+      stage: "FINAL_OR_PLACEMENT",
+      label: "Championship Path",
+      opponentLabel: "Metro Select",
+      stakesTag: "CHAMPIONSHIP",
+      tutorialFocus: ["Pressure moments", "Exposure", "Potential and school path"],
+    },
+  ],
+  pathInterest: {
+    LOCAL_3A: 50,
+    STATE_5A: 50,
+    PREP: 50,
+  },
+  localBuzz: 12,
+  scoutBuzz: 0,
+  pressureScore: 8,
+  fuzzyPotentialSeed: 50,
+  schoolPathRecommendations: ["STATE_5A", "LOCAL_3A", "PREP"],
+  completed: false,
+});
+
+const createMiddleSchoolTournamentPathSignals = (
+  tournament: MiddleSchoolTournamentState,
+): MiddleSchoolPathSignal[] =>
+  (Object.keys(tournament.pathInterest) as SchoolPath[]).map((path) => ({
+    path,
+    score: tournament.pathInterest[path],
+    reasons: [],
+  }));
+
+const getCurrentTournamentMatch = (
+  tournament: MiddleSchoolTournamentState | null | undefined,
+): MiddleSchoolTournamentMatch | null => {
+  if (!tournament || tournament.completed) {
+    return null;
+  }
+
+  return tournament.matches[tournament.currentMatchIndex] ?? null;
+};
+
+const clampPathInterest = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
+
+const summarizeTournamentMatch = (
+  match: MiddleSchoolTournamentMatch,
+  result: Pick<NonNullable<CareerState["lastMatchResult"]>, "didWin" | "matchRating">,
+): string =>
+  `${match.label}: ${result.didWin ? "win" : "loss"}, ${result.matchRating.toFixed(1)} rating.`;
+
+const applyTournamentResult = (
+  tournament: MiddleSchoolTournamentState,
+  result: NonNullable<CareerState["lastMatchResult"]>,
+): MiddleSchoolTournamentState => {
+  const currentMatch = getCurrentTournamentMatch(tournament);
+  if (!currentMatch) {
+    return tournament;
+  }
+
+  const next = {
+    ...tournament,
+    matches: tournament.matches.map((match, index) =>
+      index === tournament.currentMatchIndex
+        ? {
+            ...match,
+            label:
+              match.stage === "FINAL_OR_PLACEMENT"
+                ? result.didWin
+                  ? "Final"
+                  : "Placement Game"
+                : match.label,
+            resultSummary: summarizeTournamentMatch(match, result),
+          }
+        : match,
+    ),
+    pathInterest: { ...tournament.pathInterest },
+  };
+
+  const ratingBand = Math.round((result.matchRating - 5) * 4);
+  const winBonus = result.didWin ? 5 : -2;
+  const trustBias = Math.round(result.meterDeltas.coachTrust * 0.7);
+  const teamBias = Math.round(result.meterDeltas.teammates * 0.7);
+  const fanBias = Math.round(result.meterDeltas.fans * 0.6);
+  const reboundBias = Math.round((result.boxScore.homePlayers[0]?.reb ?? 0) * 0.8);
+  const assistBias = Math.round((result.boxScore.homePlayers[0]?.ast ?? 0) * 0.9);
+  const pointsBias = Math.round((result.boxScore.homePlayers[0]?.pts ?? 0) / 4);
+
+  switch (currentMatch.stage) {
+    case "POOL_OPENER":
+      next.localBuzz = clampMeter(tournament.localBuzz + 10 + Math.max(0, fanBias) + Math.max(0, pointsBias));
+      next.pathInterest.LOCAL_3A = clampPathInterest(tournament.pathInterest.LOCAL_3A + 6 + winBonus + fanBias);
+      next.pathInterest.STATE_5A = clampPathInterest(tournament.pathInterest.STATE_5A + 4 + ratingBand);
+      next.pathInterest.PREP = clampPathInterest(tournament.pathInterest.PREP + 2 + Math.max(0, ratingBand));
+      break;
+    case "RIVAL_MATCHUP":
+      next.localBuzz = clampMeter(tournament.localBuzz + 6 + Math.max(0, fanBias));
+      next.pressureScore = clampMeter(tournament.pressureScore + 8 + Math.max(0, winBonus) + Math.abs(trustBias));
+      next.pathInterest.LOCAL_3A = clampPathInterest(tournament.pathInterest.LOCAL_3A + 2 + teamBias);
+      next.pathInterest.STATE_5A = clampPathInterest(tournament.pathInterest.STATE_5A + 7 + trustBias + teamBias);
+      next.pathInterest.PREP = clampPathInterest(tournament.pathInterest.PREP + 3 + Math.max(0, trustBias));
+      break;
+    case "SEMIFINAL_SHOWCASE":
+      next.scoutBuzz = clampMeter(tournament.scoutBuzz + 12 + Math.max(0, reboundBias) + Math.max(0, ratingBand));
+      next.pathInterest.LOCAL_3A = clampPathInterest(tournament.pathInterest.LOCAL_3A + 1 + Math.max(0, reboundBias / 2));
+      next.pathInterest.STATE_5A = clampPathInterest(tournament.pathInterest.STATE_5A + 5 + reboundBias + trustBias);
+      next.pathInterest.PREP = clampPathInterest(tournament.pathInterest.PREP + 8 + ratingBand + reboundBias);
+      break;
+    case "FINAL_OR_PLACEMENT":
+      next.localBuzz = clampMeter(tournament.localBuzz + 4 + Math.max(0, fanBias));
+      next.scoutBuzz = clampMeter(tournament.scoutBuzz + 8 + Math.max(0, pointsBias));
+      next.pressureScore = clampMeter(tournament.pressureScore + 10 + Math.max(0, ratingBand) + Math.max(0, winBonus));
+      next.fuzzyPotentialSeed = clampMeter(
+        tournament.fuzzyPotentialSeed + 8 + Math.max(0, ratingBand) + Math.max(0, assistBias) + Math.max(0, reboundBias / 2),
+      );
+      next.pathInterest.LOCAL_3A = clampPathInterest(tournament.pathInterest.LOCAL_3A + 3 + winBonus + fanBias);
+      next.pathInterest.STATE_5A = clampPathInterest(tournament.pathInterest.STATE_5A + 5 + trustBias + assistBias);
+      next.pathInterest.PREP = clampPathInterest(tournament.pathInterest.PREP + 9 + ratingBand + Math.round(tournament.scoutBuzz / 10));
+      break;
+  }
+
+  next.currentMatchIndex = Math.min(tournament.matches.length, tournament.currentMatchIndex + 1);
+  next.completed = next.currentMatchIndex >= tournament.matches.length;
+  next.schoolPathRecommendations = createMiddleSchoolTournamentPathSignals(next)
+    .sort((left, right) => right.score - left.score)
+    .map((signal) => signal.path);
+
+  return next;
+};
+
+const getTournamentPathBadge = (tournament: MiddleSchoolTournamentState | null, path: SchoolPath): string | null => {
+  if (!tournament) {
+    return null;
+  }
+  if (tournament.schoolPathRecommendations[0] === path) {
+    return "Recommended";
+  }
+  if (path === "LOCAL_3A" && tournament.localBuzz >= tournament.scoutBuzz) {
+    return "Local buzz strongest";
+  }
+  if (path === "PREP" && tournament.scoutBuzz >= 20) {
+    return "Scouts noticed upside";
+  }
+  if (path === "STATE_5A") {
+    return "Best fit for current run";
+  }
+  return null;
 };
 
 const deriveStarRating = (player: Player): StarRating => {
@@ -347,6 +529,44 @@ const createDefaultSeasonSchedule = (
   currentWeek: number,
 ): SeasonSchedule => {
   const seasonId = `${careerPhase}-${currentYear}-${seasonNumber}`;
+  if (careerPhase === "MIDDLE_SCHOOL_AAU") {
+    const tournament = createDefaultMiddleSchoolTournament();
+    const weeks: SeasonSchedule["weeks"] = tournament.matches.map((match, index) => ({
+      id: `${seasonId}-week-${index + 1}`,
+      weekNumber: index + 1,
+      label: match.label,
+      phase: careerPhase,
+      windows: [
+        {
+          id: `${seasonId}-${match.id}`,
+          type: "TOURNAMENT",
+          label: `${tournament.eventName} ${match.label}`,
+          startWeek: index + 1,
+          endWeek: index + 1,
+          isActive: currentWeek === index + 1,
+        },
+      ],
+      matchups: [
+        {
+          id: match.id,
+          label: match.label,
+          opponentLabel: match.opponentLabel,
+          isTournament: true,
+          completed: currentWeek > index + 1,
+        },
+      ],
+      notes: match.tutorialFocus,
+    }));
+
+    return {
+      seasonId,
+      seasonLabel: tournament.eventName,
+      phase: careerPhase,
+      currentWeekId: weeks.find((week) => week.weekNumber === currentWeek)?.id ?? weeks[0].id,
+      weeks,
+    };
+  }
+
   const weeks: SeasonSchedule["weeks"] = [
     {
       id: `${seasonId}-week-1`,
@@ -441,6 +661,7 @@ const createCareerProgressionState = (input: {
     ...createDefaultCareerMeterState(),
     teamInterestById: {},
     schoolPath: defaultSchoolPathForPhase(careerPhase),
+    middleSchoolTournament: careerPhase === "MIDDLE_SCHOOL_AAU" ? createDefaultMiddleSchoolTournament() : null,
     offers: [],
     seasonSchedule: createDefaultSeasonSchedule(input.currentYear, input.seasonNumber, careerPhase, input.currentWeek),
     relationships: {},
@@ -585,7 +806,46 @@ const normalizeOfferExposureTier = (offer: Offer): Offer => ({
 
 const shouldPromptForSchoolPathSelection = (
   state: Pick<CareerState, "leagueLevel" | "currentWeek" | "pendingSchoolPathSelection">,
-): boolean => state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek >= 2 && state.pendingSchoolPathSelection;
+): boolean => state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek >= 5 && state.pendingSchoolPathSelection;
+
+const buildTournamentPathSeedBonus = (
+  tournament: MiddleSchoolTournamentState | null,
+  path: SchoolPath,
+): {
+  visibility: number;
+  coachTrust: number;
+  fans: number;
+  teammates: number;
+  localBuzz: number;
+  scoutBuzz: number;
+} => {
+  if (!tournament) {
+    return {
+      visibility: 0,
+      coachTrust: 0,
+      fans: 0,
+      teammates: 0,
+      localBuzz: 0,
+      scoutBuzz: 0,
+    };
+  }
+
+  const pathScore = tournament.pathInterest[path] ?? 50;
+  const recommendationBonus = tournament.schoolPathRecommendations[0] === path ? 4 : 0;
+  return {
+    visibility:
+      path === "PREP"
+        ? Math.round(tournament.scoutBuzz / 5) + recommendationBonus
+        : path === "STATE_5A"
+          ? Math.round((tournament.scoutBuzz + tournament.localBuzz) / 10) + recommendationBonus
+          : Math.round(tournament.localBuzz / 8) + recommendationBonus,
+    coachTrust: path === "STATE_5A" ? Math.round(pathScore / 12) : path === "PREP" ? 1 : 0,
+    fans: path === "LOCAL_3A" ? Math.round(tournament.localBuzz / 6) : path === "STATE_5A" ? 2 : 0,
+    teammates: path === "STATE_5A" ? 3 : path === "LOCAL_3A" ? 2 : 1,
+    localBuzz: tournament.localBuzz,
+    scoutBuzz: tournament.scoutBuzz,
+  };
+};
 
 const hasTakenWeeklyAction = (weeklyActionState: WeeklyActionState, actionId: WeeklyActionDefinitionId): boolean =>
   weeklyActionState.actionsTaken.some((action) => action.id === actionId);
@@ -647,6 +907,14 @@ const resolveWeekAdvance = (input: {
     seasonNumber: input.seasonNumber,
     seasonSchedule: syncSeasonScheduleWeek(input.seasonSchedule, nextWeek),
   };
+};
+
+const previewNextWeek = (input: {
+  currentWeek: number;
+  seasonSchedule: SeasonSchedule;
+}): number => {
+  const totalWeeks = input.seasonSchedule.weeks.length;
+  return input.currentWeek >= totalWeeks ? 1 : input.currentWeek + 1;
 };
 
 const buildWeeklyActionResult = (entry: WeeklyActionEntry): WeeklyActionResult => {
@@ -855,6 +1123,7 @@ const initialCareerState: CareerState = {
   teamInterestById: {},
   schoolPath: "LOCAL_3A",
   pendingSchoolPathSelection: false,
+  middleSchoolTournament: createDefaultMiddleSchoolTournament(),
   offers: [],
   seasonSchedule: createDefaultSeasonSchedule(2026, 1, "MIDDLE_SCHOOL_AAU", 1),
   relationships: {},
@@ -938,16 +1207,17 @@ const appendNewsItem = (existingNews: CareerState["newsFeed"], item: CareerState
   [item, ...existingNews].slice(0, NEWS_FEED_LIMIT);
 
 const seedHighSchoolRecruitingState = (
-  state: Pick<CareerState, "player" | "scoutVisibility" | "starRating" | "currentWeek">,
+  state: Pick<CareerState, "player" | "scoutVisibility" | "starRating" | "currentWeek" | "middleSchoolTournament">,
   schoolPath: SchoolPath,
 ) => {
   const profile = getSchoolPathProfile(schoolPath);
+  const tournamentBonus = buildTournamentPathSeedBonus(state.middleSchoolTournament, schoolPath);
   const teamInterestById = seedHighSchoolTeamInterest({
     programs: HIGH_SCHOOL_RECRUITING_PROGRAMS,
     player: state.player,
-    scoutVisibility: state.scoutVisibility,
+    scoutVisibility: state.scoutVisibility + tournamentBonus.visibility,
     starRating: state.starRating,
-    schoolPathExposureBoost: profile.immediateExposureBoost,
+    schoolPathExposureBoost: profile.immediateExposureBoost + tournamentBonus.visibility,
   });
 
   return {
@@ -1353,12 +1623,17 @@ export const useCareerStore = create<CareerStore>()(
 
           const profile = getSchoolPathProfile(path);
           const careerPhase = careerPhaseFromLeagueLevel(LeagueLevel.HIGH_SCHOOL);
+          const tournamentBonus = buildTournamentPathSeedBonus(state.middleSchoolTournament, path);
           const recruitingState = seedHighSchoolRecruitingState(
             {
               player: state.player,
-              scoutVisibility: Math.max(state.scoutVisibility, defaultScoutVisibilityForPhase(careerPhase)) + profile.immediateExposureBoost,
+              scoutVisibility:
+                Math.max(state.scoutVisibility, defaultScoutVisibilityForPhase(careerPhase)) +
+                profile.immediateExposureBoost +
+                tournamentBonus.visibility,
               starRating: state.starRating,
               currentWeek: state.currentWeek,
+              middleSchoolTournament: state.middleSchoolTournament,
             },
             path,
           );
@@ -1368,9 +1643,15 @@ export const useCareerStore = create<CareerStore>()(
             careerPhase,
             schoolPath: path,
             pendingSchoolPathSelection: false,
+            middleSchoolTournament: state.middleSchoolTournament,
             scoutVisibility: clampVisibility(
-              Math.max(state.scoutVisibility, defaultScoutVisibilityForPhase(careerPhase)) + profile.immediateExposureBoost,
+              Math.max(state.scoutVisibility, defaultScoutVisibilityForPhase(careerPhase)) +
+                profile.immediateExposureBoost +
+                tournamentBonus.visibility,
             ),
+            coachTrust: clampMeter(state.coachTrust + tournamentBonus.coachTrust),
+            fans: clampMeter(state.fans + tournamentBonus.fans),
+            teammates: clampMeter(state.teammates + tournamentBonus.teammates),
             seasonSchedule: createDefaultSeasonSchedule(
               state.currentYear,
               state.seasonNumber,
@@ -1549,20 +1830,16 @@ export const useCareerStore = create<CareerStore>()(
           const priorMatchRating = state.lastMatchResult?.matchRating;
           const ratingDelta =
             typeof priorMatchRating === "number" ? Math.round((ratingOutcome.matchRating - priorMatchRating) * 10) / 10 : 0;
-          const nextState = resolveWeekAdvance({
-            currentWeek: state.currentWeek,
-            currentYear: state.currentYear,
-            seasonNumber: state.seasonNumber,
-            careerPhase: state.careerPhase,
-            seasonSchedule: state.seasonSchedule,
-          });
           const lastMatchResult = {
             homeScore,
             awayScore,
             didWin,
             bankDelta,
             moraleDelta,
-            weekAfter: nextState.currentWeek,
+            weekAfter: previewNextWeek({
+              currentWeek: state.currentWeek,
+              seasonSchedule: state.seasonSchedule,
+            }),
             overtimePeriods: overtimePeriods ?? 0,
             boxScore,
             consequences,

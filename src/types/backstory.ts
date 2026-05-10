@@ -124,7 +124,12 @@ export interface GeneratedBadgeProfile {
   badges: ResolvedBuilderBadge[];
 }
 
-export type CareerNewsCategory = "LOCAL_BUZZ" | "POSTGAME_RECAP";
+export type CareerNewsCategory =
+  | "LOCAL_BUZZ"
+  | "POSTGAME_RECAP"
+  | "TOURNAMENT_RECAP"
+  | "SCOUT_BUZZ"
+  | "PATH_OUTLOOK";
 export type StoryType = "POSTGAME";
 export type StoryTabId = "RECAP" | "BOX_SCORE" | "BUZZ";
 export type RecapTier = "STANDARD" | "FEATURE";
@@ -145,10 +150,12 @@ export type StoryStakesTag =
   | "PLAYOFF"
   | "RIVALRY"
   | "CHAMPIONSHIP"
-  | "SEASON_ENDING";
+  | "SEASON_ENDING"
+  | "SHOWCASE";
 export type FeatureReason =
   | "PLAYOFF_GAME"
   | "TOURNAMENT_GAME"
+  | "SHOWCASE_GAME"
   | "RIVALRY_GAME"
   | "CHAMPIONSHIP_GAME"
   | "SEASON_ENDING_LOSS"

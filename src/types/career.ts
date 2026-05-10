@@ -11,6 +11,7 @@ import type {
   FinanceState,
   LegacyPerk,
   MatchConsequence,
+  MiddleSchoolTournamentState,
   Offer,
   RecordFinanceTransactionInput,
   RelationshipState,
@@ -136,6 +137,7 @@ export interface CareerState {
   teamInterestById: Record<string, number>;
   schoolPath: SchoolPath;
   pendingSchoolPathSelection: boolean;
+  middleSchoolTournament: MiddleSchoolTournamentState | null;
   offers: Offer[];
   seasonSchedule: SeasonSchedule;
   relationships: Record<string, RelationshipState>;

@@ -288,6 +288,7 @@ export const useMatchLoop = (): void => {
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const isPaused = useMatchStore((state) => state.isPaused);
   const gameFinished = useMatchStore((state) => state.gameFinished);
+  const sessionId = useMatchStore((state) => state.sessionId);
   const simulationMode = useMatchStore((state) => state.simulationMode);
   const simSpeed = useMatchStore((state) => state.simSpeed);
   const startMatch = useMatchStore((state) => state.startMatch);
@@ -527,11 +528,6 @@ export const useMatchLoop = (): void => {
   }, [addLog, addMatchConsequences, endMatch, pauseMatch, pushMomentSummary, recordBoxScoreEvent, setKeyMomentFeedback, startMatch, updateGame]);
 
   useEffect(() => {
-    const matchState = useMatchStore.getState();
-    if (matchState.isPlaying || matchState.isPaused || matchState.gameFinished) {
-      return;
-    }
-
     resetRuntime();
     possessionProgressRef.current = 0;
     lastAppliedTraceIdRef.current = 0;
@@ -561,6 +557,7 @@ export const useMatchLoop = (): void => {
     playerAttributes.stamina,
     resetRuntime,
     runtimeTeams,
+    sessionId,
     simulationMode,
     coachTrust,
   ]);

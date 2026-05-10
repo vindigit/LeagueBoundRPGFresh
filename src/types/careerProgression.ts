@@ -1,6 +1,12 @@
 export type CareerPhase = "MIDDLE_SCHOOL_AAU" | "HIGH_SCHOOL" | "COLLEGE" | "PRO";
 export type StarRating = 1 | 2 | 3 | 4 | 5;
 export type SchoolPath = "LOCAL_3A" | "STATE_5A" | "PREP";
+export type MiddleSchoolTournamentStage =
+  | "POOL_OPENER"
+  | "RIVAL_MATCHUP"
+  | "SEMIFINAL_SHOWCASE"
+  | "FINAL_OR_PLACEMENT"
+  | "COMPLETE";
 
 export type OfferType = "AAU_INVITE" | "SCHOLARSHIP" | "WALK_ON" | "TRANSFER" | "NIL" | "PRO_CONTRACT";
 export type OfferStatus = "AVAILABLE" | "ACCEPTED" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
@@ -73,6 +79,36 @@ export interface SeasonSchedule {
   phase: CareerPhase;
   currentWeekId: string;
   weeks: SeasonWeek[];
+}
+
+export interface MiddleSchoolTournamentMatch {
+  id: string;
+  stage: MiddleSchoolTournamentStage;
+  label: string;
+  opponentLabel: string;
+  stakesTag: "TOURNAMENT" | "RIVALRY" | "CHAMPIONSHIP";
+  tutorialFocus: string[];
+  resultSummary?: string;
+}
+
+export interface MiddleSchoolPathSignal {
+  path: SchoolPath;
+  score: number;
+  reasons: string[];
+}
+
+export interface MiddleSchoolTournamentState {
+  eventId: string;
+  eventName: string;
+  currentMatchIndex: number;
+  matches: MiddleSchoolTournamentMatch[];
+  pathInterest: Record<SchoolPath, number>;
+  localBuzz: number;
+  scoutBuzz: number;
+  pressureScore: number;
+  fuzzyPotentialSeed: number;
+  schoolPathRecommendations: SchoolPath[];
+  completed: boolean;
 }
 
 export type RelationshipType = "COACH" | "TEAMMATE" | "RIVAL" | "SCOUT" | "FAMILY" | "SPONSOR" | "FANBASE";

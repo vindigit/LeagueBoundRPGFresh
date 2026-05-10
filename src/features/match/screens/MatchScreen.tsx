@@ -243,7 +243,7 @@ const BoxScoreHeader = () => (
 
 export function MatchScreen() {
   useMatchLoop();
-  const hasAppliedResultRef = useRef(false);
+  const activeSessionIdRef = useRef<number | null>(null);
   const playerName = useCareerStore((state) => state.player.name);
   const playerArchetype = useCareerStore((state) => state.player.archetype);
   const playerPosition = useCareerStore((state) => state.player.position);
@@ -251,6 +251,8 @@ export function MatchScreen() {
 
   const isPlaying = useMatchStore((state) => state.isPlaying);
   const gameFinished = useMatchStore((state) => state.gameFinished);
+  const sessionId = useMatchStore((state) => state.sessionId);
+  const resultRecordedSessionId = useMatchStore((state) => state.resultRecordedSessionId);
   const homeScore = useMatchStore((state) => state.homeScore);
   const awayScore = useMatchStore((state) => state.awayScore);
   const quarter = useMatchStore((state) => state.quarter);
@@ -272,13 +274,14 @@ export function MatchScreen() {
   const setFocus = useMatchEngineStore((state) => state.setFocus);
   const resolveKeyMoment = useMatchEngineStore((state) => state.resolveKeyMoment);
   const keyMomentFeedback = useMatchStore((state) => state.keyMomentFeedback);
-  const initializeMatch = useMatchStore((state) => state.initializeMatch);
+  const resetForNewSession = useMatchStore((state) => state.resetForNewSession);
   const startMatch = useMatchStore((state) => state.startMatch);
   const pauseMatch = useMatchStore((state) => state.pauseMatch);
   const setSimSpeed = useMatchStore((state) => state.setSimSpeed);
   const setPresentationMode = useMatchStore((state) => state.setPresentationMode);
   const setActiveTab = useMatchStore((state) => state.setActiveTab);
   const clearKeyMomentFeedback = useMatchStore((state) => state.clearKeyMomentFeedback);
+  const markResultRecorded = useMatchStore((state) => state.markResultRecorded);
   const completeMatch = useCareerStore((state) => state.completeMatch);
   const keyMomentContextSummary = buildKeyMomentContextSummary({
     pending: keyMomentPending,
@@ -299,16 +302,15 @@ export function MatchScreen() {
   const userLine = matchBoxScore.homePlayers[0];
 
   useEffect(() => {
-    hasAppliedResultRef.current = false;
-    initializeMatch(homeDisplayName, AWAY_NAME);
-  }, [homeDisplayName, initializeMatch]);
+    activeSessionIdRef.current = resetForNewSession(homeDisplayName, AWAY_NAME);
+  }, [homeDisplayName, resetForNewSession]);
 
   useEffect(() => {
-    if (!gameFinished || hasAppliedResultRef.current) {
+    if (!gameFinished || resultRecordedSessionId === sessionId || activeSessionIdRef.current !== sessionId) {
       return;
     }
 
-    hasAppliedResultRef.current = true;
+    markResultRecorded(sessionId);
     const { homeTotals, awayTotals } = matchBoxScore;
     if (homeTotals.pts !== homeScore || awayTotals.pts !== awayScore) {
       console.warn(
@@ -316,7 +318,7 @@ export function MatchScreen() {
       );
     }
     completeMatch({ homeScore, awayScore, overtimePeriods: overtimePeriod, boxScore: matchBoxScore, consequences: matchConsequences });
-  }, [awayScore, completeMatch, gameFinished, homeScore, matchBoxScore, matchConsequences, overtimePeriod]);
+  }, [awayScore, completeMatch, gameFinished, homeScore, markResultRecorded, matchBoxScore, matchConsequences, overtimePeriod, resultRecordedSessionId, sessionId]);
 
   useEffect(() => {
     if (!keyMomentFeedback) {

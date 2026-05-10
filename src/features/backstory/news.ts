@@ -14,7 +14,7 @@ import type {
 } from "../../types/backstory";
 import { LeagueLevel, type LastMatchResult } from "../../types/career";
 import { formatSchoolPathLabel } from "../../constants/schoolPaths";
-import type { SchoolPath } from "../../types/careerProgression";
+import type { MiddleSchoolTournamentMatch, SchoolPath } from "../../types/careerProgression";
 
 const createNewsId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const createStoryId = (): string => createNewsId("story");
@@ -45,6 +45,7 @@ export const createPostgameNewsItem = (
   identity: PlayerIdentity,
   result: LastMatchResult,
   storyId?: string,
+  tournamentMatch?: MiddleSchoolTournamentMatch | null,
 ): CareerNewsItem => {
   const playerPoints = getPlayerLine(result)?.pts ?? 0;
   const hometown = identity.hometown.city;
@@ -61,13 +62,14 @@ export const createPostgameNewsItem = (
     headline = `${toPossessive(hometown)} ${lastName} looks to bounce back after a tough loss.`;
   }
 
+  const isTournament = Boolean(tournamentMatch);
   return {
     id: createNewsId("postgame"),
     createdAt: Date.now(),
     week: result.weekAfter,
-    category: "POSTGAME_RECAP",
+    category: isTournament ? (tournamentMatch?.stage === "SEMIFINAL_SHOWCASE" ? "SCOUT_BUZZ" : "TOURNAMENT_RECAP") : "POSTGAME_RECAP",
     headline,
-    subhead: `Final: ${result.homeScore}-${result.awayScore}`,
+    subhead: `${tournamentMatch?.label ? `${tournamentMatch.label} • ` : ""}Final: ${result.homeScore}-${result.awayScore}`,
     isTappable: true,
     storyId,
   };
@@ -87,7 +89,40 @@ export const createSchoolPathCommitmentNewsItem = (
   isTappable: false,
 });
 
-const getStoryStakesTag = (leagueLevel: LeagueLevel, currentWeek: number): StoryStakesTag => {
+export const createTournamentPathOutlookNewsItem = (
+  identity: PlayerIdentity,
+  recommendations: SchoolPath[],
+  week: number,
+): CareerNewsItem => {
+  const topPath = recommendations[0] ?? "STATE_5A";
+  return {
+    id: createNewsId("path-outlook"),
+    createdAt: Date.now(),
+    week,
+    category: "PATH_OUTLOOK",
+    headline: `${toPossessive(identity.hometown.city)} ${identity.lastName} exits the Future Stars Classic with ${formatSchoolPathLabel(topPath)} momentum.`,
+    subhead: "High school routes are taking shape after the tournament run.",
+    isTappable: false,
+  };
+};
+
+const getStoryStakesTag = (
+  leagueLevel: LeagueLevel,
+  currentWeek: number,
+  tournamentMatch?: MiddleSchoolTournamentMatch | null,
+): StoryStakesTag => {
+  if (tournamentMatch) {
+    if (tournamentMatch.stage === "RIVAL_MATCHUP") {
+      return "RIVALRY";
+    }
+    if (tournamentMatch.stage === "SEMIFINAL_SHOWCASE") {
+      return "SHOWCASE";
+    }
+    if (tournamentMatch.stage === "FINAL_OR_PLACEMENT") {
+      return "CHAMPIONSHIP";
+    }
+    return "TOURNAMENT";
+  }
   if (currentWeek >= 4) {
     return "SEASON_ENDING";
   }
@@ -104,6 +139,7 @@ const getFeatureReason = (result: LastMatchResult, stakesTag: StoryStakesTag): F
 
   if (stakesTag === "PLAYOFF") return "PLAYOFF_GAME";
   if (stakesTag === "TOURNAMENT") return "TOURNAMENT_GAME";
+  if (stakesTag === "SHOWCASE") return "SHOWCASE_GAME";
   if (stakesTag === "RIVALRY") return "RIVALRY_GAME";
   if (stakesTag === "CHAMPIONSHIP") return "CHAMPIONSHIP_GAME";
   if (stakesTag === "SEASON_ENDING" && !result.didWin) return "SEASON_ENDING_LOSS";
@@ -133,20 +169,31 @@ const getAngleTag = (result: LastMatchResult, featureReason?: FeatureReason): St
   return "TOUGH_SHOOTING_NIGHT";
 };
 
-const buildStandardRecapBody = (identity: PlayerIdentity, result: LastMatchResult): string => {
+const buildStandardRecapBody = (
+  identity: PlayerIdentity,
+  result: LastMatchResult,
+  tournamentMatch?: MiddleSchoolTournamentMatch | null,
+): string => {
   const playerLine = getPlayerLine(result);
   const points = playerLine?.pts ?? 0;
   const rebounds = playerLine?.reb ?? 0;
   const assists = playerLine?.ast ?? 0;
   const hometown = identity.hometown.city;
   const lastName = identity.lastName;
+  const tournamentLead = tournamentMatch
+    ? `${tournamentMatch.label} at the Future Stars Classic gave ${lastName} another early-stage test. `
+    : "";
 
-  return `${toPossessive(hometown)} ${lastName} delivered a steady showing in Houston's ${result.homeScore}-${result.awayScore} ${result.didWin ? "win" : "loss"}, giving the home side a dependable option whenever the possession needed direction. ${result.didWin ? "He helped Houston settle the game and keep the pressure on." : "Even as the result slipped away, he kept Houston attached with composed stretches."}
+  return `${tournamentLead}${toPossessive(hometown)} ${lastName} delivered a steady showing in Houston's ${result.homeScore}-${result.awayScore} ${result.didWin ? "win" : "loss"}, giving the home side a dependable option whenever the possession needed direction. ${result.didWin ? "He helped Houston settle the game and keep the pressure on." : "Even as the result slipped away, he kept Houston attached with composed stretches."}
 
 Alexander finished with ${points} points, ${rebounds} rebounds and ${assists} assists, numbers that matched the shape of the night. ${result.didWin ? "When Houston needed the game to stay on its terms, he usually supplied the cleanest answer." : "The final margin told one story, but his production still gave Houston its clearest offensive structure."}`;
 };
 
-const buildFeatureRecapBody = (result: LastMatchResult, stakesTag: StoryStakesTag): string => {
+const buildFeatureRecapBody = (
+  result: LastMatchResult,
+  stakesTag: StoryStakesTag,
+  tournamentMatch?: MiddleSchoolTournamentMatch | null,
+): string => {
   const playerLine = getPlayerLine(result);
   const points = playerLine?.pts ?? 0;
   const rebounds = playerLine?.reb ?? 0;
@@ -155,11 +202,16 @@ const buildFeatureRecapBody = (result: LastMatchResult, stakesTag: StoryStakesTa
   const stakesFrame =
     stakesTag === "TOURNAMENT"
       ? "With the game carrying tournament weight, the performance landed with a little more force."
+      : stakesTag === "SHOWCASE"
+        ? "With the first scout eyes beginning to drift toward the gym, every winning stretch felt louder."
       : stakesTag === "SEASON_ENDING"
         ? "With the season leaning toward a hinge point, every possession seemed to carry extra gravity."
         : "The night asked for more than routine production, and Houston found that in Alexander.";
+  const intro = tournamentMatch
+    ? `${tournamentMatch.label} at the Future Stars Classic pushed the atmosphere past a normal early run.`
+    : "For long stretches, Houston did not need spectacle so much as control.";
 
-  return `For long stretches, Houston did not need spectacle so much as control. It found that in Alexander, who gave the game its clearest shape in a ${result.homeScore}-${result.awayScore} ${result.didWin ? "win" : "loss"}.
+  return `${intro} It found control in Alexander, who gave the game its clearest shape in a ${result.homeScore}-${result.awayScore} ${result.didWin ? "win" : "loss"}.
 
 ${stakesFrame} He finished with ${points} points, ${rebounds} rebounds and ${assists} assists, but the value of the night was less about the total than the timing. When the game tightened, he supplied the cleanest possessions Houston had, either by creating a look himself or by moving the ball before the defense could reset.
 
@@ -219,17 +271,21 @@ export const createPostgameStoryDetail = (input: {
   leagueLevel: LeagueLevel;
   currentYear: number;
   currentWeek: number;
+  tournamentMatch?: MiddleSchoolTournamentMatch | null;
 }): StoryDetail => {
   const createdAt = Date.now();
   const storyId = createStoryId();
   const headlineItem = createPostgameNewsItem(input.identity, input.result, storyId);
-  const stakesTag = getStoryStakesTag(input.leagueLevel, input.currentWeek);
+  const stakesTag = getStoryStakesTag(input.leagueLevel, input.currentWeek, input.tournamentMatch);
   const featureReason = getFeatureReason(input.result, stakesTag);
   const tier = getRecapTier(featureReason);
   const style = getRecapStyle(tier);
   const angleTag = getAngleTag(input.result, featureReason);
   const playerLine = getPlayerLine(input.result);
-  const body = tier === "FEATURE" ? buildFeatureRecapBody(input.result, stakesTag) : buildStandardRecapBody(input.identity, input.result);
+  const body =
+    tier === "FEATURE"
+      ? buildFeatureRecapBody(input.result, stakesTag, input.tournamentMatch)
+      : buildStandardRecapBody(input.identity, input.result, input.tournamentMatch);
 
   return {
     id: storyId,
@@ -245,7 +301,7 @@ export const createPostgameStoryDetail = (input: {
       seasonYear: input.currentYear,
       week: input.result.weekAfter,
       playerTeamLabel: "My Player",
-      opponentTeamLabel: "Rivals High",
+      opponentTeamLabel: input.tournamentMatch?.opponentLabel ?? "Rivals High",
       homeScore: input.result.homeScore,
       awayScore: input.result.awayScore,
       didWin: input.result.didWin,
@@ -283,7 +339,9 @@ export const createPostgameStoryDetail = (input: {
           ? input.result.didWin
             ? "Houston's cleanest stretch came once Alexander settled the tempo and forced the game onto his terms."
             : "Even in defeat, Houston's most stable possessions still ran through Alexander's decision-making."
-          : undefined,
+          : input.tournamentMatch
+            ? `${input.tournamentMatch.label} doubled as a teaching game, with the loudest lesson arriving in the possession swings that decided it.`
+            : undefined,
     },
     boxScore: {
       summary: {
@@ -298,7 +356,7 @@ export const createPostgameStoryDetail = (input: {
         players: input.result.boxScore.homePlayers,
       },
       awayTeam: {
-        label: "Rivals High",
+        label: input.tournamentMatch?.opponentLabel ?? "Rivals High",
         totals: input.result.boxScore.awayTotals,
         players: input.result.boxScore.awayPlayers,
       },

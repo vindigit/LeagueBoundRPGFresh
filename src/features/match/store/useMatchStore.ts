@@ -65,6 +65,8 @@ export interface MatchBoxScore {
 }
 
 export interface MatchState {
+  sessionId: number;
+  resultRecordedSessionId: number | null;
   isPlaying: boolean;
   isPaused: boolean;
   gameFinished: boolean;
@@ -90,7 +92,7 @@ export interface MatchState {
 }
 
 interface MatchActions {
-  initializeMatch: (homeName: string, awayName: string) => void;
+  resetForNewSession: (homeName: string, awayName: string) => number;
   initializeBoxScore: (homeNames: string[], awayNames: string[]) => void;
   startMatch: () => void;
   pauseMatch: () => void;
@@ -127,6 +129,7 @@ interface MatchActions {
     foulOnPlayerIndex?: number;
   }) => void;
   addLog: (log: PlayLog) => void;
+  markResultRecorded: (sessionId: number) => void;
 }
 
 type MatchStore = MatchState & MatchActions;
@@ -237,6 +240,8 @@ const withPlayerStatDelta = (
 };
 
 const initialMatchState: MatchState = {
+  sessionId: 0,
+  resultRecordedSessionId: null,
   isPlaying: false,
   isPaused: false,
   gameFinished: false,
@@ -263,12 +268,18 @@ const initialMatchState: MatchState = {
 
 export const useMatchStore = create<MatchStore>((set) => ({
   ...initialMatchState,
-  initializeMatch: (homeName, _awayName) => {
+  resetForNewSession: (homeName, _awayName) => {
     const homeNames = [homeName, ...DEFAULT_HOME_BOX_NAMES.slice(1)];
-    set(() => ({
+    let nextSessionId = 0;
+    set((state) => {
+      nextSessionId = state.sessionId + 1;
+      return {
       ...initialMatchState,
+      sessionId: nextSessionId,
       matchBoxScore: buildBoxScoreFromNames(homeNames, DEFAULT_AWAY_BOX_NAMES),
-    }));
+      };
+    });
+    return nextSessionId;
   },
   initializeBoxScore: (homeNames, awayNames) => {
     set(() => ({
@@ -423,5 +434,12 @@ export const useMatchStore = create<MatchStore>((set) => ({
     set((state) => ({
       logs: [log, ...state.logs].slice(0, 50),
     }));
+  },
+  markResultRecorded: (sessionId) => {
+    set((state) => (
+      state.sessionId !== sessionId
+        ? state
+        : { resultRecordedSessionId: sessionId }
+    ));
   },
 }));

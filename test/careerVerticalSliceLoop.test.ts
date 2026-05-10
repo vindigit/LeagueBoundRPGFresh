@@ -110,6 +110,7 @@ describe("Career vertical slice weekly loop", () => {
       const afterMatch = useCareerStore.getState();
       expect(afterMatch.view).toBe("POSTGAME");
       expect(afterMatch.currentWeek).toBe(cycle);
+      expect(afterMatch.lastMatchResult?.weekAfter).toBe(cycle + 1);
       expect(afterMatch.weeklyActionState).toMatchObject({
         matchUnlocked: true,
         postgamePending: true,

@@ -79,7 +79,7 @@ describe("Full match smoke flow", () => {
     mockCompleteMatch.mockReset();
     dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_TIMESTAMP);
     useMatchEngineStore.getState().resetRuntime();
-    useMatchStore.getState().initializeMatch("Test Player", "Rivals High");
+    useMatchStore.getState().resetForNewSession("Test Player", "Rivals High");
   });
 
   afterEach(() => {
@@ -187,5 +187,77 @@ describe("Full match smoke flow", () => {
     expect(persistedResult.boxScore.awayTotals.pts).toBe(finalMatchState.awayScore);
     expect(finalMatchState.matchBoxScore.homeTotals.pts).toBe(finalMatchState.homeScore);
     expect(finalMatchState.matchBoxScore.awayTotals.pts).toBe(finalMatchState.awayScore);
+  });
+
+  it("does not replay the previous postgame result when a new match session starts", () => {
+    act(() => {
+      useMatchStore.setState((state) => ({
+        ...state,
+        gameFinished: true,
+        homeScore: 77,
+        awayScore: 65,
+        quarter: 4,
+        timeRemaining: 0,
+        momentPhase: "postgame",
+        matchBoxScore: {
+          homePlayers: [
+            {
+              id: "home-0",
+              name: "Stale Player",
+              team: "home",
+              pts: 30,
+              reb: 5,
+              ast: 7,
+              stl: 1,
+              blk: 0,
+              to: 2,
+              fgm: 11,
+              fga: 18,
+              tpm: 3,
+              tpa: 6,
+              ftm: 5,
+              fta: 6,
+              pf: 1,
+            },
+          ],
+          awayPlayers: [
+            {
+              id: "away-0",
+              name: "Old Rival",
+              team: "away",
+              pts: 18,
+              reb: 4,
+              ast: 2,
+              stl: 1,
+              blk: 0,
+              to: 3,
+              fgm: 7,
+              fga: 14,
+              tpm: 1,
+              tpa: 3,
+              ftm: 3,
+              fta: 4,
+              pf: 2,
+            },
+          ],
+          homeTotals: { pts: 77, reb: 24, ast: 16, stl: 6, blk: 2, to: 9, fgm: 28, fga: 54, tpm: 7, tpa: 18, ftm: 14, fta: 18, pf: 8 },
+          awayTotals: { pts: 65, reb: 19, ast: 11, stl: 5, blk: 1, to: 12, fgm: 23, fga: 49, tpm: 5, tpa: 15, ftm: 14, fta: 17, pf: 10 },
+        },
+      }));
+    });
+
+    const screen = render(<MatchScreen />);
+
+    expect(mockCompleteMatch).not.toHaveBeenCalled();
+    expect(useMatchStore.getState().gameFinished).toBe(false);
+    expect(useMatchStore.getState().resultRecordedSessionId).toBeNull();
+    expect(useMatchStore.getState().homeScore).toBe(0);
+    expect(useMatchStore.getState().awayScore).toBe(0);
+    expect(useMatchStore.getState().matchBoxScore.homeTotals.pts).toBe(0);
+    expect(useMatchStore.getState().matchBoxScore.awayTotals.pts).toBe(0);
+    expect(useMatchStore.getState().logs).toHaveLength(0);
+    expect(screen.getByText("Start Game")).toBeTruthy();
+    expect(screen.getByText("0 PTS | 0 AST | 0 REB")).toBeTruthy();
+    expect(screen.queryByText("Stale Player")).toBeNull();
   });
 });

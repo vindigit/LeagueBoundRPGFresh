@@ -58,11 +58,44 @@ export interface LastMatchResult {
   };
 }
 
-export interface WeeklyLoopState {
-  eventCompleted: boolean;
-  matchCompleted: boolean;
+export type WeeklyActionDefinitionId =
+  | "TRAIN_SHOOTING"
+  | "TRAIN_FINISHING"
+  | "TRAIN_PLAYMAKING"
+  | "TRAIN_DEFENSE"
+  | "STUDY"
+  | "REST_RECOVERY"
+  | "TEAM_BONDING"
+  | "SOCIAL_FANS"
+  | "FILM_COACH_TRUST"
+  | "NIL_APPEARANCE";
+
+export interface WeeklyActionEntry {
+  id: WeeklyActionDefinitionId;
+  label: string;
+  energyDelta: number;
+  conditionDelta: number;
+  coachTrustDelta?: number;
+  fansDelta?: number;
+  teammatesDelta?: number;
+  gpaDelta?: number;
+  moneyDelta?: number;
+  scoutVisibilityDelta?: number;
+  narrativeFile?: string;
+}
+
+export interface WeeklyActionState {
+  slotsTotal: number;
+  slotsRemaining: number;
+  actionsTaken: WeeklyActionEntry[];
+  availableActionIds: WeeklyActionDefinitionId[];
+  optionalNarrativeActionId: WeeklyActionDefinitionId | null;
+  matchUnlocked: boolean;
   postgamePending: boolean;
-  studyCompleted: boolean;
+  tutorialWeek: boolean;
+  tutorialActionSet: boolean;
+  academicWarningShown: boolean;
+  pendingNarrativeActionId: WeeklyActionDefinitionId | null;
 }
 
 export interface CareerState {
@@ -100,7 +133,7 @@ export interface CareerState {
   currentNarrativeFile: string;
   lastMatchResult: LastMatchResult | null;
   newsFeed: CareerNewsItem[];
-  weeklyLoop: WeeklyLoopState;
+  weeklyActionState: WeeklyActionState;
   ovrBudget: number;
   exile: ExileStatus | null;
   exileState: ExileState;
@@ -124,9 +157,13 @@ export interface CareerActions {
   selectSchoolPath(path: SchoolPath): void;
   setGoatPath(isGoatPath: boolean): void;
   setCurrentYear(year: number): void;
+  startWeek(): void;
+  takeWeeklyAction(actionId: WeeklyActionDefinitionId): void;
+  unlockMatchIfReady(): void;
   startNarrative(fileName: string): void;
   completeStudyActivity(): void;
   completeNarrativeEvent(): void;
+  completeOptionalNarrativeAction(): void;
   closeNarrative(): void;
   navigateToMatch(): void;
   navigateToHub(): void;

@@ -9,6 +9,10 @@ import {
   HIGH_SCHOOL_RECRUITING_PROGRAMS,
   seedHighSchoolTeamInterest,
 } from "../features/career/recruiting";
+import {
+  getWeeklyActionDefinition,
+  getWeeklyActionIdsForLeagueLevel,
+} from "../features/career/weeklyActions";
 import { calculatePersonalMatchRating, type CareerMeterDeltas } from "../features/career/matchRating";
 import { heightFromPresetMidpoint, weightFromPresetMidpoint } from "../features/backstory/constants/bodyMapping";
 import { BACKSTORY_V1_ENABLED } from "../features/backstory/constants/flags";
@@ -43,7 +47,9 @@ import {
   type CareerActions,
   type CareerState,
   type ExileStatus,
-  type WeeklyLoopState,
+  type WeeklyActionDefinitionId,
+  type WeeklyActionEntry,
+  type WeeklyActionState,
 } from "../types/career";
 import type {
   ActiveInjury,
@@ -84,6 +90,9 @@ const isAcademicPhase = (leagueLevel: LeagueLevel): boolean => leagueLevel !== L
 
 const isAcademicallyEligible = (gpa: number, leagueLevel: LeagueLevel): boolean =>
   !isAcademicPhase(leagueLevel) || clampGpa(gpa) >= 2;
+
+const getWeeklySlotsForLeagueLevel = (leagueLevel: LeagueLevel): number =>
+  leagueLevel === LeagueLevel.MIDDLE_SCHOOL ? 2 : 3;
 
 const defaultPlayer: Player = {
   id: "",
@@ -455,12 +464,28 @@ const syncSeasonScheduleWeek = (seasonSchedule: SeasonSchedule, currentWeek: num
   })),
 });
 
-const createDefaultWeeklyLoopState = (input: Partial<WeeklyLoopState> = {}): WeeklyLoopState => ({
-  eventCompleted: input.eventCompleted ?? false,
-  matchCompleted: input.matchCompleted ?? false,
-  postgamePending: input.postgamePending ?? false,
-  studyCompleted: input.studyCompleted ?? false,
-});
+const createDefaultWeeklyActionState = (
+  leagueLevel: LeagueLevel,
+  input: Partial<WeeklyActionState> = {},
+): WeeklyActionState => {
+  const slotsTotal = input.slotsTotal ?? getWeeklySlotsForLeagueLevel(leagueLevel);
+  const availableActionIds = input.availableActionIds ?? getWeeklyActionIdsForLeagueLevel(leagueLevel);
+
+  return {
+    slotsTotal,
+    slotsRemaining: input.slotsRemaining ?? slotsTotal,
+    actionsTaken: input.actionsTaken ?? [],
+    availableActionIds,
+    optionalNarrativeActionId:
+      input.optionalNarrativeActionId ?? (availableActionIds.includes("FILM_COACH_TRUST") ? "FILM_COACH_TRUST" : null),
+    matchUnlocked: input.matchUnlocked ?? false,
+    postgamePending: input.postgamePending ?? false,
+    tutorialWeek: input.tutorialWeek ?? leagueLevel === LeagueLevel.MIDDLE_SCHOOL,
+    tutorialActionSet: input.tutorialActionSet ?? leagueLevel === LeagueLevel.MIDDLE_SCHOOL,
+    academicWarningShown: input.academicWarningShown ?? false,
+    pendingNarrativeActionId: input.pendingNarrativeActionId ?? null,
+  };
+};
 
 const buildActiveInjury = (
   consequence: Extract<MatchConsequence, { kind: "injury" }>,
@@ -560,13 +585,32 @@ const shouldPromptForSchoolPathSelection = (
   state: Pick<CareerState, "leagueLevel" | "currentWeek" | "pendingSchoolPathSelection">,
 ): boolean => state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek >= 2 && state.pendingSchoolPathSelection;
 
-const canStartNarrative = (weeklyLoop: WeeklyLoopState): boolean => !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
+const hasTakenWeeklyAction = (weeklyActionState: WeeklyActionState, actionId: WeeklyActionDefinitionId): boolean =>
+  weeklyActionState.actionsTaken.some((action) => action.id === actionId);
 
-const canCompleteStudy = (weeklyLoop: WeeklyLoopState): boolean =>
-  !weeklyLoop.studyCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+const canTakeWeeklyAction = (
+  weeklyActionState: WeeklyActionState,
+  actionId: WeeklyActionDefinitionId,
+): boolean =>
+  !weeklyActionState.postgamePending &&
+  !weeklyActionState.matchUnlocked &&
+  weeklyActionState.slotsRemaining > 0 &&
+  weeklyActionState.availableActionIds.includes(actionId) &&
+  !hasTakenWeeklyAction(weeklyActionState, actionId);
 
-const canStartMatch = (weeklyLoop: WeeklyLoopState): boolean =>
-  weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
+const canStartNarrative = (state: Pick<CareerState, "weeklyActionState">): boolean =>
+  !state.weeklyActionState.postgamePending && state.weeklyActionState.pendingNarrativeActionId !== null;
+
+const canCompleteStudy = (state: Pick<CareerState, "weeklyActionState">): boolean =>
+  canTakeWeeklyAction(state.weeklyActionState, "STUDY");
+
+const canUnlockMatch = (weeklyActionState: WeeklyActionState): boolean =>
+  !weeklyActionState.postgamePending && weeklyActionState.slotsRemaining <= 0;
+
+const canStartMatch = (state: Pick<CareerState, "weeklyActionState" | "gpa" | "leagueLevel">): boolean =>
+  state.weeklyActionState.matchUnlocked &&
+  !state.weeklyActionState.postgamePending &&
+  isAcademicallyEligible(state.gpa, state.leagueLevel);
 
 const resolveWeekAdvance = (input: {
   currentWeek: number;
@@ -594,39 +638,167 @@ const resolveWeekAdvance = (input: {
   };
 };
 
-const deriveMigratedWeeklyLoop = (input: {
-  persistedWeeklyLoop?: Partial<WeeklyLoopState>;
+const applyWeeklyActionToState = (state: CareerState, entry: WeeklyActionEntry): CareerState => {
+  let nextState: CareerState = {
+    ...state,
+    coachTrust: clampMeter(state.coachTrust + (entry.coachTrustDelta ?? 0)),
+    fans: clampMeter(state.fans + (entry.fansDelta ?? 0)),
+    teammates: clampMeter(state.teammates + (entry.teammatesDelta ?? 0)),
+    energy: clampMeter(state.energy + entry.energyDelta),
+    condition: clampMeter(state.condition + entry.conditionDelta),
+    scoutVisibility: clampVisibility(state.scoutVisibility + (entry.scoutVisibilityDelta ?? 0)),
+    gpa: clampGpa(state.gpa + (entry.gpaDelta ?? 0)),
+    wearTear: entry.id === "REST_RECOVERY" ? Math.max(0, state.wearTear - 8) : state.wearTear,
+    weeklyActionState: {
+      ...state.weeklyActionState,
+      slotsRemaining: Math.max(0, state.weeklyActionState.slotsRemaining - 1),
+      actionsTaken: [...state.weeklyActionState.actionsTaken, entry],
+      pendingNarrativeActionId: null,
+      academicWarningShown:
+        state.weeklyActionState.academicWarningShown ||
+        (!isAcademicallyEligible(state.gpa + (entry.gpaDelta ?? 0), state.leagueLevel) &&
+          state.leagueLevel === LeagueLevel.HIGH_SCHOOL),
+    },
+  };
+
+  nextState = {
+    ...nextState,
+    eligibility: syncEligibilityState(nextState.eligibility, nextState.careerPhase, nextState.gpa),
+  };
+
+  for (const gain of getWeeklyActionDefinition(entry.id).attributeGains ?? []) {
+    const currentValue = nextState.player.attributes[gain.attr];
+    const cap = nextState.player.dna?.caps[gain.attr] ?? 99;
+    const growthByLeague = nextState.player.dna?.growthByLeague ?? {
+      [LeagueLevel.MIDDLE_SCHOOL]: 1,
+      [LeagueLevel.HIGH_SCHOOL]: 1,
+      [LeagueLevel.COLLEGE]: 1,
+      [LeagueLevel.PRO]: 1,
+    };
+    const residue = nextState.player.dna?.growthResidue?.[gain.attr] ?? 0;
+    const result = calculateAttributeGain({
+      attribute: gain.attr,
+      amount: gain.amount,
+      currentValue,
+      cap,
+      source: "TRAINING",
+      leagueLevel: nextState.leagueLevel,
+      growthByLeague,
+      archetype: nextState.player.archetype,
+      residue,
+    });
+    nextState = {
+      ...nextState,
+      player: {
+        ...nextState.player,
+        attributes: {
+          ...nextState.player.attributes,
+          [gain.attr]: clampAttribute(result.nextValue) as PlayerAttributes[typeof gain.attr],
+        },
+        dna: nextState.player.dna
+          ? {
+              ...nextState.player.dna,
+              growthResidue: {
+                ...nextState.player.dna.growthResidue,
+                [gain.attr]: result.nextResidue,
+              },
+            }
+          : null,
+      },
+    };
+  }
+
+  if ((entry.moneyDelta ?? 0) !== 0) {
+    const transaction = buildFinanceTransactionFromDelta(entry.moneyDelta!, {
+      category: entry.id === "FILM_COACH_TRUST" ? "film_stipend" : "misc",
+      description: entry.id === "FILM_COACH_TRUST" ? "Film room stipend" : `${entry.label} payout`,
+      source: entry.id === "FILM_COACH_TRUST" ? "narrative" : "weekly_action",
+    });
+    if (transaction) {
+      const financeUpdate = buildFinanceTransactionState(nextState, transaction);
+      if (financeUpdate) {
+        nextState = {
+          ...nextState,
+          ...financeUpdate,
+        };
+      }
+    }
+  }
+
+  const matchUnlocked = canUnlockMatch(nextState.weeklyActionState);
+  return {
+    ...nextState,
+    weeklyActionState: {
+      ...nextState.weeklyActionState,
+      matchUnlocked,
+    },
+  };
+};
+
+const deriveMigratedWeeklyActionState = (input: {
+  persistedWeeklyLoop?: Partial<{
+    eventCompleted: boolean;
+    matchCompleted: boolean;
+    postgamePending: boolean;
+    studyCompleted: boolean;
+  }>;
   view?: CareerState["view"];
   lastMatchResult?: CareerState["lastMatchResult"];
   initializedPlayer: boolean;
-}): WeeklyLoopState => {
+  leagueLevel: LeagueLevel;
+}): WeeklyActionState => {
   const fallback = (() => {
     if (!input.initializedPlayer || input.view === "BACKSTORY") {
-      return createDefaultWeeklyLoopState();
+      return createDefaultWeeklyActionState(input.leagueLevel);
     }
     if (input.view === "POSTGAME" && input.lastMatchResult) {
-      return createDefaultWeeklyLoopState({
-        eventCompleted: true,
-        matchCompleted: true,
+      return createDefaultWeeklyActionState(input.leagueLevel, {
+        slotsRemaining: 0,
+        matchUnlocked: true,
         postgamePending: true,
       });
     }
     if (input.view === "NARRATIVE") {
-      return createDefaultWeeklyLoopState();
-    }
-    if (input.view === "HUB" || input.view === "MATCH") {
-      return createDefaultWeeklyLoopState({
-        eventCompleted: true,
+      return createDefaultWeeklyActionState(input.leagueLevel, {
+        pendingNarrativeActionId: "FILM_COACH_TRUST",
       });
     }
-    return createDefaultWeeklyLoopState();
+    if (input.view === "HUB" || input.view === "MATCH") {
+      return createDefaultWeeklyActionState(input.leagueLevel, {
+        slotsRemaining: 0,
+        matchUnlocked: true,
+      });
+    }
+    return createDefaultWeeklyActionState(input.leagueLevel);
   })();
 
-  return createDefaultWeeklyLoopState({
-    eventCompleted: input.persistedWeeklyLoop?.eventCompleted ?? fallback.eventCompleted,
-    matchCompleted: input.persistedWeeklyLoop?.matchCompleted ?? fallback.matchCompleted,
-    postgamePending: input.persistedWeeklyLoop?.postgamePending ?? fallback.postgamePending,
-    studyCompleted: input.persistedWeeklyLoop?.studyCompleted ?? fallback.studyCompleted,
+  if (!input.persistedWeeklyLoop) {
+    return fallback;
+  }
+
+  const actionsTaken: WeeklyActionEntry[] = input.persistedWeeklyLoop.studyCompleted
+    ? [getWeeklyActionDefinition("STUDY").buildEntry({ leagueLevel: input.leagueLevel })]
+    : [];
+
+  if (input.persistedWeeklyLoop.postgamePending || input.persistedWeeklyLoop.matchCompleted) {
+    return createDefaultWeeklyActionState(input.leagueLevel, {
+      slotsRemaining: 0,
+      actionsTaken,
+      matchUnlocked: true,
+      postgamePending: Boolean(input.persistedWeeklyLoop.postgamePending || input.persistedWeeklyLoop.matchCompleted),
+    });
+  }
+
+  if (input.persistedWeeklyLoop.eventCompleted) {
+    return createDefaultWeeklyActionState(input.leagueLevel, {
+      slotsRemaining: 0,
+      actionsTaken,
+      matchUnlocked: true,
+    });
+  }
+
+  return createDefaultWeeklyActionState(input.leagueLevel, {
+    actionsTaken,
   });
 };
 
@@ -665,7 +837,7 @@ const initialCareerState: CareerState = {
   currentNarrativeFile: "",
   lastMatchResult: null,
   newsFeed: [],
-  weeklyLoop: createDefaultWeeklyLoopState(),
+  weeklyActionState: createDefaultWeeklyActionState(LeagueLevel.MIDDLE_SCHOOL),
   ovrBudget: 60,
   exile: null,
   exileState: createDefaultExileState(),
@@ -943,7 +1115,7 @@ export const useCareerStore = create<CareerStore>()(
           view: "HUB",
           pendingSchoolPathSelection: false,
           newsFeed: [creationNews],
-          weeklyLoop: createDefaultWeeklyLoopState(),
+          weeklyActionState: createDefaultWeeklyActionState(initialCareerState.leagueLevel),
         }));
       },
       applyAttributeGain: (attr, amount, source = "SYSTEM") => {
@@ -1069,6 +1241,7 @@ export const useCareerStore = create<CareerStore>()(
               state.currentWeek,
             ),
             eligibility: syncEligibilityState(state.eligibility, careerPhase, state.gpa),
+            weeklyActionState: createDefaultWeeklyActionState(level),
             pendingSchoolPathSelection:
               level === LeagueLevel.HIGH_SCHOOL ? false : state.pendingSchoolPathSelection,
             exileState: state.exileState.enteredAtPhase ? { ...state.exileState, enteredAtPhase: careerPhase } : state.exileState,
@@ -1179,6 +1352,7 @@ export const useCareerStore = create<CareerStore>()(
               createSchoolPathCommitmentNewsItem(state.player.identity, path, state.currentWeek),
             ),
             view: "HUB",
+            weeklyActionState: createDefaultWeeklyActionState(LeagueLevel.HIGH_SCHOOL),
           };
         });
       },
@@ -1188,9 +1362,44 @@ export const useCareerStore = create<CareerStore>()(
       setCurrentYear: (year) => {
         set(() => ({ currentYear: year }));
       },
+      startWeek: () => {
+        set((state) => ({
+          weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
+        }));
+      },
+      takeWeeklyAction: (actionId) => {
+        set((state) => {
+          if (!canTakeWeeklyAction(state.weeklyActionState, actionId)) {
+            return state;
+          }
+
+          const definition = getWeeklyActionDefinition(actionId);
+          if (definition.isNarrative && definition.narrativeFile) {
+            return {
+              view: "NARRATIVE",
+              currentNarrativeFile: definition.narrativeFile,
+              weeklyActionState: {
+                ...state.weeklyActionState,
+                pendingNarrativeActionId: actionId,
+              },
+            };
+          }
+
+          const entry = definition.buildEntry({ leagueLevel: state.leagueLevel });
+          return applyWeeklyActionToState(state, entry);
+        });
+      },
+      unlockMatchIfReady: () => {
+        set((state) => ({
+          weeklyActionState: {
+            ...state.weeklyActionState,
+            matchUnlocked: canUnlockMatch(state.weeklyActionState),
+          },
+        }));
+      },
       startNarrative: (fileName) => {
         set((state) => {
-          if (!canStartNarrative(state.weeklyLoop)) {
+          if (!canStartNarrative(state)) {
             return state;
           }
 
@@ -1201,41 +1410,42 @@ export const useCareerStore = create<CareerStore>()(
         });
       },
       completeStudyActivity: () => {
+        get().takeWeeklyAction("STUDY");
+      },
+      completeNarrativeEvent: () => {
+        get().completeOptionalNarrativeAction();
+      },
+      completeOptionalNarrativeAction: () => {
         set((state) => {
-          if (!canCompleteStudy(state.weeklyLoop)) {
-            return state;
+          const pendingActionId = state.weeklyActionState.pendingNarrativeActionId;
+          if (!pendingActionId) {
+            return {
+              view: "HUB",
+              currentNarrativeFile: "",
+            };
           }
 
-          const nextGpa = clampGpa(state.gpa + 0.1);
+          const entry = getWeeklyActionDefinition(pendingActionId).buildEntry({ leagueLevel: state.leagueLevel });
           return {
-            gpa: nextGpa,
-            eligibility: syncEligibilityState(state.eligibility, state.careerPhase, nextGpa),
-            weeklyLoop: {
-              ...state.weeklyLoop,
-              studyCompleted: true,
-            },
+            ...applyWeeklyActionToState(state, entry),
+            view: "HUB",
+            currentNarrativeFile: "",
           };
         });
       },
-      completeNarrativeEvent: () => {
+      closeNarrative: () => {
         set((state) => ({
           view: "HUB",
           currentNarrativeFile: "",
-          weeklyLoop: {
-            ...state.weeklyLoop,
-            eventCompleted: true,
+          weeklyActionState: {
+            ...state.weeklyActionState,
+            pendingNarrativeActionId: null,
           },
-        }));
-      },
-      closeNarrative: () => {
-        set(() => ({
-          view: "HUB",
-          currentNarrativeFile: "",
         }));
       },
       navigateToMatch: () => {
         set((state) => {
-          if (!canStartMatch(state.weeklyLoop) || !isAcademicallyEligible(state.gpa, state.leagueLevel)) {
+          if (!canStartMatch(state)) {
             return state;
           }
 
@@ -1309,9 +1519,9 @@ export const useCareerStore = create<CareerStore>()(
             view: "POSTGAME",
             ...nextHealthState,
             lastMatchResult,
-            weeklyLoop: {
-              ...state.weeklyLoop,
-              matchCompleted: true,
+            weeklyActionState: {
+              ...state.weeklyActionState,
+              matchUnlocked: true,
               postgamePending: true,
             },
           };
@@ -1328,7 +1538,7 @@ export const useCareerStore = create<CareerStore>()(
             return {
               view: shouldPromptForSchoolPathSelection(state) ? "SCHOOL_PATH_SELECT" : "HUB",
               ...nextHealthState,
-              weeklyLoop: createDefaultWeeklyLoopState(),
+              weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
             };
           }
 
@@ -1413,7 +1623,7 @@ export const useCareerStore = create<CareerStore>()(
             offers: recruitingState.offers,
             pendingSchoolPathSelection,
             ...nextHealthState,
-            weeklyLoop: createDefaultWeeklyLoopState(),
+            weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
           };
         });
       },
@@ -1426,7 +1636,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 14,
+      version: 15,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -1436,6 +1646,12 @@ export const useCareerStore = create<CareerStore>()(
         const typedState = persistedState as Partial<CareerStore> & {
           player?: LegacyPlayerStateInput;
           injuryState?: LegacyPersistedInjuryState;
+          weeklyLoop?: {
+            eventCompleted?: boolean;
+            matchCompleted?: boolean;
+            postgamePending?: boolean;
+            studyCompleted?: boolean;
+          };
         };
         if (!typedState.player) {
           const fallbackPlayer = defaultPlayer;
@@ -1462,7 +1678,7 @@ export const useCareerStore = create<CareerStore>()(
             currentWeek: fallbackCurrentWeek,
             view: getInitialCareerView(),
             newsFeed: [],
-            weeklyLoop: createDefaultWeeklyLoopState(),
+            weeklyActionState: createDefaultWeeklyActionState(fallbackLeagueLevel),
             pendingSchoolPathSelection: false,
             financeLedger: [],
             ovrBudget: typedState.ovrBudget ?? 60,
@@ -1499,11 +1715,12 @@ export const useCareerStore = create<CareerStore>()(
               notes: typedState.exileState.notes ?? progressionState.exileState.notes,
             }
           : progressionState.exileState;
-        const weeklyLoop = deriveMigratedWeeklyLoop({
+        const weeklyActionState = deriveMigratedWeeklyActionState({
           persistedWeeklyLoop: typedState.weeklyLoop,
           view: resolvedView,
           lastMatchResult: typedState.lastMatchResult ?? null,
           initializedPlayer: isInitializedPlayer(migratedPlayer),
+          leagueLevel,
         });
         const migratedTeamInterestById = typedState.teamInterestById ?? progressionState.teamInterestById;
         const shouldBackfillHighSchoolRecruiting =
@@ -1539,7 +1756,7 @@ export const useCareerStore = create<CareerStore>()(
           careerPhase: typedState.careerPhase ?? progressionState.careerPhase,
           view: resolvedView,
           newsFeed,
-          weeklyLoop,
+          weeklyActionState,
           pendingSchoolPathSelection: typedState.pendingSchoolPathSelection ?? false,
           starRating: typedState.starRating ?? progressionState.starRating,
           scoutVisibility: clampVisibility(typedState.scoutVisibility ?? progressionState.scoutVisibility),
@@ -1605,7 +1822,7 @@ export const useCareerStore = create<CareerStore>()(
         currentNarrativeFile: state.currentNarrativeFile,
         lastMatchResult: normalizeLastMatchResult(state.lastMatchResult),
         newsFeed: state.newsFeed,
-        weeklyLoop: state.weeklyLoop,
+        weeklyActionState: state.weeklyActionState,
         ovrBudget: state.ovrBudget,
         exile: state.exile,
         exileState: state.exileState,

@@ -125,11 +125,11 @@ describe("Career store migration smoke", () => {
     expect(state.eligibility.status).toBe("ELIGIBLE");
     expect(state.financeState.ledger.nilEarnings).toBe(0);
     expect(state.financeLedger).toEqual([]);
-    expect(state.weeklyLoop).toEqual({
-      eventCompleted: true,
-      matchCompleted: false,
+    expect(state.weeklyActionState).toMatchObject({
+      slotsTotal: 3,
+      slotsRemaining: 0,
+      matchUnlocked: true,
       postgamePending: false,
-      studyCompleted: false,
     });
 
     const screen = render(<HomeScreen />);

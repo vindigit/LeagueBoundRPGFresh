@@ -78,11 +78,14 @@ describe("Career vertical slice UI", () => {
       view: "BACKSTORY",
       newsFeed: [],
       lastMatchResult: null,
-      weeklyLoop: {
-        eventCompleted: false,
-        matchCompleted: false,
+      weeklyActionState: {
+        ...state.weeklyActionState,
+        slotsTotal: 2,
+        slotsRemaining: 2,
+        actionsTaken: [],
+        matchUnlocked: false,
         postgamePending: false,
-        studyCompleted: false,
+        pendingNarrativeActionId: null,
       },
       currentNarrativeFile: "",
       currentWeek: 1,
@@ -113,15 +116,16 @@ describe("Career vertical slice UI", () => {
     });
 
     expect(screen.getByText("Career Hub")).toBeTruthy();
-    expect(screen.getByText("Start your weekly event to unlock the match.")).toBeTruthy();
+    expect(screen.getByText("2 of 2 weekly actions remaining.")).toBeTruthy();
 
     const startingVision = useCareerStore.getState().player.attributes.vision;
-    fireEvent.press(screen.getByText("Next Event"));
+    fireEvent.press(screen.getByText("Film / Coach Trust"));
     expect(useCareerStore.getState().view).toBe("NARRATIVE");
     fireEvent.press(screen.getByText(/Study Film/));
+    fireEvent.press(screen.getByText("Study"));
 
     expect(useCareerStore.getState().view).toBe("HUB");
-    expect(useCareerStore.getState().weeklyLoop.eventCompleted).toBe(true);
+    expect(useCareerStore.getState().weeklyActionState.matchUnlocked).toBe(true);
     expect(useCareerStore.getState().player.attributes.vision).toBeGreaterThanOrEqual(startingVision + 1);
     expect(useCareerStore.getState().financeLedger.at(-1)).toMatchObject({
       type: "income",
@@ -129,9 +133,9 @@ describe("Career vertical slice UI", () => {
       description: "Film room stipend",
       source: "narrative",
     });
-    expect(screen.getByText("Event complete. Match is unlocked.")).toBeTruthy();
+    expect(screen.getByText("Action plan complete. Match unlocked.")).toBeTruthy();
     expect(screen.getByText("Recent Financial Activity")).toBeTruthy();
-    expect(screen.getByText("Film room stipend")).toBeTruthy();
+    expect(screen.getAllByText("Film room stipend").length).toBeGreaterThan(0);
 
     fireEvent.press(screen.getByText("Play Match"));
     expect(useCareerStore.getState().view).toBe("MATCH");
@@ -153,11 +157,11 @@ describe("Career vertical slice UI", () => {
     expect(useCareerStore.getState().view).toBe("HUB");
     expect(useCareerStore.getState().currentWeek).toBe(2);
     expect(useCareerStore.getState().lastMatchResult).toBeNull();
-    expect(useCareerStore.getState().weeklyLoop).toEqual({
-      eventCompleted: false,
-      matchCompleted: false,
+    expect(useCareerStore.getState().weeklyActionState).toMatchObject({
+      slotsTotal: 3,
+      slotsRemaining: 3,
+      matchUnlocked: false,
       postgamePending: false,
-      studyCompleted: false,
     });
     expect(useCareerStore.getState().leagueLevel).toBe("HIGH_SCHOOL");
     expect(useCareerStore.getState().schoolPath).toBe("STATE_5A");
@@ -171,7 +175,7 @@ describe("Career vertical slice UI", () => {
     expect(screen.getByText("Offer Inbox")).toBeTruthy();
     expect(screen.queryAllByText("Accept").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Decline").length).toBeGreaterThan(0);
-    expect(screen.getByText("Start your weekly event to unlock the match.")).toBeTruthy();
+    expect(screen.getByText("3 of 3 weekly actions remaining.")).toBeTruthy();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {
@@ -193,8 +197,9 @@ describe("Career vertical slice UI", () => {
         weightLbs: 185,
         generationSeed: 20260427,
       });
-      useCareerStore.getState().applyAttributeGain("vision", 1, "NARRATIVE");
+      useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
       useCareerStore.getState().completeNarrativeEvent();
+      useCareerStore.getState().takeWeeklyAction("STUDY");
       useCareerStore.getState().completeMatch({
         homeScore: 64,
         awayScore: 52,
@@ -231,8 +236,9 @@ describe("Career vertical slice UI", () => {
         weightLbs: 185,
         generationSeed: 20260428,
       });
-      useCareerStore.getState().applyAttributeGain("vision", 1, "NARRATIVE");
+      useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
       useCareerStore.getState().completeNarrativeEvent();
+      useCareerStore.getState().takeWeeklyAction("STUDY");
       useCareerStore.getState().completeMatch({
         homeScore: 64,
         awayScore: 52,
@@ -280,11 +286,11 @@ describe("Career vertical slice UI", () => {
     expect(useCareerStore.getState().gpa).toBe(2.6);
 
     act(() => {
-      useCareerStore.getState().completeNarrativeEvent();
+      useCareerStore.getState().takeWeeklyAction("TRAIN_SHOOTING");
       useCareerStore.getState().adjustGpa(-0.7, "SYSTEM");
     });
 
-    expect(screen.getByText("Academically ineligible: raise GPA to 2.0 to play.")).toBeTruthy();
+    expect(screen.getByText("Action plan complete. Raise GPA to 2.0 to unlock the match.")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Play Match"));
     expect(useCareerStore.getState().view).toBe("HUB");

@@ -81,7 +81,7 @@ const run = async (): Promise<void> => {
   const baselineBank = initialized.player.bankBalance;
   const baselineMorale = initialized.player.morale;
 
-  useCareerStore.getState().startNarrative("practice_coach.ink");
+  useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
   const stateAfterStart = useCareerStore.getState();
   assert(stateAfterStart.view === "NARRATIVE", `Expected NARRATIVE after startNarrative, got ${stateAfterStart.view}.`);
   assert(
@@ -96,9 +96,10 @@ const run = async (): Promise<void> => {
   assert(hasSceneComplete, "Expected SCENE_COMPLETE tag after narrative resolution.");
 
   useCareerStore.getState().completeNarrativeEvent();
+  useCareerStore.getState().takeWeeklyAction("STUDY");
   const stateAfterNarrative = useCareerStore.getState();
   assert(stateAfterNarrative.view === "HUB", `Expected HUB after narrative completion, got ${stateAfterNarrative.view}.`);
-  assert(stateAfterNarrative.weeklyLoop.eventCompleted, "Expected weekly event to be marked complete.");
+  assert(stateAfterNarrative.weeklyActionState.matchUnlocked, "Expected weekly action plan to unlock the match.");
   assert(Boolean(stateAfterNarrative.player.identity), "Expected player identity to remain populated after narrative resolution.");
   assert(Boolean(stateAfterNarrative.player.dna), "Expected player DNA to remain populated after narrative resolution.");
 
@@ -116,7 +117,7 @@ const run = async (): Promise<void> => {
   assert(stateAfterMatch.view === "POSTGAME", `Expected POSTGAME after completeMatch, got ${stateAfterMatch.view}.`);
   assert(Boolean(stateAfterMatch.lastMatchResult), "Expected lastMatchResult after completeMatch.");
   assert(stateAfterMatch.currentWeek === 1, `Expected week to remain 1 until resolution, got ${stateAfterMatch.currentWeek}.`);
-  assert(stateAfterMatch.weeklyLoop.postgamePending, "Expected postgamePending after completeMatch.");
+  assert(stateAfterMatch.weeklyActionState.postgamePending, "Expected postgamePending after completeMatch.");
   assert(stateAfterMatch.newsFeed.length === initialized.newsFeed.length, "Expected feed not to grow until week resolution.");
 
   useCareerStore.getState().resolvePostgameAndAdvanceWeek();
@@ -141,10 +142,10 @@ const run = async (): Promise<void> => {
   assert(selectedPath.player.bankBalance > baselineBank, "Expected bank balance to increase after postgame resolution.");
   assert(selectedPath.player.morale !== baselineMorale, "Expected morale to change after postgame resolution.");
   assert(
-    !selectedPath.weeklyLoop.eventCompleted &&
-      !selectedPath.weeklyLoop.matchCompleted &&
-      !selectedPath.weeklyLoop.postgamePending,
-    "Expected weekly loop state to reset for the next week.",
+    !selectedPath.weeklyActionState.matchUnlocked &&
+      !selectedPath.weeklyActionState.postgamePending &&
+      selectedPath.weeklyActionState.slotsRemaining === selectedPath.weeklyActionState.slotsTotal,
+    "Expected weekly action state to reset for the next week.",
   );
 
   console.log("Vertical slice loop verification passed.");

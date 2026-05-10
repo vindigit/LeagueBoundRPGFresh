@@ -5,10 +5,11 @@ import { PlayerCard } from "../components/PlayerCard";
 import { BackstoryScreen } from "../features/backstory/screens/BackstoryScreen";
 import { HIGH_SCHOOL_RECRUITING_PROGRAMS } from "../features/career/recruiting";
 import { SchoolPathSelectionScreen } from "../features/career/screens/SchoolPathSelectionScreen";
+import { getWeeklyActionDefinition } from "../features/career/weeklyActions";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
-import { LeagueLevel } from "../types/career";
+import { LeagueLevel, type WeeklyActionDefinitionId } from "../types/career";
 import type { FinanceLedgerEntry, ProjectedRole } from "../types/careerProgression";
 
 const formatLeagueLevel = (value: string): string =>
@@ -55,6 +56,20 @@ const getInterestStrengthLabel = (interestLevel: number): string => {
   return "Warm";
 };
 
+const formatActionPreview = (actionId: WeeklyActionDefinitionId): string => {
+  const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel: LeagueLevel.HIGH_SCHOOL });
+  const parts = [
+    entry.energyDelta !== 0 ? `Energy ${entry.energyDelta > 0 ? "+" : ""}${entry.energyDelta}` : null,
+    entry.conditionDelta !== 0 ? `Condition ${entry.conditionDelta > 0 ? "+" : ""}${entry.conditionDelta}` : null,
+    entry.gpaDelta ? `GPA +${entry.gpaDelta.toFixed(1)}` : null,
+    entry.coachTrustDelta ? `Trust +${entry.coachTrustDelta}` : null,
+    entry.fansDelta ? `Fans +${entry.fansDelta}` : null,
+    entry.teammatesDelta ? `Team +${entry.teammatesDelta}` : null,
+  ].filter(Boolean);
+
+  return parts.join(" | ");
+};
+
 export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
@@ -63,6 +78,11 @@ export function HomeScreen() {
   const bankBalance = useCareerStore((state) => state.player.bankBalance);
   const financeLedger = useCareerStore((state) => state.financeLedger);
   const scoutVisibility = useCareerStore((state) => state.scoutVisibility);
+  const coachTrust = useCareerStore((state) => state.coachTrust);
+  const fans = useCareerStore((state) => state.fans);
+  const teammates = useCareerStore((state) => state.teammates);
+  const energy = useCareerStore((state) => state.energy);
+  const condition = useCareerStore((state) => state.condition);
   const gpa = useCareerStore((state) => state.gpa);
   const schoolPath = useCareerStore((state) => state.schoolPath);
   const injury = useCareerStore((state) => state.injury);
@@ -70,9 +90,8 @@ export function HomeScreen() {
   const teamInterestById = useCareerStore((state) => state.teamInterestById);
   const offers = useCareerStore((state) => state.offers);
   const newsFeed = useCareerStore((state) => state.newsFeed);
-  const weeklyLoop = useCareerStore((state) => state.weeklyLoop);
-  const startNarrative = useCareerStore((state) => state.startNarrative);
-  const completeStudyActivity = useCareerStore((state) => state.completeStudyActivity);
+  const weeklyActionState = useCareerStore((state) => state.weeklyActionState);
+  const takeWeeklyAction = useCareerStore((state) => state.takeWeeklyAction);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
   const respondToOffer = useCareerStore((state) => state.respondToOffer);
   const showSchoolPathStatus = leagueLevel !== LeagueLevel.MIDDLE_SCHOOL;
@@ -84,19 +103,20 @@ export function HomeScreen() {
   const availableOffers = offers.filter((offer) => offer.status === "AVAILABLE" && offer.phases.includes("HIGH_SCHOOL"));
   const acceptedOffer = offers.find((offer) => offer.status === "ACCEPTED" && offer.phases.includes("HIGH_SCHOOL"));
   const recentFinanceEntries = financeLedger.slice(-3).reverse();
-  const canOpenEvent = !weeklyLoop.eventCompleted && !weeklyLoop.postgamePending;
-  const canStudy = !weeklyLoop.studyCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending;
-  const canPlayMatch = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending && academicallyEligible;
-  const isBlockedByGpa = weeklyLoop.eventCompleted && !weeklyLoop.matchCompleted && !weeklyLoop.postgamePending && !academicallyEligible;
-  const loopStatus = weeklyLoop.postgamePending
+  const canPlayMatch = weeklyActionState.matchUnlocked && !weeklyActionState.postgamePending && academicallyEligible;
+  const isBlockedByGpa = weeklyActionState.matchUnlocked && !weeklyActionState.postgamePending && !academicallyEligible;
+  const loopStatus = weeklyActionState.postgamePending
     ? "Finish postgame to resolve the week."
-    : weeklyLoop.matchCompleted
-      ? "Week complete. Advance from postgame."
-      : isBlockedByGpa
-        ? "Event complete. Raise GPA to 2.0 to unlock the match."
-      : weeklyLoop.eventCompleted
-        ? "Event complete. Match is unlocked."
-        : "Start your weekly event to unlock the match.";
+    : isBlockedByGpa
+      ? "Action plan complete. Raise GPA to 2.0 to unlock the match."
+      : weeklyActionState.matchUnlocked
+        ? "Action plan complete. Match unlocked."
+        : `${weeklyActionState.slotsRemaining} of ${weeklyActionState.slotsTotal} weekly actions remaining.`;
+  const visibleActionIds = weeklyActionState.availableActionIds.filter((actionId) =>
+    weeklyActionState.optionalNarrativeActionId === actionId ||
+    !weeklyActionState.actionsTaken.some((action) => action.id === actionId),
+  );
+  const recruitingBuzz = visibleInterestEntries[0]?.[1] ?? 0;
 
   return (
     <SafeAreaView className="relative flex-1 bg-premium-bg">
@@ -150,6 +170,31 @@ export function HomeScreen() {
               </View>
 
               <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Energy</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{energy}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Condition</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{condition}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Coach Trust</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{coachTrust}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Fans</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{fans}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                <Text className="text-xs text-premium-muted">Teammates</Text>
+                <Text className="mt-1 text-base font-semibold text-white">{teammates}</Text>
+              </View>
+
+              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
                 <Text className="text-xs text-premium-muted">Exposure</Text>
                 <Text className="mt-1 text-base font-semibold text-white">{scoutVisibility}</Text>
               </View>
@@ -170,11 +215,25 @@ export function HomeScreen() {
                   ) : null}
                 </View>
               ) : null}
+
+              {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+                <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
+                  <Text className="text-xs text-premium-muted">Recruiting Buzz</Text>
+                  <Text className="mt-1 text-base font-semibold text-white">{recruitingBuzz}</Text>
+                </View>
+              ) : null}
             </View>
 
             <View className="mt-3 rounded-lg bg-premium-bg p-3">
               <Text className="text-xs text-premium-muted">Loop Status</Text>
               <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
+            </View>
+
+            <View className="mt-3 rounded-lg bg-premium-bg p-3">
+              <Text className="text-xs text-premium-muted">Weekly Action Budget</Text>
+              <Text className="mt-1 text-sm font-medium text-white">
+                {weeklyActionState.slotsRemaining} remaining out of {weeklyActionState.slotsTotal}
+              </Text>
             </View>
 
             <View className="mt-3 rounded-lg bg-premium-bg p-3">
@@ -307,6 +366,49 @@ export function HomeScreen() {
             </View>
           ) : null}
 
+          <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+            <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Weekly Actions</Text>
+            <Text className="mt-2 text-sm text-premium-muted">
+              Spend your remaining actions to prepare for the week. The match unlocks once the budget is exhausted.
+            </Text>
+
+            <View className="mt-4 gap-3">
+              {visibleActionIds.map((actionId) => {
+                const definition = getWeeklyActionDefinition(actionId);
+                const isTaken = weeklyActionState.actionsTaken.some((action) => action.id === actionId);
+                const disabled =
+                  isTaken ||
+                  weeklyActionState.postgamePending ||
+                  weeklyActionState.matchUnlocked ||
+                  weeklyActionState.slotsRemaining <= 0;
+
+                return (
+                  <Pressable
+                    key={actionId}
+                    className={`rounded-xl border px-4 py-4 ${
+                      disabled ? "border-slate-700 bg-slate-800/70" : "border-premium-surfaceAlt bg-premium-bg"
+                    }`}
+                    disabled={disabled}
+                    onPress={() => {
+                      takeWeeklyAction(actionId);
+                    }}
+                  >
+                    <View className="flex-row items-center justify-between gap-3">
+                      <Text className={`flex-1 text-base font-semibold ${disabled ? "text-slate-300" : "text-white"}`}>
+                        {definition.label}
+                      </Text>
+                      {weeklyActionState.optionalNarrativeActionId === actionId ? (
+                        <Text className="text-xs font-semibold uppercase text-premium-accent">Scene</Text>
+                      ) : null}
+                    </View>
+                    <Text className="mt-1 text-sm text-premium-muted">{definition.description}</Text>
+                    <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           <Pressable
             className={`mt-6 items-center justify-center rounded-xl px-4 py-4 ${canPlayMatch ? "bg-sky-600" : "bg-slate-700"}`}
             disabled={!canPlayMatch}
@@ -318,22 +420,6 @@ export function HomeScreen() {
           {isBlockedByGpa ? (
             <Text className="mt-3 text-sm font-medium text-amber-300">Academically ineligible: raise GPA to 2.0 to play.</Text>
           ) : null}
-
-          {canStudy ? (
-            <Pressable className="mt-3 items-center justify-center rounded-xl bg-emerald-600 px-4 py-4" onPress={completeStudyActivity}>
-              <Text className="text-base font-semibold text-white">Study</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            className={`mt-3 items-center justify-center rounded-xl px-4 py-4 ${canOpenEvent ? "bg-premium-accent" : "bg-slate-700"}`}
-            disabled={!canOpenEvent}
-            onPress={() => {
-              startNarrative("practice_coach.ink");
-            }}
-          >
-            <Text className={`text-base font-semibold ${canOpenEvent ? "text-black" : "text-slate-200"}`}>Next Event</Text>
-          </Pressable>
         </ScrollView>
       ) : null}
 

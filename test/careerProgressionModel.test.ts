@@ -30,7 +30,7 @@ describe("Career progression domain model", () => {
       .persist
       .getOptions().version;
 
-    expect(version).toBe(14);
+    expect(version).toBe(15);
   });
 
   it("seeds initializeCareer with the new progression state", () => {
@@ -61,11 +61,11 @@ describe("Career progression domain model", () => {
     expect(state.legacyPerks).toEqual([]);
     expect(state.exileState.currentMode).toBe("NONE");
     expect(state.exile).toBeNull();
-    expect(state.weeklyLoop).toEqual({
-      eventCompleted: false,
-      matchCompleted: false,
+    expect(state.weeklyActionState).toMatchObject({
+      slotsTotal: 2,
+      slotsRemaining: 2,
+      matchUnlocked: false,
       postgamePending: false,
-      studyCompleted: false,
     });
   });
 
@@ -120,11 +120,11 @@ describe("Career progression domain model", () => {
     expect(migrated.exileState.triggerReason).toBe("LEGACY_MIGRATION");
     expect(migrated.exile).toBe("OVERSEAS");
     expect(migrated.ovrBudget).toBe(77);
-    expect(migrated.weeklyLoop).toEqual({
-      eventCompleted: true,
-      matchCompleted: false,
+    expect(migrated.weeklyActionState).toMatchObject({
+      slotsTotal: 3,
+      slotsRemaining: 0,
+      matchUnlocked: true,
       postgamePending: false,
-      studyCompleted: false,
     });
   });
 
@@ -158,7 +158,7 @@ describe("Career progression domain model", () => {
     expect(partial).toHaveProperty("financeLedger");
     expect(partial).toHaveProperty("legacyPerks");
     expect(partial).toHaveProperty("exileState");
-    expect(partial).toHaveProperty("weeklyLoop");
+    expect(partial).toHaveProperty("weeklyActionState");
   });
 
   it("lets the optional study action raise GPA once per week", () => {
@@ -167,7 +167,8 @@ describe("Career progression domain model", () => {
     before.completeStudyActivity();
     const afterFirstStudy = useCareerStore.getState();
     expect(afterFirstStudy.gpa).toBe(2.6);
-    expect(afterFirstStudy.weeklyLoop.studyCompleted).toBe(true);
+    expect(afterFirstStudy.weeklyActionState.actionsTaken.some((action) => action.id === "STUDY")).toBe(true);
+    expect(afterFirstStudy.weeklyActionState.slotsRemaining).toBe(1);
 
     afterFirstStudy.completeStudyActivity();
     const afterSecondStudy = useCareerStore.getState();
@@ -175,16 +176,17 @@ describe("Career progression domain model", () => {
   });
 
   it("blocks match navigation below a 2.0 GPA during academic phases and restores it on recovery", () => {
-    useCareerStore.getState().completeNarrativeEvent();
-    useCareerStore.getState().adjustGpa(-0.6, "SYSTEM");
+    useCareerStore.getState().takeWeeklyAction("TRAIN_SHOOTING");
+    useCareerStore.getState().takeWeeklyAction("STUDY");
+    useCareerStore.getState().adjustGpa(-0.8, "SYSTEM");
 
     useCareerStore.getState().navigateToMatch();
     const blockedState = useCareerStore.getState();
-    expect(blockedState.gpa).toBe(1.9);
+    expect(blockedState.gpa).toBe(1.8);
     expect(blockedState.eligibility.status).toBe("INELIGIBLE");
     expect(blockedState.view).toBe("HUB");
 
-    useCareerStore.getState().adjustGpa(0.1, "SYSTEM");
+    useCareerStore.getState().adjustGpa(0.2, "SYSTEM");
     useCareerStore.getState().navigateToMatch();
     const recoveredState = useCareerStore.getState();
     expect(recoveredState.gpa).toBe(2);
@@ -193,8 +195,10 @@ describe("Career progression domain model", () => {
   });
 
   it("does not apply the GPA gate in the pro phase", () => {
-    useCareerStore.getState().completeNarrativeEvent();
     useCareerStore.getState().updateLeagueLevel(LeagueLevel.PRO);
+    useCareerStore.getState().takeWeeklyAction("TRAIN_SHOOTING");
+    useCareerStore.getState().takeWeeklyAction("TRAIN_FINISHING");
+    useCareerStore.getState().takeWeeklyAction("REST_RECOVERY");
     useCareerStore.getState().adjustGpa(-0.7, "SYSTEM");
 
     useCareerStore.getState().navigateToMatch();
@@ -460,8 +464,9 @@ describe("Career progression domain model", () => {
 });
 
 const actToHighSchool = () => {
-  useCareerStore.getState().applyAttributeGain("vision", 1, "NARRATIVE");
+  useCareerStore.getState().takeWeeklyAction("FILM_COACH_TRUST");
   useCareerStore.getState().completeNarrativeEvent();
+  useCareerStore.getState().takeWeeklyAction("STUDY");
   useCareerStore.getState().completeMatch({
     homeScore: 68,
     awayScore: 54,

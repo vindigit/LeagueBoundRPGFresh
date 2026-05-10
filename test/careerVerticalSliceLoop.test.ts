@@ -77,20 +77,23 @@ describe("Career vertical slice weekly loop", () => {
       const beforeCycle = useCareerStore.getState();
       expect(beforeCycle.view).toBe("HUB");
       expect(beforeCycle.currentWeek).toBe(cycle);
-      expect(beforeCycle.weeklyLoop).toEqual({
-        eventCompleted: false,
-        matchCompleted: false,
+      expect(beforeCycle.weeklyActionState).toMatchObject({
+        slotsRemaining: cycle === 1 ? 2 : 3,
+        matchUnlocked: false,
         postgamePending: false,
-        studyCompleted: false,
       });
 
-      beforeCycle.applyAttributeGain("vision", 1, "NARRATIVE");
-      beforeCycle.completeNarrativeEvent();
+      beforeCycle.takeWeeklyAction("FILM_COACH_TRUST");
+      useCareerStore.getState().completeNarrativeEvent();
+      useCareerStore.getState().takeWeeklyAction("STUDY");
+      if (cycle > 1) {
+        useCareerStore.getState().takeWeeklyAction("TEAM_BONDING");
+      }
 
       const afterEvent = useCareerStore.getState();
       expect(afterEvent.view).toBe("HUB");
-      expect(afterEvent.weeklyLoop.eventCompleted).toBe(true);
-      expect(afterEvent.weeklyLoop.matchCompleted).toBe(false);
+      expect(afterEvent.weeklyActionState.matchUnlocked).toBe(true);
+      expect(afterEvent.weeklyActionState.postgamePending).toBe(false);
       expect(afterEvent.player.attributes.vision).toBeGreaterThanOrEqual(beforeCycle.player.attributes.vision);
 
       afterEvent.navigateToMatch();
@@ -106,11 +109,9 @@ describe("Career vertical slice weekly loop", () => {
       const afterMatch = useCareerStore.getState();
       expect(afterMatch.view).toBe("POSTGAME");
       expect(afterMatch.currentWeek).toBe(cycle);
-      expect(afterMatch.weeklyLoop).toEqual({
-        eventCompleted: true,
-        matchCompleted: true,
+      expect(afterMatch.weeklyActionState).toMatchObject({
+        matchUnlocked: true,
         postgamePending: true,
-        studyCompleted: false,
       });
       const expectedNewsBeforeResolution = cycle === 1 ? initialNewsCount : initialNewsCount + cycle;
       expect(afterMatch.newsFeed.length).toBe(expectedNewsBeforeResolution);
@@ -131,11 +132,11 @@ describe("Career vertical slice weekly loop", () => {
         expect(afterSelection.careerPhase).toBe("HIGH_SCHOOL");
         expect(afterSelection.pendingSchoolPathSelection).toBe(false);
         expect(afterSelection.currentWeek).toBe(cycle + 1);
-        expect(afterSelection.weeklyLoop).toEqual({
-          eventCompleted: false,
-          matchCompleted: false,
+        expect(afterSelection.weeklyActionState).toMatchObject({
+          slotsTotal: 3,
+          slotsRemaining: 3,
+          matchUnlocked: false,
           postgamePending: false,
-          studyCompleted: false,
         });
         expect(afterSelection.newsFeed.length).toBe(initialNewsCount + cycle + 1);
         expect(afterSelection.player.bankBalance).toBe(initialBank + 500 * cycle);
@@ -152,11 +153,11 @@ describe("Career vertical slice weekly loop", () => {
 
       expect(resolved.view).toBe("HUB");
       expect(resolved.currentWeek).toBe(cycle + 1);
-      expect(resolved.weeklyLoop).toEqual({
-        eventCompleted: false,
-        matchCompleted: false,
+      expect(resolved.weeklyActionState).toMatchObject({
+        slotsTotal: 3,
+        slotsRemaining: 3,
+        matchUnlocked: false,
         postgamePending: false,
-        studyCompleted: false,
       });
       expect(resolved.newsFeed.length).toBe(initialNewsCount + cycle + 1);
       expect(resolved.player.bankBalance).toBeGreaterThan(initialBank + 500 * cycle);

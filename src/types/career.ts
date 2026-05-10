@@ -47,6 +47,15 @@ export interface LastMatchResult {
   overtimePeriods: number;
   boxScore: MatchBoxScore;
   consequences: MatchConsequence[];
+  matchRating: number;
+  ratingDelta: number;
+  meterDeltas: {
+    coachTrust: number;
+    fans: number;
+    teammates: number;
+    energy: number;
+    condition: number;
+  };
 }
 
 export interface WeeklyLoopState {
@@ -63,6 +72,12 @@ export interface CareerState {
   status: CareerStatus;
   starRating: StarRating;
   scoutVisibility: number;
+  coachTrust: number;
+  fans: number;
+  teammates: number;
+  energy: number;
+  condition: number;
+  recentRatingTrend: number;
   gpa: number;
   currentYear: number;
   seasonNumber: number;

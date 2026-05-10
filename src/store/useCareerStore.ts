@@ -7,8 +7,10 @@ import {
   buildInterestDeltaFromMatch,
   generateHighSchoolOffers,
   HIGH_SCHOOL_RECRUITING_PROGRAMS,
+  type RecruitingProgram,
   seedHighSchoolTeamInterest,
 } from "../features/career/recruiting";
+import { calculatePersonalMatchRating, type CareerMeterDeltas } from "../features/career/matchRating";
 import { heightFromPresetMidpoint, weightFromPresetMidpoint } from "../features/backstory/constants/bodyMapping";
 import { BACKSTORY_V1_ENABLED } from "../features/backstory/constants/flags";
 import { getPotentialTier } from "../features/backstory/constants/potentialTier";
@@ -30,6 +32,12 @@ import {
   createSchoolPathCommitmentNewsItem,
 } from "../features/backstory/news";
 import { computeOverall } from "../builder/derivedRatings";
+import {
+  getFuzzyScoutingSummary,
+  getPlaystyleLabel,
+  inferPublicAttributesFromEngine,
+  type StartingArchetypeId,
+} from "../builder/publicAttributes";
 import {
   CareerStatus,
   LeagueLevel,
@@ -70,6 +78,8 @@ const clampAttribute = (value: number): number => Math.min(99, Math.max(0, value
 const clampMorale = (value: number): number => Math.min(100, Math.max(0, value));
 const clampVisibility = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
 const clampGpa = (value: number): number => Math.round(Math.min(4, Math.max(0, value)) * 10) / 10;
+const clampMeter = (value: number): number => Math.min(100, Math.max(0, Math.round(value)));
+const clampRecentRatingTrend = (value: number): number => Math.min(3, Math.max(-3, Math.round(value)));
 
 const isAcademicPhase = (leagueLevel: LeagueLevel): boolean => leagueLevel !== LeagueLevel.PRO;
 
@@ -218,6 +228,34 @@ const createDefaultFinanceState = (): FinanceState => ({
   recurringObligations: [],
   lastNilWeek: undefined,
   lastUpdatedAt: Date.now(),
+});
+
+const createDefaultCareerMeterState = () => ({
+  coachTrust: 50,
+  fans: 50,
+  teammates: 50,
+  energy: 100,
+  condition: 100,
+  recentRatingTrend: 0,
+});
+
+const createDefaultMeterDeltas = (): CareerMeterDeltas => ({
+  coachTrust: 0,
+  fans: 0,
+  teammates: 0,
+  energy: 0,
+  condition: 0,
+});
+
+const applyCareerMeterDeltas = (
+  state: Pick<CareerState, "coachTrust" | "fans" | "teammates" | "energy" | "condition">,
+  deltas: CareerMeterDeltas,
+) => ({
+  coachTrust: clampMeter(state.coachTrust + deltas.coachTrust),
+  fans: clampMeter(state.fans + deltas.fans),
+  teammates: clampMeter(state.teammates + deltas.teammates),
+  energy: clampMeter(state.energy + deltas.energy),
+  condition: clampMeter(state.condition + deltas.condition),
 });
 
 const buildFinanceTransactionFromDelta = (
@@ -390,6 +428,7 @@ const createCareerProgressionState = (input: {
     careerPhase,
     starRating: deriveStarRating(input.player),
     scoutVisibility: defaultScoutVisibilityForPhase(careerPhase),
+    ...createDefaultCareerMeterState(),
     teamInterestById: {},
     schoolPath: defaultSchoolPathForPhase(careerPhase),
     offers: [],
@@ -599,6 +638,12 @@ const initialCareerState: CareerState = {
   status: CareerStatus.ACTIVE,
   starRating: 1,
   scoutVisibility: 20,
+  coachTrust: 50,
+  fans: 50,
+  teammates: 50,
+  energy: 100,
+  condition: 100,
+  recentRatingTrend: 0,
   gpa: 2.5,
   currentYear: 2026,
   seasonNumber: 1,
@@ -666,6 +711,12 @@ const normalizeLastMatchResult = (
         ...result,
         boxScore: result.boxScore ?? emptyBoxScore(),
         consequences: result.consequences ?? [],
+        matchRating: typeof result.matchRating === "number" ? result.matchRating : 5,
+        ratingDelta: typeof result.ratingDelta === "number" ? result.ratingDelta : 0,
+        meterDeltas: {
+          ...createDefaultMeterDeltas(),
+          ...(result.meterDeltas ?? {}),
+        },
       }
     : null;
 
@@ -768,6 +819,49 @@ const buildPlayerBuilderProfile = (player: Player): GeneratedBadgeProfile | unde
   return deriveGeneratedBadgeProfile(player.attributes, caps, player.position);
 };
 
+const backfillPublicBuilderMetadata = (player: Player): Player => {
+  if (!player.identity || !player.dna) {
+    return player;
+  }
+
+  const publicAttributes = player.dna.publicAttributes ?? player.identity.publicAttributes ?? inferPublicAttributesFromEngine(player.attributes);
+  const startingArchetypeId =
+    player.dna.startingArchetypeId ??
+    player.identity.startingArchetypeId ??
+    ((player.identity.archetypeId as StartingArchetypeId | undefined) ?? "all_around");
+  const currentPlaystyle =
+    player.dna.currentPlaystyle ??
+    player.identity.currentPlaystyle ??
+    player.identity.roleLabel ??
+    getPlaystyleLabel(publicAttributes, player.position, startingArchetypeId);
+  const fuzzyScoutingSummary =
+    player.dna.fuzzyScoutingSummary ??
+    player.identity.fuzzyScoutingSummary ??
+    getFuzzyScoutingSummary(player.dna.potential, player.dna.growthCurve, publicAttributes);
+
+  return {
+    ...player,
+    identity: {
+      ...player.identity,
+      startingArchetypeId,
+      currentPlaystyle,
+      publicAttributes,
+      fuzzyScoutingSummary,
+    },
+    dna: {
+      ...player.dna,
+      startingArchetypeId,
+      currentPlaystyle,
+      publicAttributes,
+      hiddenEngineAttributes: player.dna.hiddenEngineAttributes ?? player.attributes,
+      fuzzyScoutingSummary,
+      publicTraits: (player.dna.publicTraits ?? []).map((trait) =>
+        trait.startsWith("Potential Tier:") ? fuzzyScoutingSummary : trait,
+      ),
+    },
+  };
+};
+
 const migratePlayerWithBackstory = (player: Player): Player => {
   let migratedPlayer = normalizePlayerIdentityHometown({ ...player });
   if (!migratedPlayer.identity || !migratedPlayer.dna) {
@@ -803,7 +897,7 @@ const migratePlayerWithBackstory = (player: Player): Player => {
         },
       };
     }
-  return migratedPlayer;
+  return backfillPublicBuilderMetadata(migratedPlayer);
 };
 
 export const useCareerStore = create<CareerStore>()(
@@ -1176,6 +1270,14 @@ export const useCareerStore = create<CareerStore>()(
           const schoolPathProfile = state.leagueLevel === LeagueLevel.HIGH_SCHOOL ? getSchoolPathProfile(state.schoolPath) : null;
           const bankDelta = (didWin ? 500 : 300) + (schoolPathProfile?.bankRewardBonus ?? 0);
           const moraleDelta = (didWin ? 5 : -3) + (schoolPathProfile?.moraleRewardBonus ?? 0);
+          const ratingOutcome = calculatePersonalMatchRating({
+            boxScore,
+            didWin,
+            consequences,
+          });
+          const priorMatchRating = state.lastMatchResult?.matchRating;
+          const ratingDelta =
+            typeof priorMatchRating === "number" ? Math.round((ratingOutcome.matchRating - priorMatchRating) * 10) / 10 : 0;
           const nextState = resolveWeekAdvance({
             currentWeek: state.currentWeek,
             currentYear: state.currentYear,
@@ -1193,6 +1295,9 @@ export const useCareerStore = create<CareerStore>()(
             overtimePeriods: overtimePeriods ?? 0,
             boxScore,
             consequences,
+            matchRating: ratingOutcome.matchRating,
+            ratingDelta,
+            meterDeltas: ratingOutcome.meterDeltas,
           };
           const nextHealthState = applyMatchConsequencesToHealth({
             injury: state.injury,
@@ -1281,6 +1386,8 @@ export const useCareerStore = create<CareerStore>()(
             source: "match",
           });
           const financeUpdate = matchRewardTransaction ? buildFinanceTransactionState(state, matchRewardTransaction) : null;
+          const nextMeterState = applyCareerMeterDeltas(state, state.lastMatchResult.meterDeltas);
+          const nextRecentRatingTrend = clampRecentRatingTrend(state.recentRatingTrend + Math.sign(state.lastMatchResult.ratingDelta));
 
           return {
             currentWeek: nextState.currentWeek,
@@ -1297,6 +1404,12 @@ export const useCareerStore = create<CareerStore>()(
             lastMatchResult: null,
             newsFeed,
             scoutVisibility: nextScoutVisibility,
+            coachTrust: nextMeterState.coachTrust,
+            fans: nextMeterState.fans,
+            teammates: nextMeterState.teammates,
+            energy: nextMeterState.energy,
+            condition: nextMeterState.condition,
+            recentRatingTrend: nextRecentRatingTrend,
             teamInterestById: recruitingState.teamInterestById,
             offers: recruitingState.offers,
             pendingSchoolPathSelection,
@@ -1314,7 +1427,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 13,
+      version: 14,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -1431,6 +1544,12 @@ export const useCareerStore = create<CareerStore>()(
           pendingSchoolPathSelection: typedState.pendingSchoolPathSelection ?? false,
           starRating: typedState.starRating ?? progressionState.starRating,
           scoutVisibility: clampVisibility(typedState.scoutVisibility ?? progressionState.scoutVisibility),
+          coachTrust: clampMeter(typedState.coachTrust ?? progressionState.coachTrust),
+          fans: clampMeter(typedState.fans ?? progressionState.fans),
+          teammates: clampMeter(typedState.teammates ?? progressionState.teammates),
+          energy: clampMeter(typedState.energy ?? progressionState.energy),
+          condition: clampMeter(typedState.condition ?? progressionState.condition),
+          recentRatingTrend: clampRecentRatingTrend(typedState.recentRatingTrend ?? progressionState.recentRatingTrend),
           teamInterestById: highSchoolRecruitingState?.teamInterestById ?? migratedTeamInterestById,
           schoolPath: typedState.schoolPath ?? progressionState.schoolPath,
           offers: migratedOffers,
@@ -1464,6 +1583,12 @@ export const useCareerStore = create<CareerStore>()(
         careerPhase: state.careerPhase,
         starRating: state.starRating,
         scoutVisibility: state.scoutVisibility,
+        coachTrust: state.coachTrust,
+        fans: state.fans,
+        teammates: state.teammates,
+        energy: state.energy,
+        condition: state.condition,
+        recentRatingTrend: state.recentRatingTrend,
         teamInterestById: state.teamInterestById,
         schoolPath: state.schoolPath,
         pendingSchoolPathSelection: state.pendingSchoolPathSelection,

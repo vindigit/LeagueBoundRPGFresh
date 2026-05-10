@@ -12,6 +12,19 @@ import type {
 } from "../../types/backstory";
 import type { LegacyPlayerStateInput, PlayerArchetype, PlayerAttributes, Position } from "../../types/player";
 import { classifyBuilderBuild, type BuilderClassification } from "../../builder/classify";
+import {
+  BASE_PUBLIC_ATTRIBUTES,
+  PUBLIC_ATTRIBUTE_KEYS,
+  STARTING_ARCHETYPES_BY_ID,
+  deriveEngineRatings,
+  getExpectedKeyMoments,
+  getFuzzyScoutingSummary,
+  getPlaystyleLabel,
+  inferPublicAttributesFromEngine,
+  legacyArchetypeForStartingArchetype,
+  type PublicAttributes,
+  type StartingArchetypeId,
+} from "../../builder/publicAttributes";
 import { resolveBuilderBadges } from "../../builder/badges/resolve";
 import { clampHeight, clampWeight, heightFromPresetMidpoint, toHeightPreset, toWeightPreset, weightFromPresetMidpoint } from "./constants/bodyMapping";
 import {
@@ -69,6 +82,8 @@ export interface BasketballBackgroundOption {
   currentPolish: string;
   developmentEmphasis: string;
 }
+
+const DEFAULT_STARTING_ARCHETYPE_ID: StartingArchetypeId = "all_around";
 
 export const BASKETBALL_BACKGROUND_OPTIONS: readonly BasketballBackgroundOption[] = [
   {
@@ -301,7 +316,11 @@ const scaleBonus = (
 };
 
 /**
- * Default secondary position fallback when primary/secondary collide or are missing.
+ * Internal compatibility fallback for player state shape.
+ *
+ * Builder-created players do not choose a secondary position. Future coaching
+ * logic should infer real positional flexibility from size, attributes, role,
+ * roster context, and development.
  */
 export const getDefaultSecondaryPosition = (primaryPosition: Position): Position => {
   const defaults: Record<Position, Position> = {
@@ -384,12 +403,13 @@ const buildCapTable = (
   secondaryPosition: Position,
   heightPreset: HeightPreset,
   weightPreset: WeightPreset,
+  secondaryPositionScale = SECONDARY_POSITION_SCALE,
 ): PlayerAttributes => {
   const archetypeBaseCaps = getLegacyArchetypeBaseCaps(archetype);
   const frameBonus = FRAME_BONUSES[frame];
   const curveBonus = CURVE_CAP_BONUSES[growthCurve];
   const primaryPositionBonus = POSITION_CAP_BONUSES[primaryPosition];
-  const secondaryPositionBonus = scaleBonus(POSITION_CAP_BONUSES[secondaryPosition], SECONDARY_POSITION_SCALE);
+  const secondaryPositionBonus = scaleBonus(POSITION_CAP_BONUSES[secondaryPosition], secondaryPositionScale);
   // Exact body values are mapped to presets first, then presets apply small cap deltas.
   const heightBonus = HEIGHT_PRESET_CONFIG[heightPreset].capBonus;
   const weightBonus = WEIGHT_PRESET_CONFIG[weightPreset].capBonus;
@@ -479,14 +499,15 @@ export const createBuildBackstorySeed = (input: BuildBackstoryInput): number =>
       input.stateCode.trim().toLowerCase(),
       input.citySlug.trim().toLowerCase(),
       input.primaryPosition,
-      input.secondaryPosition,
       input.bodyFrame,
       input.dominantHand,
       input.height.feet,
       input.height.inches,
       input.weightLbs,
-      input.archetypeId ?? "",
-      ...ALL_ATTRIBUTE_KEYS.map((key) => input.buildAttributes[key]),
+      input.startingArchetypeId ?? input.archetypeId ?? "",
+      ...(input.publicAttributes
+        ? PUBLIC_ATTRIBUTE_KEYS.map((key) => input.publicAttributes?.[key] ?? BASE_PUBLIC_ATTRIBUTES[key])
+        : ALL_ATTRIBUTE_KEYS.map((key) => input.buildAttributes?.[key] ?? 0)),
     ].join("|"),
   );
 
@@ -575,6 +596,16 @@ export const generateBackstoryFromInput = (
     heightPreset,
     weightPreset,
   );
+  const startingAttributes = buildStartingAttributes(
+    rawInput.archetype,
+    ageStartedBand,
+    rawInput.bodyFrame,
+    primaryPosition,
+    secondaryPosition,
+    heightPreset,
+    weightPreset,
+    caps,
+  );
   const identity: PlayerIdentity = {
     firstName,
     lastName,
@@ -592,6 +623,8 @@ export const generateBackstoryFromInput = (
     weightLbs: normalizedWeight,
   };
   const potentialTier = getPotentialTier(potential);
+  const publicAttributes = inferPublicAttributesFromEngine(startingAttributes);
+  const fuzzyScoutingSummary = getFuzzyScoutingSummary(potential, growthCurve, publicAttributes);
   const dna: PlayerDNA = {
     potential,
     potentialTier,
@@ -601,23 +634,16 @@ export const generateBackstoryFromInput = (
     caps,
     growthResidue: {},
     publicTraits: [
-      `Potential Tier: ${potentialTier}`,
+      fuzzyScoutingSummary,
       getCurveLabel(growthCurve),
       `${rawInput.bodyFrame} Frame`,
       `${hometown.city} Hooper`,
     ],
+    publicAttributes,
+    hiddenEngineAttributes: startingAttributes,
+    fuzzyScoutingSummary,
     builderProfile: undefined,
   };
-  const startingAttributes = buildStartingAttributes(
-    rawInput.archetype,
-    ageStartedBand,
-    rawInput.bodyFrame,
-    primaryPosition,
-    secondaryPosition,
-    heightPreset,
-    weightPreset,
-    caps,
-  );
   const builderProfile = buildBuilderProfile(
     startingAttributes,
     caps,
@@ -633,8 +659,38 @@ export const generateBackstoryFromInput = (
   };
 };
 
-const deriveCompatibilityArchetype = (input: BuildBackstoryInput): BuilderClassification =>
-  classifyBuilderBuild(input.buildAttributes, input.primaryPosition);
+const getBuildEngineAttributes = (
+  input: BuildBackstoryInput,
+  normalizedHeight: ExactHeight,
+  normalizedWeight: number,
+): PlayerAttributes => {
+  if (input.publicAttributes) {
+    return deriveEngineRatings({
+      publicAttributes: input.publicAttributes,
+      startingArchetypeId: input.startingArchetypeId ?? DEFAULT_STARTING_ARCHETYPE_ID,
+      position: input.primaryPosition,
+      height: normalizedHeight,
+      weightLbs: normalizedWeight,
+      bodyFrame: input.bodyFrame,
+    });
+  }
+
+  if (input.buildAttributes) {
+    return input.buildAttributes;
+  }
+
+  return deriveEngineRatings({
+    publicAttributes: BASE_PUBLIC_ATTRIBUTES,
+    startingArchetypeId: input.startingArchetypeId ?? DEFAULT_STARTING_ARCHETYPE_ID,
+    position: input.primaryPosition,
+    height: normalizedHeight,
+    weightLbs: normalizedWeight,
+    bodyFrame: input.bodyFrame,
+  });
+};
+
+const deriveCompatibilityArchetype = (attributes: PlayerAttributes, position: Position): BuilderClassification =>
+  classifyBuilderBuild(attributes, position);
 
 export const generateBackstoryFromBuildInput = (
   rawInput: BuildBackstoryInput,
@@ -649,16 +705,12 @@ export const generateBackstoryFromBuildInput = (
   const heightPreset = toHeightPreset(normalizedHeight);
   const weightPreset = toWeightPreset(normalizedWeight);
   const primaryPosition = rawInput.primaryPosition;
-  const secondaryPosition =
-    rawInput.secondaryPosition === rawInput.primaryPosition
-      ? getDefaultSecondaryPosition(rawInput.primaryPosition)
-      : rawInput.secondaryPosition;
-  const compatibilityClassification = deriveCompatibilityArchetype({
-    ...rawInput,
-    primaryPosition,
-    secondaryPosition,
-  });
-  const compatibilityArchetype = compatibilityClassification.legacyArchetype;
+  const secondaryPosition = getDefaultSecondaryPosition(primaryPosition);
+  const engineBuildAttributes = getBuildEngineAttributes(rawInput, normalizedHeight, normalizedWeight);
+  const compatibilityClassification = deriveCompatibilityArchetype(engineBuildAttributes, primaryPosition);
+  const compatibilityArchetype = rawInput.startingArchetypeId
+    ? legacyArchetypeForStartingArchetype(rawInput.startingArchetypeId)
+    : compatibilityClassification.legacyArchetype;
   const generationSeed =
     options.seedOverride ??
     createBuildBackstorySeed({
@@ -667,7 +719,6 @@ export const generateBackstoryFromBuildInput = (
       lastName,
       ageStarted,
       primaryPosition,
-      secondaryPosition,
     });
   const rng = createSeededRng(generationSeed);
   const potential = rollPotential(rng);
@@ -680,9 +731,16 @@ export const generateBackstoryFromBuildInput = (
     secondaryPosition,
     heightPreset,
     weightPreset,
+    0,
   );
-  const startingAttributes = buildAgeAdjustedBuildAttributes(rawInput.buildAttributes, ageStartedBand, caps);
+  const startingAttributes = buildAgeAdjustedBuildAttributes(engineBuildAttributes, ageStartedBand, caps);
   const builderProfile = buildBuilderProfile(startingAttributes, caps, primaryPosition);
+  const publicAttributes: PublicAttributes = rawInput.publicAttributes ?? inferPublicAttributesFromEngine(startingAttributes);
+  const startingArchetypeId = rawInput.startingArchetypeId ?? DEFAULT_STARTING_ARCHETYPE_ID;
+  const selectedArchetype = STARTING_ARCHETYPES_BY_ID[startingArchetypeId];
+  const currentPlaystyle = rawInput.roleLabel ?? getPlaystyleLabel(publicAttributes, primaryPosition, startingArchetypeId);
+  const fuzzyScoutingSummary = getFuzzyScoutingSummary(potential, growthCurve, publicAttributes);
+  const expectedKeyMoments = getExpectedKeyMoments(startingArchetypeId);
   const identity: PlayerIdentity = {
     firstName,
     lastName,
@@ -694,9 +752,13 @@ export const generateBackstoryFromBuildInput = (
     bodyFrame: rawInput.bodyFrame,
     dominantHand: rawInput.dominantHand,
     archetype: builderProfile.classification.legacyArchetype,
-    archetypeId: rawInput.archetypeId,
-    archetypeLabel: rawInput.archetypeLabel ?? builderProfile.classification.legacyArchetype,
-    roleLabel: rawInput.roleLabel ?? builderProfile.classification.taxonomy.label,
+    archetypeId: rawInput.archetypeId ?? startingArchetypeId,
+    archetypeLabel: rawInput.archetypeLabel ?? selectedArchetype.label,
+    roleLabel: currentPlaystyle,
+    startingArchetypeId,
+    currentPlaystyle,
+    publicAttributes,
+    fuzzyScoutingSummary,
     primaryPosition,
     secondaryPosition,
     height: normalizedHeight,
@@ -712,11 +774,17 @@ export const generateBackstoryFromBuildInput = (
     caps,
     growthResidue: {},
     publicTraits: [
-      `Potential Tier: ${potentialTier}`,
+      fuzzyScoutingSummary,
       getCurveLabel(growthCurve),
       `${rawInput.bodyFrame} Frame`,
       `${hometown.city} Hooper`,
     ],
+    startingArchetypeId,
+    currentPlaystyle,
+    publicAttributes,
+    hiddenEngineAttributes: startingAttributes,
+    fuzzyScoutingSummary,
+    expectedKeyMoments,
     builderProfile: undefined,
   };
   dna.builderProfile = builderProfile;

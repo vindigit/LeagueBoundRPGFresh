@@ -111,10 +111,10 @@ describe("Builder caps", () => {
     },
   ];
 
-  it("matches current backstory cap math for overlapping neutral-wingspan inputs", () => {
+  it("does not let hidden secondary position change builder caps", () => {
     fixtures.forEach((input, index) => {
       const generated = generateBackstoryFromInput(input, { seedOverride: 9000 + index });
-      const builderCaps = buildBuilderCaps({
+      const baseCaps = buildBuilderCaps({
         archetype: input.archetype,
         potential: generated.dna.potential,
         frame: input.bodyFrame,
@@ -125,8 +125,19 @@ describe("Builder caps", () => {
         weightPreset: toWeightPreset(input.weightLbs),
         wingspanPreset: DEFAULT_WINGSPAN_PRESET,
       });
+      const alternateCaps = buildBuilderCaps({
+        archetype: input.archetype,
+        potential: generated.dna.potential,
+        frame: input.bodyFrame,
+        growthCurve: generated.dna.growthCurve,
+        primaryPosition: input.primaryPosition,
+        secondaryPosition: input.primaryPosition === "C" ? "PG" : "C",
+        heightPreset: toHeightPreset(input.height),
+        weightPreset: toWeightPreset(input.weightLbs),
+        wingspanPreset: DEFAULT_WINGSPAN_PRESET,
+      });
 
-      expect(builderCaps).toEqual(generated.dna.caps);
+      expect(alternateCaps).toEqual(baseCaps);
     });
   });
 

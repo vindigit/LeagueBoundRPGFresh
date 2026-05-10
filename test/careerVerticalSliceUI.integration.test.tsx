@@ -92,7 +92,7 @@ describe("Career vertical slice UI", () => {
 
   it("runs builder to event to match to postgame to week-advance through the hub", () => {
     const screen = render(<HomeScreen />);
-    expect(screen.getByText("Backstory Generator")).toBeTruthy();
+    expect(screen.getByText("Player Builder")).toBeTruthy();
 
     act(() => {
       useCareerStore.getState().initializeCareer({

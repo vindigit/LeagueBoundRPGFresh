@@ -75,8 +75,6 @@ const POSITION_CAP_BONUSES: Record<Position, AttributeModifiers> = {
   C: { shortRange: 1, dunking: 1, interiorDefense: 2, blocking: 2, offRebounding: 2, defRebounding: 2, strength: 2, handle: -2, threePoint: -1 },
 };
 
-const SECONDARY_POSITION_SCALE = 0.5;
-
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 const asCap = (value: number): PlayerAttributes["shortRange"] =>
@@ -105,17 +103,6 @@ const combineBonuses = (...sources: AttributeModifiers[]): AttributeModifiers =>
   return combined;
 };
 
-const scaleBonus = (source: AttributeModifiers, factor: number): AttributeModifiers => {
-  const scaled: AttributeModifiers = {};
-  for (const key of ATTRIBUTE_KEYS) {
-    const value = source[key];
-    if (value !== undefined) {
-      scaled[key] = Math.round(value * factor);
-    }
-  }
-  return scaled;
-};
-
 const getPrimaryBonus = (attribute: keyof PlayerAttributes, archetype: PlayerArchetype): number => {
   const primaries = ARCHETYPE_PRIMARY_ATTRIBUTES[archetype];
   return primaries.includes(attribute) ? 2 : 0;
@@ -127,7 +114,7 @@ export interface BuilderCapInput {
   frame: BodyFrame;
   growthCurve: GrowthCurve;
   primaryPosition: Position;
-  secondaryPosition: Position;
+  secondaryPosition?: Position;
   heightPreset: HeightPreset;
   weightPreset: WeightPreset;
   wingspanPreset?: WingspanPreset;
@@ -138,11 +125,10 @@ export const buildBuilderCaps = (input: BuilderCapInput): PlayerAttributes => {
   const frameBonus = FRAME_BONUSES[input.frame];
   const curveBonus = CURVE_CAP_BONUSES[input.growthCurve];
   const primaryPositionBonus = POSITION_CAP_BONUSES[input.primaryPosition];
-  const secondaryPositionBonus = scaleBonus(POSITION_CAP_BONUSES[input.secondaryPosition], SECONDARY_POSITION_SCALE);
   const heightBonus = HEIGHT_PRESET_CONFIG[input.heightPreset].capBonus;
   const weightBonus = WEIGHT_PRESET_CONFIG[input.weightPreset].capBonus;
   const wingspanBonus = WINGSPAN_PRESET_CONFIG[input.wingspanPreset ?? DEFAULT_WINGSPAN_PRESET].capBonus;
-  const buildBonus = combineBonuses(primaryPositionBonus, secondaryPositionBonus, heightBonus, weightBonus, wingspanBonus);
+  const buildBonus = combineBonuses(primaryPositionBonus, heightBonus, weightBonus, wingspanBonus);
   const potentialBonus = getPotentialBonus(input.potential);
 
   const caps = {} as PlayerAttributes;

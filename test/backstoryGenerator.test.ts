@@ -70,6 +70,37 @@ describe("Backstory generator", () => {
     expect(late.dna.growthCurve).toBe("LATE_BLOOMER");
   });
 
+  it("derives deterministic adjacent secondary defaults", () => {
+    const defaults = [
+      ["PG", "SG"],
+      ["SG", "PG"],
+      ["SF", "PF"],
+      ["PF", "C"],
+      ["C", "PF"],
+    ] as const;
+
+    for (const [primaryPosition, expectedSecondary] of defaults) {
+      const generated = generateBackstoryFromBuildInput(
+        {
+          firstName: "Derived",
+          lastName: primaryPosition,
+          stateCode: "TX",
+          citySlug: "houston-tx",
+          ageStarted: 8,
+          bodyFrame: "Athletic",
+          dominantHand: "Right",
+          primaryPosition,
+          height: { feet: 6, inches: 6 },
+          weightLbs: 210,
+          buildAttributes: makeBuildAttributes(),
+        },
+        { seedOverride: 10 },
+      );
+
+      expect(generated.identity.secondaryPosition).toBe(expectedSecondary);
+    }
+  });
+
   it("maps basketball backgrounds to representative age bands and growth curves", () => {
     const early = generateBackstoryFromInput(
       { ...baseInput, ageStarted: 8, basketballBackground: "EARLY_STARTER" },
@@ -145,13 +176,20 @@ describe("Backstory generator", () => {
     expect(houston.dna.caps).toEqual(dallas.dna.caps);
   });
 
-  it("maps potential to public tier label", () => {
+  it("keeps exact potential internal and exposes fuzzy scouting language", () => {
     const generated = generateBackstoryFromInput(baseInput, { seedOverride: 9 });
     expect(["Bronze", "Silver", "Gold", "Platinum"]).toContain(generated.dna.potentialTier);
-    expect(generated.dna.publicTraits.some((trait) => trait.startsWith("Potential Tier:"))).toBe(true);
+    expect(generated.dna.publicTraits.some((trait) => trait.startsWith("Potential Tier:"))).toBe(false);
+    expect([
+      "Raw tools",
+      "Polished early",
+      "Coaches see another level",
+      "Scouts are split",
+      "High ceiling, uneven floor",
+    ]).toContain(generated.dna.fuzzyScoutingSummary);
   });
 
-  it("reroll can change visible tier with different seeds", () => {
+  it("reroll can change internal tier with different seeds", () => {
     let firstTier = "";
     let secondTier = "";
     for (let seed = 1; seed < 500; seed += 1) {
@@ -256,5 +294,51 @@ describe("Backstory generator", () => {
     expect(late.dna.potential).toBe(balanced.dna.potential);
     expect(early.startingAttributes.handle).toBeGreaterThan(balanced.startingAttributes.handle);
     expect(late.startingAttributes.handle).toBeLessThan(balanced.startingAttributes.handle);
+  });
+
+  it("ignores caller-provided builder secondary position for seed and generated build outcome", () => {
+    const baseBuildInput: BuildBackstoryInput = {
+      firstName: "Builder",
+      lastName: "Secondary",
+      stateCode: "TX",
+      citySlug: "houston-tx",
+      ageStarted: 8,
+      basketballBackground: "BALANCED_PATH",
+      bodyFrame: "Athletic",
+      dominantHand: "Right",
+      primaryPosition: "SG",
+      height: { feet: 6, inches: 4 },
+      weightLbs: 200,
+      buildAttributes: makeBuildAttributes({
+        threePoint: 82,
+        midrange: 78,
+        handle: 74,
+        passing: 60,
+        defRebounding: 35,
+        blocking: 30,
+      }),
+      archetypeId: "sg_movement_shooter",
+      archetypeLabel: "Sharpshooter",
+      roleLabel: "Off-ball scorer",
+    };
+    const manualSecondaryInput: BuildBackstoryInput = {
+      ...baseBuildInput,
+      secondaryPosition: "C",
+    };
+
+    expect(createBuildBackstorySeed(manualSecondaryInput)).toBe(createBuildBackstorySeed(baseBuildInput));
+
+    const seed = createBuildBackstorySeed(baseBuildInput);
+    const generated = generateBackstoryFromBuildInput(baseBuildInput, { seedOverride: seed });
+    const generatedWithManualSecondary = generateBackstoryFromBuildInput(manualSecondaryInput, { seedOverride: seed });
+
+    expect(generated.identity.secondaryPosition).toBe("PG");
+    expect(generatedWithManualSecondary.identity.secondaryPosition).toBe("PG");
+    expect(generatedWithManualSecondary.dna.caps).toEqual(generated.dna.caps);
+    expect(generatedWithManualSecondary.startingAttributes).toEqual(generated.startingAttributes);
+    expect(generatedWithManualSecondary.builderProfile.classification).toEqual(generated.builderProfile.classification);
+    expect(generatedWithManualSecondary.identity.archetypeId).toBe(generated.identity.archetypeId);
+    expect(generatedWithManualSecondary.identity.archetypeLabel).toBe(generated.identity.archetypeLabel);
+    expect(generatedWithManualSecondary.identity.roleLabel).toBe(generated.identity.roleLabel);
   });
 });

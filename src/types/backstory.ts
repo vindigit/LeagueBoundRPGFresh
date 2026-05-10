@@ -2,6 +2,7 @@ import type { LeagueLevel } from "./career";
 import type { PlayerArchetype, PlayerAttributes, Position } from "./player";
 import type { BuilderClassification } from "../builder/classify";
 import type { ResolvedBuilderBadge } from "../builder/badges/resolve";
+import type { FuzzyScoutingSummary, PublicAttributes, StartingArchetypeId } from "../builder/publicAttributes";
 
 export type BodyFrame = "Lean" | "Athletic" | "Stocky";
 export type DominantHand = "Left" | "Right";
@@ -51,6 +52,10 @@ export interface PlayerIdentity {
   archetypeId?: string;
   archetypeLabel?: string;
   roleLabel?: string;
+  startingArchetypeId?: StartingArchetypeId;
+  currentPlaystyle?: string;
+  publicAttributes?: PublicAttributes;
+  fuzzyScoutingSummary?: FuzzyScoutingSummary;
   primaryPosition: Position;
   secondaryPosition: Position;
   height: ExactHeight;
@@ -66,6 +71,12 @@ export interface PlayerDNA {
   caps: PlayerAttributes;
   growthResidue: Partial<Record<keyof PlayerAttributes, number>>;
   publicTraits: string[];
+  startingArchetypeId?: StartingArchetypeId;
+  currentPlaystyle?: string;
+  publicAttributes?: PublicAttributes;
+  hiddenEngineAttributes?: PlayerAttributes;
+  fuzzyScoutingSummary?: FuzzyScoutingSummary;
+  expectedKeyMoments?: string[];
   builderProfile?: GeneratedBadgeProfile;
 }
 
@@ -96,10 +107,12 @@ export interface BuildBackstoryInput {
   bodyFrame: BodyFrame;
   dominantHand: DominantHand;
   primaryPosition: Position;
-  secondaryPosition: Position;
+  secondaryPosition?: Position;
   height: ExactHeight;
   weightLbs: number;
-  buildAttributes: PlayerAttributes;
+  buildAttributes?: PlayerAttributes;
+  publicAttributes?: PublicAttributes;
+  startingArchetypeId?: StartingArchetypeId;
   archetypeId?: string;
   archetypeLabel?: string;
   roleLabel?: string;

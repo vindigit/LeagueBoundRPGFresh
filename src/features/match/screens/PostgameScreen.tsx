@@ -15,6 +15,23 @@ const formatMoraleDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}
 const formatFg = (fgm: number, fga: number): string => `${fgm}-${fga}`;
 const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} remaining`;
 const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
+const formatMeterDelta = (amount: number): string => `${amount >= 0 ? "+" : ""}${amount}`;
+
+const getRatingLabel = (rating: number): string => {
+  if (rating >= 8.5) {
+    return "Standout";
+  }
+  if (rating >= 7) {
+    return "Strong";
+  }
+  if (rating >= 5.5) {
+    return "Solid";
+  }
+  if (rating >= 4) {
+    return "Shaky";
+  }
+  return "Cold";
+};
 
 const renderTeamTotals = (label: string, totals: TeamBoxScoreTotals) => (
   <View className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
@@ -72,14 +89,31 @@ export function PostgameScreen() {
   const selectedPlayers = isHomeSelected ? result.boxScore.homePlayers : result.boxScore.awayPlayers;
   const selectedTotals = isHomeSelected ? result.boxScore.homeTotals : result.boxScore.awayTotals;
   const injuryConsequence = result.consequences.find((consequence) => consequence.kind === "injury");
+  const ratingLabel = getRatingLabel(result.matchRating);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-950">
       <ScrollView contentContainerClassName="px-5 pb-8 pt-8">
         <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Postgame Report</Text>
-        <Text className="mt-2 text-3xl font-bold text-white">{result.didWin ? "Victory" : "Defeat"}</Text>
+        <Text className="mt-2 text-3xl font-bold text-white">Match Rating</Text>
 
         <View className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Personal Performance</Text>
+          <View className="mt-3 flex-row items-end justify-between">
+            <View>
+              <Text className="text-4xl font-bold text-emerald-300">{result.matchRating.toFixed(1)}</Text>
+              <Text className="mt-1 text-sm font-semibold uppercase tracking-wide text-slate-200">{ratingLabel}</Text>
+            </View>
+            <Text className={`text-sm font-semibold ${result.ratingDelta >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+              {result.ratingDelta >= 0 ? "+" : ""}
+              {result.ratingDelta.toFixed(1)} trend
+            </Text>
+          </View>
+        </View>
+
+        <View className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Team Result</Text>
+          <Text className="mt-2 text-2xl font-bold text-white">{result.didWin ? "Victory" : "Defeat"}</Text>
           <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Final Score</Text>
           <Text className="mt-2 text-2xl font-bold text-white">
             {result.homeScore} - {result.awayScore}
@@ -149,6 +183,41 @@ export function PostgameScreen() {
           <View className="mt-2 flex-row items-center justify-between">
             <Text className="text-sm text-slate-300">Next Week</Text>
             <Text className="text-sm font-semibold text-white">{result.weekAfter}</Text>
+          </View>
+
+          <View className="mt-4 rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-3">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Career Meters</Text>
+
+            <View className="mt-3 flex-row items-center justify-between">
+              <Text className="text-sm text-slate-300">Coach Trust</Text>
+              <Text className={`text-sm font-semibold ${result.meterDeltas.coachTrust >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                {formatMeterDelta(result.meterDeltas.coachTrust)}
+              </Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between">
+              <Text className="text-sm text-slate-300">Fans</Text>
+              <Text className={`text-sm font-semibold ${result.meterDeltas.fans >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                {formatMeterDelta(result.meterDeltas.fans)}
+              </Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between">
+              <Text className="text-sm text-slate-300">Teammates</Text>
+              <Text className={`text-sm font-semibold ${result.meterDeltas.teammates >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                {formatMeterDelta(result.meterDeltas.teammates)}
+              </Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between">
+              <Text className="text-sm text-slate-300">Energy</Text>
+              <Text className={`text-sm font-semibold ${result.meterDeltas.energy >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                {formatMeterDelta(result.meterDeltas.energy)}
+              </Text>
+            </View>
+            <View className="mt-2 flex-row items-center justify-between">
+              <Text className="text-sm text-slate-300">Condition</Text>
+              <Text className={`text-sm font-semibold ${result.meterDeltas.condition >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                {formatMeterDelta(result.meterDeltas.condition)}
+              </Text>
+            </View>
           </View>
 
           {localHeadline ? (

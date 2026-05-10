@@ -138,17 +138,17 @@ const runPresetAggregate = (preset: BuildPreset): UserAggregate => {
   return totals;
 };
 
-const preset = (position: Position, label: string): BuildPreset => {
-  const found = BUILD_PRESETS_BY_POSITION[position].find((entry) => entry.label === label);
-  if (!found) throw new Error(`Missing preset ${position} ${label}`);
+const preset = (position: Position, id: BuildPreset["id"]): BuildPreset => {
+  const found = BUILD_PRESETS_BY_POSITION[position].find((entry) => entry.id === id);
+  if (!found) throw new Error(`Missing preset ${position} ${id}`);
   return found;
 };
 
 describe("builder preset aggregate simulation identity", () => {
   it("separates SG shooting and rim-pressure profiles", () => {
-    const movement = runPresetAggregate(preset("SG", "Movement Shooter"));
-    const slasher = runPresetAggregate(preset("SG", "Slashing Scorer"));
-    const poa = runPresetAggregate(preset("SG", "Point-of-Attack Defender"));
+    const movement = runPresetAggregate(preset("SG", "sg_movement_shooter"));
+    const slasher = runPresetAggregate(preset("SG", "sg_slashing_scorer"));
+    const poa = runPresetAggregate(preset("SG", "sg_point_of_attack_defender"));
 
     expect(movement.threePa).toBeGreaterThan(slasher.threePa);
     expect(movement.threePa).toBeGreaterThan(poa.threePa);
@@ -156,9 +156,9 @@ describe("builder preset aggregate simulation identity", () => {
   });
 
   it("separates PG creator and rim-pressure profiles", () => {
-    const creator = runPresetAggregate(preset("PG", "Primary Creator"));
-    const shotmaker = runPresetAggregate(preset("PG", "Shotmaking Guard"));
-    const rim = runPresetAggregate(preset("PG", "Rim Pressure Guard"));
+    const creator = runPresetAggregate(preset("PG", "pg_primary_creator"));
+    const shotmaker = runPresetAggregate(preset("PG", "pg_shotmaking_guard"));
+    const rim = runPresetAggregate(preset("PG", "pg_rim_pressure_guard"));
 
     expect(creator.assists).toBeGreaterThan(shotmaker.assists);
     expect(creator.assists).toBeGreaterThan(rim.assists);
@@ -166,12 +166,12 @@ describe("builder preset aggregate simulation identity", () => {
   });
 
   it("separates frontcourt rebound, defense, and stretch profiles", () => {
-    const glass = runPresetAggregate(preset("PF", "Glass Defender"));
-    const stretchFour = runPresetAggregate(preset("PF", "Stretch Four"));
-    const athletic = runPresetAggregate(preset("PF", "Athletic Finisher"));
-    const paint = runPresetAggregate(preset("C", "Paint Beast"));
-    const rimProtector = runPresetAggregate(preset("C", "Rim Protector"));
-    const stretchBig = runPresetAggregate(preset("C", "Stretch Big"));
+    const glass = runPresetAggregate(preset("PF", "pf_glass_defender"));
+    const stretchFour = runPresetAggregate(preset("PF", "pf_stretch_four"));
+    const athletic = runPresetAggregate(preset("PF", "pf_athletic_finisher"));
+    const paint = runPresetAggregate(preset("C", "c_paint_beast"));
+    const rimProtector = runPresetAggregate(preset("C", "c_rim_protector"));
+    const stretchBig = runPresetAggregate(preset("C", "c_stretch_big"));
 
     expect(glass.rebounds).toBeGreaterThan(stretchFour.rebounds);
     expect(glass.rebounds).toBeGreaterThan(athletic.rebounds);
@@ -181,10 +181,10 @@ describe("builder preset aggregate simulation identity", () => {
   });
 
   it("keeps guard rebounding materially below frontcourt rebounding", () => {
-    const creator = runPresetAggregate(preset("PG", "Primary Creator"));
-    const movement = runPresetAggregate(preset("SG", "Movement Shooter"));
-    const glass = runPresetAggregate(preset("PF", "Glass Defender"));
-    const paint = runPresetAggregate(preset("C", "Paint Beast"));
+    const creator = runPresetAggregate(preset("PG", "pg_primary_creator"));
+    const movement = runPresetAggregate(preset("SG", "sg_movement_shooter"));
+    const glass = runPresetAggregate(preset("PF", "pf_glass_defender"));
+    const paint = runPresetAggregate(preset("C", "c_paint_beast"));
 
     expect((creator.rebounds + movement.rebounds) / 2).toBeLessThan((glass.rebounds + paint.rebounds) / 2);
   });

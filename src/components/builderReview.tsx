@@ -112,6 +112,11 @@ const TENDENCY_LABELS: Record<keyof BuildSimProjection["tendencies"], string> = 
   fatigueRisk: "Fatigue Risk",
 };
 
+const fallbackExpectedGameShape = (projection: BuildSimProjection): string[] =>
+  (Object.keys(TENDENCY_LABELS) as Array<keyof BuildSimProjection["tendencies"]>).map(
+    (key) => `${projection.tendencies[key]} ${TENDENCY_LABELS[key].toLowerCase()}`,
+  );
+
 const formatBadgeWatch = (badge: BadgeWatchItem): string => {
   const tier = formatBadgeTier(badge.tier);
   return badge.status === "unlocked" ? `${badge.label} ${tier}` : `${badge.label}: ${tier} nearby`;
@@ -130,6 +135,12 @@ export function BuilderReviewSection({
   }
 
   const theme = THEME_BY_VARIANT[variant];
+  const archetypeLabel = projection?.selectedArchetypeLabel ?? projection?.archetype ?? summary.archetypeFit;
+  const roleLabel = projection?.role ?? summary.classification;
+  const roleNote = projection?.currentRoleNote ?? projection?.identityNote ?? (summary.hasStandoutStrength ? `Confidence: ${summary.archetypeConfidence}` : NO_STANDOUT_LABEL);
+  const expectedGameShape = projection ? projection.expectedGameShape ?? fallbackExpectedGameShape(projection) : [];
+  const strengths = projection?.contractStrengths?.length ? projection.contractStrengths : projection?.strengths?.length ? projection.strengths : summary.topStrengths;
+  const tradeoffs = projection?.contractWeaknesses?.length ? projection.contractWeaknesses : projection?.weaknesses ?? [];
 
   return (
     <View className={`rounded-lg border p-3 ${theme.borderClassName} ${theme.backgroundClassName} ${className}`.trim()}>
@@ -137,27 +148,26 @@ export function BuilderReviewSection({
 
       <View className="mt-3 gap-3">
         <View>
-          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Role</Text>
-          <Text className={`mt-1 text-sm font-semibold ${theme.valueClassName}`}>{projection?.role ?? summary.classification}</Text>
-          <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{projection?.identityNote ?? (summary.hasStandoutStrength ? `Confidence: ${summary.archetypeConfidence}` : NO_STANDOUT_LABEL)}</Text>
+          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Archetype</Text>
+          <Text className={`mt-1 text-base font-bold ${theme.valueClassName}`}>{archetypeLabel}</Text>
+          {projection?.archetypeIdentitySummary ? (
+            <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{projection.archetypeIdentitySummary}</Text>
+          ) : null}
         </View>
 
-        <View className="flex-row gap-2">
-          <View className={`flex-1 rounded-lg border px-2 py-2 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
-            <Text className={`text-[10px] font-semibold uppercase ${theme.labelClassName}`}>Archetype</Text>
-            <Text className={`mt-1 text-xs font-bold ${theme.valueClassName}`}>{projection?.archetype ?? summary.archetypeFit}</Text>
-          </View>
+        <View>
+          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Current Role</Text>
+          <Text className={`mt-1 text-sm font-semibold ${theme.valueClassName}`}>{roleLabel}</Text>
+          <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{roleNote}</Text>
         </View>
 
         {projection ? (
           <View>
-            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Expected Sim Tendencies</Text>
+            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Expected Game Shape</Text>
             <View className="mt-2 flex-row flex-wrap gap-2">
-              {(Object.keys(TENDENCY_LABELS) as Array<keyof BuildSimProjection["tendencies"]>).map((key) => (
-                <View key={key} className={`rounded-lg border px-2 py-1 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
-                  <Text className={`text-[11px] font-semibold ${theme.chipTextClassName}`}>
-                    {TENDENCY_LABELS[key]}: {projection.tendencies[key]}
-                  </Text>
+              {expectedGameShape.map((shape) => (
+                <View key={shape} className={`rounded-lg border px-2 py-1 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
+                  <Text className={`text-[11px] font-semibold ${theme.chipTextClassName}`}>{shape}</Text>
                 </View>
               ))}
             </View>
@@ -166,7 +176,10 @@ export function BuilderReviewSection({
 
         {projection ? (
           <View>
-            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Shot Profile</Text>
+            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Shot Style</Text>
+            {projection.shotStyleNote ? (
+              <Text className={`mt-1 text-xs ${theme.labelClassName}`}>{projection.shotStyleNote}</Text>
+            ) : null}
             <View className="mt-2 flex-row gap-2">
               {([
                 ["Rim", projection.shotProfile.rim],
@@ -183,10 +196,10 @@ export function BuilderReviewSection({
         ) : null}
 
         <View>
-          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Top Strengths</Text>
+          <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Strengths</Text>
           <View className="mt-2 flex-row flex-wrap gap-2">
-            {summary.topStrengths.length > 0 ? (
-              summary.topStrengths.map((strength) => (
+            {strengths.length > 0 ? (
+              strengths.map((strength) => (
                 <View key={strength} className={`rounded-full border px-3 py-1 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
                   <Text className={`text-xs font-semibold ${theme.chipTextClassName}`}>{strength}</Text>
                 </View>
@@ -196,6 +209,19 @@ export function BuilderReviewSection({
             )}
           </View>
         </View>
+
+        {tradeoffs.length > 0 ? (
+          <View>
+            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${theme.labelClassName}`}>Tradeoffs</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {tradeoffs.map((tradeoff) => (
+                <View key={tradeoff} className={`rounded-full border px-3 py-1 ${theme.chipBorderClassName} ${theme.chipBackgroundClassName}`}>
+                  <Text className={`text-xs font-semibold ${theme.chipTextClassName}`}>{tradeoff}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {showBadges ? (
           <View>

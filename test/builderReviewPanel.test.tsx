@@ -1,4 +1,5 @@
 import { render } from "@testing-library/react-native";
+import { ARCHETYPE_PROFILES_BY_POSITION } from "../src/builder/presets";
 import { buildSimProjection } from "../src/builder/simProjection";
 import { BuilderReviewSection, type BuilderReviewSummary } from "../src/components/builderReview";
 import type { PlayerAttributes } from "../src/types/player";
@@ -42,8 +43,31 @@ describe("BuilderReviewSection projection panel", () => {
     expect(screen.getByText("Current-Level Sim Projection")).toBeTruthy();
     expect(screen.getByText("Balanced Guard")).toBeTruthy();
     expect(screen.getByText("No standout strengths yet. Raise 2-3 core attributes to define your playstyle.")).toBeTruthy();
-    expect(screen.getByText("Expected Sim Tendencies")).toBeTruthy();
-    expect(screen.getByText("Shot Profile")).toBeTruthy();
+    expect(screen.getByText("Expected Game Shape")).toBeTruthy();
+    expect(screen.getByText("Shot Style")).toBeTruthy();
+  });
+
+  it("renders selected archetype contract identity instead of no-standout copy", () => {
+    const slasher = ARCHETYPE_PROFILES_BY_POSITION.SG.find((profile) => profile.id === "sg_slashing_scorer");
+    if (!slasher) throw new Error("Missing SG slasher profile");
+    const projection = buildSimProjection({
+      attributes: slasher.attributes,
+      position: "SG",
+      caps: makeAttributes(),
+      archetypeProfile: slasher,
+      badgesEnabled: false,
+    });
+    const screen = render(<BuilderReviewSection summary={makeSummary(projection)} projection={projection} variant="slate" showBadges={false} />);
+
+    expect(screen.getByText("Archetype")).toBeTruthy();
+    expect(screen.getByText("Slasher")).toBeTruthy();
+    expect(screen.getByText("Current Role")).toBeTruthy();
+    expect(screen.getByText("Rim-pressure scorer")).toBeTruthy();
+    expect(screen.queryByText("No standout strengths yet.")).toBeNull();
+    expect(screen.getByText("Rim pressure")).toBeTruthy();
+    expect(screen.getByText("Passing")).toBeTruthy();
+    expect(screen.getByText("Expected Game Shape")).toBeTruthy();
+    expect(screen.getByText("Shot Style")).toBeTruthy();
   });
 
   it("renders shooter projection and badge watch", () => {

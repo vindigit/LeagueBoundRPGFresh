@@ -1,4 +1,5 @@
 import { buildSimProjection } from "../src/builder/simProjection";
+import { ARCHETYPE_PROFILES_BY_POSITION } from "../src/builder/presets";
 import { isBadgeSystemAvailable } from "../src/builder/badges/availability";
 import { LeagueLevel } from "../src/types/career";
 import type { PlayerAttributes } from "../src/types/player";
@@ -112,6 +113,27 @@ describe("builder sim projection", () => {
 
     expect(projection.badges).toEqual([]);
     expect(projection.badgeWatch).toEqual([]);
+  });
+
+  it("carries selected archetype review fields from the sim contract", () => {
+    const slasher = ARCHETYPE_PROFILES_BY_POSITION.SG.find((profile) => profile.id === "sg_slashing_scorer");
+    if (!slasher) throw new Error("Missing SG slasher profile");
+    const projection = buildSimProjection({
+      attributes: slasher.attributes,
+      position: "SG",
+      caps: makeAttributes(),
+      archetypeProfile: slasher,
+      badgesEnabled: false,
+    });
+
+    expect(projection.selectedArchetypeLabel).toBe("Slasher");
+    expect(projection.selectedRoleLabel).toBe("Rim-pressure scorer");
+    expect(projection.archetypeIdentitySummary).toContain("rim pressure");
+    expect(projection.currentRoleNote).toBe("Your current attributes still match this archetype identity.");
+    expect(projection.expectedGameShape?.some((shape) => shape.includes("rim pressure"))).toBe(true);
+    expect(projection.shotStyleNote).toContain("shot diet");
+    expect(projection.contractStrengths).toContain("Rim pressure");
+    expect(projection.contractWeaknesses).toContain("Passing");
   });
 
   it("unlocks the badge system in high school year 4 and later phases", () => {

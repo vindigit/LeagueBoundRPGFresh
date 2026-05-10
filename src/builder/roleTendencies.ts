@@ -2,6 +2,7 @@ import { LEAGUE_MODIFIERS } from "../constants/leagueScaling";
 import { LeagueLevel } from "../types/career";
 import type { BodyFrame, ExactHeight } from "../types/backstory";
 import type { PlayerAttributes, Position } from "../types/player";
+import type { ArchetypeSimContract, ArchetypeTendencyTargets } from "./archetypeSimContracts";
 import type { ResolvedBuilderBadge } from "./badges/resolve";
 import type { ArchetypeProfile } from "./presets";
 
@@ -29,6 +30,7 @@ export interface PlayerRoleTendencies {
 export interface BuildRoleTendencyInput {
   attributes: PlayerAttributes;
   position: Position;
+  archetypeContract?: ArchetypeSimContract;
   archetypeProfile?: ArchetypeProfile;
   height?: ExactHeight;
   weightLbs?: number;
@@ -61,6 +63,7 @@ export interface RoleShotProfile {
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const clamp01 = (value: number): number => clamp(value, 0, 1);
 const average = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 const score01 = (value: number): number => clamp(value / 99, 0, 1);
 const scaled = (value: number, leagueLevel: LeagueLevel): number => clamp(value * LEAGUE_MODIFIERS[leagueLevel], 0, 99);
@@ -119,6 +122,23 @@ const riskLabel = (value: number): TendencyLabel => {
   return "Low";
 };
 
+const tendencyContradiction = (attributeValue: number, contractValue: number): number =>
+  clamp01((Math.abs(attributeValue - contractValue) - 0.18) / 0.42);
+
+const contractWeightForField = (baseWeight: number, attributeValue: number, contractValue: number): number =>
+  baseWeight * (1 - tendencyContradiction(attributeValue, contractValue) * 0.5);
+
+const blendTendency = (attributeValue: number, contractValue: number | undefined, contractWeight: number): number => {
+  if (contractValue === undefined) {
+    return clamp(attributeValue, 0.01, 1);
+  }
+  const adjustedWeight = contractWeightForField(contractWeight, attributeValue, contractValue);
+  return clamp(attributeValue * (1 - adjustedWeight) + contractValue * adjustedWeight, 0.01, 1);
+};
+
+const resolveContractTargets = (input: BuildRoleTendencyInput): ArchetypeTendencyTargets | undefined =>
+  input.archetypeContract?.tendencyTargets ?? input.archetypeProfile?.roleTendencies;
+
 export const derivePlayerRoleTendencies = (input: BuildRoleTendencyInput): PlayerRoleTendencies => {
   const leagueLevel = input.leagueLevel ?? LeagueLevel.MIDDLE_SCHOOL;
   const a = input.attributes;
@@ -135,6 +155,45 @@ export const derivePlayerRoleTendencies = (input: BuildRoleTendencyInput): Playe
   const reboundBase = (effective(a.offRebounding) * 0.43 + effective(a.defRebounding) * 0.47 + effective(a.strength) * 0.1) / 99;
   const reboundPosition = POSITION_REBOUND_MULTIPLIER[input.position];
   const ballSecurity = effective(a.handle) * 0.5 + effective(a.vision) * 0.28 + effective(a.passing) * 0.22;
+  const contractTargets = resolveContractTargets(input);
+  const baseline = {
+    touchWeight: clamp(score01(creation) * 0.78 + score01(passCreation) * 0.22, 0.05, 1),
+    passCreationWeight: clamp(score01(passCreation), 0.05, 1),
+    selfCreationWeight: clamp(score01(selfCreation), 0.05, 1),
+    offBallShotWeight: clamp(score01(shooting) * 0.88 + score01(a.stamina) * 0.12, 0.05, 1),
+    rimPressureWeight: clamp(score01(rim), 0.05, 1),
+    threeVolumeWeight: clamp(score01(shooting) + threeRelative, 0.03, 1),
+    midrangeVolumeWeight: clamp(score01(effective(a.midrange) * 0.72 + effective(a.shortRange) * 0.15 + effective(a.handle) * 0.13), 0.05, 1),
+    turnoverRiskWeight: clamp(1 - score01(ballSecurity) + (rim > 72 ? 0.06 : 0), 0.04, 0.96),
+    assistCreationWeight: clamp(score01(passCreation), 0.04, 1),
+    reboundWeight: clamp(reboundBase * reboundPosition * (0.72 + size * 0.55), 0.03, 1),
+    offensiveReboundWeight: clamp(score01(effective(a.offRebounding) * 0.74 + effective(a.strength) * 0.26) * reboundPosition * (0.68 + size * 0.5), 0.03, 1),
+    defensiveReboundWeight: clamp(score01(effective(a.defRebounding) * 0.78 + effective(a.strength) * 0.22) * reboundPosition * (0.72 + size * 0.58), 0.03, 1),
+    stealEventWeight: clamp(score01(effective(a.stealing) * 0.5 + effective(a.perimeterDefense) * 0.28 + effective(a.speed) * 0.22), 0.03, 1),
+    blockEventWeight: clamp(score01(effective(a.blocking) * 0.55 + effective(a.interiorDefense) * 0.28 + effective(a.strength) * 0.17) * POSITION_BLOCK_MULTIPLIER[input.position] * (0.68 + size * 0.46), 0.01, 1),
+    contestWeight: clamp(score01(defense), 0.05, 1),
+    fatigueLoadWeight: clamp(score01(creation) * 0.18 + score01(rim) * 0.14 + (1 - score01(effective(a.stamina))) * 0.58 + score01(selfCreation) * 0.1, 0.05, 1),
+  };
+
+  const blended = {
+    touchWeight: blendTendency(baseline.touchWeight, contractTargets?.touchWeight, 0.34),
+    passCreationWeight: blendTendency(baseline.passCreationWeight, contractTargets?.passCreationWeight, 0.34),
+    selfCreationWeight: blendTendency(baseline.selfCreationWeight, contractTargets?.shotCreationWeight, 0.34),
+    offBallShotWeight: blendTendency(baseline.offBallShotWeight, contractTargets?.offBallShotWeight, 0.34),
+    rimPressureWeight: blendTendency(baseline.rimPressureWeight, contractTargets?.rimPressureWeight, 0.36),
+    threeVolumeWeight: blendTendency(baseline.threeVolumeWeight, contractTargets?.threeVolumeWeight, 0.36),
+    midrangeVolumeWeight: blendTendency(baseline.midrangeVolumeWeight, contractTargets?.midrangeWeight, 0.34),
+    turnoverRiskWeight: baseline.turnoverRiskWeight,
+    assistCreationWeight: blendTendency(baseline.assistCreationWeight, contractTargets?.passCreationWeight, 0.3),
+    reboundWeight: blendTendency(baseline.reboundWeight, contractTargets?.reboundWeight, 0.24),
+    offensiveReboundWeight: blendTendency(baseline.offensiveReboundWeight, contractTargets?.offensiveReboundWeight, 0.22),
+    defensiveReboundWeight: blendTendency(baseline.defensiveReboundWeight, contractTargets?.defensiveReboundWeight, 0.22),
+    stealEventWeight: blendTendency(baseline.stealEventWeight, contractTargets?.stealWeight, 0.24),
+    blockEventWeight: blendTendency(baseline.blockEventWeight, contractTargets?.blockWeight, 0.22),
+    contestWeight: blendTendency(baseline.contestWeight, contractTargets?.contestWeight, 0.24),
+    fatigueLoadWeight: blendTendency(baseline.fatigueLoadWeight, contractTargets?.fatigueLoadWeight, 0.24),
+  };
+
   const floorGeneral = hasBadge(input.badges, "floor_general");
   const needleThreader = hasBadge(input.badges, "needle_threader");
   const deepRange = hasBadge(input.badges, "deep_range");
@@ -146,27 +205,23 @@ export const derivePlayerRoleTendencies = (input: BuildRoleTendencyInput): Playe
   const anchor = hasBadge(input.badges, "anchor");
   const glass = hasBadge(input.badges, "glass_cleaner") || hasBadge(input.badges, "box_out_beast");
 
-  const archetype = input.archetypeProfile?.roleTendencies;
-  const blend = (attributeValue: number, archetypeValue: number | undefined, weight = 0.22): number =>
-    archetypeValue === undefined ? attributeValue : clamp(attributeValue * (1 - weight) + archetypeValue * weight, 0.01, 1);
-
   return {
-    touchWeight: blend(clamp(score01(creation) * 0.78 + score01(passCreation) * 0.22, 0.05, 1), archetype?.touchWeight),
-    passCreationWeight: blend(clamp(score01(passCreation) + (floorGeneral ? 0.08 : 0) + (needleThreader ? 0.06 : 0), 0.05, 1), archetype?.passCreationWeight),
-    selfCreationWeight: blend(clamp(score01(selfCreation), 0.05, 1), archetype?.shotCreationWeight),
-    offBallShotWeight: blend(clamp(score01(shooting) * 0.88 + score01(a.stamina) * 0.12 + (catchAndShoot ? 0.08 : 0), 0.05, 1), archetype?.offBallShotWeight),
-    rimPressureWeight: blend(clamp(score01(rim) + (quickFirstStep ? 0.07 : 0) + (rimPressure ? 0.05 : 0), 0.05, 1), archetype?.rimPressureWeight),
-    threeVolumeWeight: blend(clamp(score01(shooting) + threeRelative + (deepRange ? 0.08 : 0) + (catchAndShoot ? 0.05 : 0), 0.03, 1), archetype?.threeVolumeWeight),
-    midrangeVolumeWeight: blend(clamp(score01(effective(a.midrange) * 0.72 + effective(a.shortRange) * 0.15 + effective(a.handle) * 0.13), 0.05, 1), archetype?.midrangeWeight),
-    turnoverRiskWeight: clamp(1 - score01(ballSecurity) + (rim > 72 ? 0.06 : 0) - (floorGeneral ? 0.07 : 0) - (needleThreader ? 0.05 : 0), 0.04, 0.96),
-    assistCreationWeight: clamp(score01(passCreation) + (floorGeneral ? 0.09 : 0) + (needleThreader ? 0.08 : 0), 0.04, 1),
-    reboundWeight: blend(clamp(reboundBase * reboundPosition * (0.72 + size * 0.55) + (glass ? 0.08 : 0), 0.03, 1), archetype?.reboundWeight),
-    offensiveReboundWeight: blend(clamp(score01(effective(a.offRebounding) * 0.74 + effective(a.strength) * 0.26) * reboundPosition * (0.68 + size * 0.5), 0.03, 1), archetype?.offensiveReboundWeight),
-    defensiveReboundWeight: blend(clamp((score01(effective(a.defRebounding) * 0.78 + effective(a.strength) * 0.22) * reboundPosition * (0.72 + size * 0.58)) + (glass ? 0.08 : 0), 0.03, 1), archetype?.defensiveReboundWeight),
-    stealEventWeight: blend(clamp(score01(effective(a.stealing) * 0.5 + effective(a.perimeterDefense) * 0.28 + effective(a.speed) * 0.22) + (pointOfAttack ? 0.1 : 0) + (pickpocket ? 0.09 : 0), 0.03, 1), archetype?.stealWeight),
-    blockEventWeight: blend(clamp(score01(effective(a.blocking) * 0.55 + effective(a.interiorDefense) * 0.28 + effective(a.strength) * 0.17) * POSITION_BLOCK_MULTIPLIER[input.position] * (0.68 + size * 0.46) + (anchor ? 0.1 : 0), 0.01, 1), archetype?.blockWeight),
-    contestWeight: blend(clamp(score01(defense) + (pointOfAttack ? 0.05 : 0) + (anchor ? 0.06 : 0), 0.05, 1), archetype?.contestWeight),
-    fatigueLoadWeight: blend(clamp(score01(creation) * 0.18 + score01(rim) * 0.14 + (1 - score01(effective(a.stamina))) * 0.58 + score01(selfCreation) * 0.1, 0.05, 1), archetype?.fatigueLoadWeight),
+    touchWeight: clamp01(blended.touchWeight),
+    passCreationWeight: clamp01(blended.passCreationWeight + (floorGeneral ? 0.08 : 0) + (needleThreader ? 0.06 : 0)),
+    selfCreationWeight: clamp01(blended.selfCreationWeight),
+    offBallShotWeight: clamp01(blended.offBallShotWeight + (catchAndShoot ? 0.08 : 0)),
+    rimPressureWeight: clamp01(blended.rimPressureWeight + (quickFirstStep ? 0.07 : 0) + (rimPressure ? 0.05 : 0)),
+    threeVolumeWeight: clamp01(blended.threeVolumeWeight + (deepRange ? 0.08 : 0) + (catchAndShoot ? 0.05 : 0)),
+    midrangeVolumeWeight: clamp01(blended.midrangeVolumeWeight),
+    turnoverRiskWeight: clamp(blended.turnoverRiskWeight - (floorGeneral ? 0.07 : 0) - (needleThreader ? 0.05 : 0), 0.04, 0.96),
+    assistCreationWeight: clamp01(blended.assistCreationWeight + (floorGeneral ? 0.09 : 0) + (needleThreader ? 0.08 : 0)),
+    reboundWeight: clamp01(blended.reboundWeight + (glass ? 0.08 : 0)),
+    offensiveReboundWeight: clamp01(blended.offensiveReboundWeight),
+    defensiveReboundWeight: clamp01(blended.defensiveReboundWeight + (glass ? 0.08 : 0)),
+    stealEventWeight: clamp01(blended.stealEventWeight + (pointOfAttack ? 0.1 : 0) + (pickpocket ? 0.09 : 0)),
+    blockEventWeight: clamp01(blended.blockEventWeight + (anchor ? 0.1 : 0)),
+    contestWeight: clamp01(blended.contestWeight + (pointOfAttack ? 0.05 : 0) + (anchor ? 0.06 : 0)),
+    fatigueLoadWeight: clamp01(blended.fatigueLoadWeight),
   };
 };
 

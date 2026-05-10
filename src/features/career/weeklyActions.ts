@@ -6,6 +6,9 @@ export interface WeeklyActionDefinition {
   id: WeeklyActionDefinitionId;
   label: string;
   description: string;
+  tagline?: string;
+  resultTitle?: string;
+  resultDescription?: string;
   availableIn: LeagueLevel[];
   isNarrative?: boolean;
   narrativeFile?: string;
@@ -107,6 +110,24 @@ export const WEEKLY_ACTION_DEFINITIONS: Record<WeeklyActionDefinitionId, WeeklyA
       conditionDelta: isMiddleSchool(state.leagueLevel) ? 14 : 12,
     }),
   },
+  COURTFUEL: {
+    id: "COURTFUEL",
+    label: "CourtFuel",
+    tagline: "Fuel the run.",
+    description:
+      "A bright orange sports drink seen in every gym cooler from middle school tournaments to pro shootarounds. Reliable, sweet, and built for players trying to get one more run in.",
+    resultTitle: "CourtFuel — Tropical Surge",
+    resultDescription:
+      "A bright orange sports drink seen in every gym cooler from middle school tournaments to pro shootarounds. Reliable, sweet, and built for players trying to get one more run in.",
+    availableIn: [LeagueLevel.MIDDLE_SCHOOL, LeagueLevel.HIGH_SCHOOL, LeagueLevel.COLLEGE, LeagueLevel.PRO],
+    buildEntry: () => ({
+      id: "COURTFUEL",
+      label: "CourtFuel",
+      energyDelta: 18,
+      conditionDelta: 3,
+      moneyDelta: -25,
+    }),
+  },
   TEAM_BONDING: {
     id: "TEAM_BONDING",
     label: "Team Bonding",
@@ -174,7 +195,7 @@ export const getWeeklyActionDefinition = (id: WeeklyActionDefinitionId): WeeklyA
 export const getWeeklyActionIdsForLeagueLevel = (leagueLevel: LeagueLevel): WeeklyActionDefinitionId[] => {
   const ordered: WeeklyActionDefinitionId[] =
     leagueLevel === LeagueLevel.MIDDLE_SCHOOL
-      ? ["TRAIN_SHOOTING", "TRAIN_PLAYMAKING", "STUDY", "REST_RECOVERY", "TEAM_BONDING", "FILM_COACH_TRUST"]
+      ? ["TRAIN_SHOOTING", "TRAIN_PLAYMAKING", "STUDY", "REST_RECOVERY", "COURTFUEL", "TEAM_BONDING", "FILM_COACH_TRUST"]
       : [
           "TRAIN_SHOOTING",
           "TRAIN_FINISHING",
@@ -182,6 +203,7 @@ export const getWeeklyActionIdsForLeagueLevel = (leagueLevel: LeagueLevel): Week
           "TRAIN_DEFENSE",
           "STUDY",
           "REST_RECOVERY",
+          "COURTFUEL",
           "TEAM_BONDING",
           "SOCIAL_FANS",
           "FILM_COACH_TRUST",

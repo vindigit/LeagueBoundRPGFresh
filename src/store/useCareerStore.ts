@@ -49,6 +49,7 @@ import {
   type ExileStatus,
   type WeeklyActionDefinitionId,
   type WeeklyActionEntry,
+  type WeeklyActionResult,
   type WeeklyActionState,
 } from "../types/career";
 import type {
@@ -588,21 +589,30 @@ const shouldPromptForSchoolPathSelection = (
 const hasTakenWeeklyAction = (weeklyActionState: WeeklyActionState, actionId: WeeklyActionDefinitionId): boolean =>
   weeklyActionState.actionsTaken.some((action) => action.id === actionId);
 
+const canAffordWeeklyAction = (
+  state: Pick<CareerState, "player" | "leagueLevel">,
+  actionId: WeeklyActionDefinitionId,
+): boolean => {
+  const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel: state.leagueLevel });
+  return state.player.bankBalance + (entry.moneyDelta ?? 0) >= 0;
+};
+
 const canTakeWeeklyAction = (
-  weeklyActionState: WeeklyActionState,
+  state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel">,
   actionId: WeeklyActionDefinitionId,
 ): boolean =>
-  !weeklyActionState.postgamePending &&
-  !weeklyActionState.matchUnlocked &&
-  weeklyActionState.slotsRemaining > 0 &&
-  weeklyActionState.availableActionIds.includes(actionId) &&
-  !hasTakenWeeklyAction(weeklyActionState, actionId);
+  !state.weeklyActionState.postgamePending &&
+  !state.weeklyActionState.matchUnlocked &&
+  state.weeklyActionState.slotsRemaining > 0 &&
+  state.weeklyActionState.availableActionIds.includes(actionId) &&
+  !hasTakenWeeklyAction(state.weeklyActionState, actionId) &&
+  canAffordWeeklyAction(state, actionId);
 
 const canStartNarrative = (state: Pick<CareerState, "weeklyActionState">): boolean =>
   !state.weeklyActionState.postgamePending && state.weeklyActionState.pendingNarrativeActionId !== null;
 
-const canCompleteStudy = (state: Pick<CareerState, "weeklyActionState">): boolean =>
-  canTakeWeeklyAction(state.weeklyActionState, "STUDY");
+const canCompleteStudy = (state: Pick<CareerState, "weeklyActionState" | "player" | "leagueLevel">): boolean =>
+  canTakeWeeklyAction(state, "STUDY");
 
 const canUnlockMatch = (weeklyActionState: WeeklyActionState): boolean =>
   !weeklyActionState.postgamePending && weeklyActionState.slotsRemaining <= 0;
@@ -635,6 +645,25 @@ const resolveWeekAdvance = (input: {
     currentYear: input.currentYear,
     seasonNumber: input.seasonNumber,
     seasonSchedule: syncSeasonScheduleWeek(input.seasonSchedule, nextWeek),
+  };
+};
+
+const buildWeeklyActionResult = (entry: WeeklyActionEntry): WeeklyActionResult => {
+  const definition = getWeeklyActionDefinition(entry.id);
+  return {
+    actionId: entry.id,
+    actionLabel: entry.label,
+    title: definition.resultTitle ?? entry.label,
+    tagline: definition.tagline,
+    description: definition.resultDescription ?? definition.description,
+    energyDelta: entry.energyDelta,
+    conditionDelta: entry.conditionDelta,
+    coachTrustDelta: entry.coachTrustDelta,
+    fansDelta: entry.fansDelta,
+    teammatesDelta: entry.teammatesDelta,
+    gpaDelta: entry.gpaDelta,
+    moneyDelta: entry.moneyDelta,
+    scoutVisibilityDelta: entry.scoutVisibilityDelta,
   };
 };
 
@@ -711,7 +740,8 @@ const applyWeeklyActionToState = (state: CareerState, entry: WeeklyActionEntry):
   if ((entry.moneyDelta ?? 0) !== 0) {
     const transaction = buildFinanceTransactionFromDelta(entry.moneyDelta!, {
       category: entry.id === "FILM_COACH_TRUST" ? "film_stipend" : "misc",
-      description: entry.id === "FILM_COACH_TRUST" ? "Film room stipend" : `${entry.label} payout`,
+      description:
+        entry.id === "FILM_COACH_TRUST" ? "Film room stipend" : entry.id === "COURTFUEL" ? "CourtFuel purchase" : `${entry.label} payout`,
       source: entry.id === "FILM_COACH_TRUST" ? "narrative" : "weekly_action",
     });
     if (transaction) {
@@ -728,6 +758,7 @@ const applyWeeklyActionToState = (state: CareerState, entry: WeeklyActionEntry):
   const matchUnlocked = canUnlockMatch(nextState.weeklyActionState);
   return {
     ...nextState,
+    lastWeeklyActionResult: buildWeeklyActionResult(entry),
     weeklyActionState: {
       ...nextState.weeklyActionState,
       matchUnlocked,
@@ -836,6 +867,7 @@ const initialCareerState: CareerState = {
   view: getInitialCareerView(),
   currentNarrativeFile: "",
   lastMatchResult: null,
+  lastWeeklyActionResult: null,
   newsFeed: [],
   weeklyActionState: createDefaultWeeklyActionState(LeagueLevel.MIDDLE_SCHOOL),
   ovrBudget: 60,
@@ -1365,11 +1397,15 @@ export const useCareerStore = create<CareerStore>()(
       startWeek: () => {
         set((state) => ({
           weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
+          lastWeeklyActionResult: null,
         }));
+      },
+      dismissWeeklyActionResult: () => {
+        set(() => ({ lastWeeklyActionResult: null }));
       },
       takeWeeklyAction: (actionId) => {
         set((state) => {
-          if (!canTakeWeeklyAction(state.weeklyActionState, actionId)) {
+          if (!canTakeWeeklyAction(state, actionId)) {
             return state;
           }
 
@@ -1452,6 +1488,7 @@ export const useCareerStore = create<CareerStore>()(
           return {
             view: "MATCH",
             lastMatchResult: null,
+            lastWeeklyActionResult: null,
           };
         });
       },
@@ -1459,6 +1496,7 @@ export const useCareerStore = create<CareerStore>()(
         set(() => ({
           view: "HUB",
           lastMatchResult: null,
+          lastWeeklyActionResult: null,
         }));
       },
       applyMatchConsequences: (consequences) => {
@@ -1539,6 +1577,7 @@ export const useCareerStore = create<CareerStore>()(
               view: shouldPromptForSchoolPathSelection(state) ? "SCHOOL_PATH_SELECT" : "HUB",
               ...nextHealthState,
               weeklyActionState: createDefaultWeeklyActionState(state.leagueLevel),
+              lastWeeklyActionResult: null,
             };
           }
 
@@ -1611,6 +1650,7 @@ export const useCareerStore = create<CareerStore>()(
             financeState: financeUpdate?.financeState ?? state.financeState,
             financeLedger: financeUpdate?.financeLedger ?? state.financeLedger,
             lastMatchResult: null,
+            lastWeeklyActionResult: null,
             newsFeed,
             scoutVisibility: nextScoutVisibility,
             coachTrust: nextMeterState.coachTrust,
@@ -1628,15 +1668,15 @@ export const useCareerStore = create<CareerStore>()(
         });
       },
       hydrateCareer: (state) => {
-        set(() => ({ ...state }));
+        set(() => ({ ...state, lastWeeklyActionResult: null }));
       },
       resetCareer: (state) => {
-        set(() => ({ ...state }));
+        set(() => ({ ...state, lastWeeklyActionResult: null }));
       },
     }),
     {
       name: "leaguebound-career-storage",
-      version: 15,
+      version: 16,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -1785,6 +1825,7 @@ export const useCareerStore = create<CareerStore>()(
           exileState: existingExileState,
           exile: typedState.exile ?? deriveLegacyExile(existingExileState),
           lastMatchResult: normalizeLastMatchResult(typedState.lastMatchResult),
+          lastWeeklyActionResult: null,
         };
       },
       partialize: (state) => ({

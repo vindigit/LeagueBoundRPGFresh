@@ -1,4 +1,4 @@
-import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { Modal, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import { formatSchoolPathLabel, getSchoolPathProfile } from "../constants/schoolPaths";
 import { NarrativeOverlay } from "../components/NarrativeOverlay";
 import { PlayerCard } from "../components/PlayerCard";
@@ -9,7 +9,7 @@ import { getWeeklyActionDefinition } from "../features/career/weeklyActions";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
 import { useCareerStore } from "../store/useCareerStore";
-import { LeagueLevel, type WeeklyActionDefinitionId } from "../types/career";
+import { LeagueLevel, type WeeklyActionDefinitionId, type WeeklyActionResult } from "../types/career";
 import type { FinanceLedgerEntry, ProjectedRole } from "../types/careerProgression";
 
 const formatLeagueLevel = (value: string): string =>
@@ -56,8 +56,8 @@ const getInterestStrengthLabel = (interestLevel: number): string => {
   return "Warm";
 };
 
-const formatActionPreview = (actionId: WeeklyActionDefinitionId): string => {
-  const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel: LeagueLevel.HIGH_SCHOOL });
+const formatActionPreview = (actionId: WeeklyActionDefinitionId, leagueLevel: LeagueLevel): string => {
+  const entry = getWeeklyActionDefinition(actionId).buildEntry({ leagueLevel });
   const parts = [
     entry.energyDelta !== 0 ? `Energy ${entry.energyDelta > 0 ? "+" : ""}${entry.energyDelta}` : null,
     entry.conditionDelta !== 0 ? `Condition ${entry.conditionDelta > 0 ? "+" : ""}${entry.conditionDelta}` : null,
@@ -65,10 +65,23 @@ const formatActionPreview = (actionId: WeeklyActionDefinitionId): string => {
     entry.coachTrustDelta ? `Trust +${entry.coachTrustDelta}` : null,
     entry.fansDelta ? `Fans +${entry.fansDelta}` : null,
     entry.teammatesDelta ? `Team +${entry.teammatesDelta}` : null,
+    entry.moneyDelta ? `$${Math.abs(entry.moneyDelta)}` : null,
   ].filter(Boolean);
 
   return parts.join(" | ");
 };
+
+const formatWeeklyActionResultLines = (result: WeeklyActionResult): string[] =>
+  [
+    result.energyDelta !== 0 ? `Energy ${result.energyDelta > 0 ? "+" : ""}${result.energyDelta}` : null,
+    result.conditionDelta !== 0 ? `Condition ${result.conditionDelta > 0 ? "+" : ""}${result.conditionDelta}` : null,
+    result.gpaDelta ? `GPA +${result.gpaDelta.toFixed(1)}` : null,
+    result.coachTrustDelta ? `Coach Trust +${result.coachTrustDelta}` : null,
+    result.fansDelta ? `Fans +${result.fansDelta}` : null,
+    result.teammatesDelta ? `Teammates +${result.teammatesDelta}` : null,
+    result.scoutVisibilityDelta ? `Exposure +${result.scoutVisibilityDelta}` : null,
+    result.moneyDelta ? `Cost $${Math.abs(result.moneyDelta)}` : null,
+  ].filter((value): value is string => Boolean(value));
 
 export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
@@ -91,7 +104,9 @@ export function HomeScreen() {
   const offers = useCareerStore((state) => state.offers);
   const newsFeed = useCareerStore((state) => state.newsFeed);
   const weeklyActionState = useCareerStore((state) => state.weeklyActionState);
+  const lastWeeklyActionResult = useCareerStore((state) => state.lastWeeklyActionResult);
   const takeWeeklyAction = useCareerStore((state) => state.takeWeeklyAction);
+  const dismissWeeklyActionResult = useCareerStore((state) => state.dismissWeeklyActionResult);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
   const respondToOffer = useCareerStore((state) => state.respondToOffer);
   const showSchoolPathStatus = leagueLevel !== LeagueLevel.MIDDLE_SCHOOL;
@@ -376,11 +391,14 @@ export function HomeScreen() {
               {visibleActionIds.map((actionId) => {
                 const definition = getWeeklyActionDefinition(actionId);
                 const isTaken = weeklyActionState.actionsTaken.some((action) => action.id === actionId);
+                const entry = definition.buildEntry({ leagueLevel });
+                const needsMoney = (entry.moneyDelta ?? 0) < 0 && bankBalance < Math.abs(entry.moneyDelta ?? 0);
                 const disabled =
                   isTaken ||
                   weeklyActionState.postgamePending ||
                   weeklyActionState.matchUnlocked ||
-                  weeklyActionState.slotsRemaining <= 0;
+                  weeklyActionState.slotsRemaining <= 0 ||
+                  needsMoney;
 
                 return (
                   <Pressable
@@ -402,7 +420,8 @@ export function HomeScreen() {
                       ) : null}
                     </View>
                     <Text className="mt-1 text-sm text-premium-muted">{definition.description}</Text>
-                    <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId)}</Text>
+                    <Text className="mt-2 text-xs text-premium-muted">{formatActionPreview(actionId, leagueLevel)}</Text>
+                    {needsMoney ? <Text className="mt-2 text-xs font-semibold text-amber-300">Need $25</Text> : null}
                   </Pressable>
                 );
               })}
@@ -432,6 +451,38 @@ export function HomeScreen() {
       {view === "BACKSTORY" ? <BackstoryScreen /> : null}
 
       {view === "SCHOOL_PATH_SELECT" ? <SchoolPathSelectionScreen /> : null}
+
+      {view === "HUB" && lastWeeklyActionResult ? (
+        <Modal transparent visible animationType="fade" statusBarTranslucent>
+          <View className="flex-1 items-center justify-center bg-black/70 px-6">
+            <View className="w-full max-w-md rounded-3xl border border-premium-surfaceAlt bg-premium-surface p-6">
+              <Text className="text-xs font-semibold uppercase tracking-[0.24em] text-premium-accent">
+                {lastWeeklyActionResult.actionLabel}
+              </Text>
+              <Text className="mt-3 text-2xl font-bold text-white">{lastWeeklyActionResult.title}</Text>
+              {lastWeeklyActionResult.tagline ? (
+                <Text className="mt-2 text-sm font-semibold text-premium-accent">{lastWeeklyActionResult.tagline}</Text>
+              ) : null}
+              {lastWeeklyActionResult.description ? (
+                <Text className="mt-3 text-sm leading-6 text-premium-muted">{lastWeeklyActionResult.description}</Text>
+              ) : null}
+              <View className="mt-5 gap-2 rounded-2xl bg-premium-bg p-4">
+                {formatWeeklyActionResultLines(lastWeeklyActionResult).map((line) => (
+                  <Text key={line} className="text-sm font-medium text-white">
+                    {line}
+                  </Text>
+                ))}
+              </View>
+              <Pressable
+                className="mt-5 items-center rounded-xl bg-sky-600 px-4 py-3"
+                onPress={dismissWeeklyActionResult}
+              >
+                <Text className="text-base font-semibold text-white">Continue</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }

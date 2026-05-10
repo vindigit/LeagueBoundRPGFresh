@@ -2,6 +2,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 
+import { act } from "@testing-library/react-native";
 import { useCareerStore } from "../src/store/useCareerStore";
 import type { MatchBoxScore } from "../src/features/match/store/useMatchStore";
 
@@ -172,5 +173,66 @@ describe("Career vertical slice weekly loop", () => {
       });
       expect((resolved.financeLedger.at(-1)?.amount ?? 0)).toBeGreaterThan(0);
     }
+  });
+
+  it("applies CourtFuel as a paid weekly action and exposes a dismissible result popup state", () => {
+    act(() => {
+      useCareerStore.setState((state) => ({
+        player: {
+          ...state.player,
+          bankBalance: 40,
+        },
+        energy: 70,
+        condition: 80,
+      }));
+    });
+
+    useCareerStore.getState().takeWeeklyAction("COURTFUEL");
+
+    const afterDrink = useCareerStore.getState();
+    expect(afterDrink.energy).toBe(88);
+    expect(afterDrink.condition).toBe(83);
+    expect(afterDrink.player.bankBalance).toBe(15);
+    expect(afterDrink.weeklyActionState.actionsTaken.at(-1)).toMatchObject({ id: "COURTFUEL" });
+    expect(afterDrink.lastWeeklyActionResult).toMatchObject({
+      actionId: "COURTFUEL",
+      title: "CourtFuel — Tropical Surge",
+      tagline: "Fuel the run.",
+      moneyDelta: -25,
+      energyDelta: 18,
+      conditionDelta: 3,
+    });
+    expect(afterDrink.financeLedger.at(-1)).toMatchObject({
+      type: "expense",
+      category: "misc",
+      description: "CourtFuel purchase",
+      source: "weekly_action",
+    });
+
+    useCareerStore.getState().dismissWeeklyActionResult();
+    expect(useCareerStore.getState().lastWeeklyActionResult).toBeNull();
+  });
+
+  it("does not allow CourtFuel when the player cannot afford it", () => {
+    act(() => {
+      useCareerStore.setState((state) => ({
+        player: {
+          ...state.player,
+          bankBalance: 10,
+        },
+        energy: 70,
+        condition: 80,
+      }));
+    });
+
+    useCareerStore.getState().takeWeeklyAction("COURTFUEL");
+
+    const blocked = useCareerStore.getState();
+    expect(blocked.energy).toBe(70);
+    expect(blocked.condition).toBe(80);
+    expect(blocked.player.bankBalance).toBe(10);
+    expect(blocked.weeklyActionState.actionsTaken).toHaveLength(0);
+    expect(blocked.financeLedger).toHaveLength(0);
+    expect(blocked.lastWeeklyActionResult).toBeNull();
   });
 });

@@ -65,6 +65,7 @@ export type WeeklyActionDefinitionId =
   | "TRAIN_DEFENSE"
   | "STUDY"
   | "REST_RECOVERY"
+  | "COURTFUEL"
   | "TEAM_BONDING"
   | "SOCIAL_FANS"
   | "FILM_COACH_TRUST"
@@ -82,6 +83,22 @@ export interface WeeklyActionEntry {
   moneyDelta?: number;
   scoutVisibilityDelta?: number;
   narrativeFile?: string;
+}
+
+export interface WeeklyActionResult {
+  actionId: WeeklyActionDefinitionId;
+  actionLabel: string;
+  title: string;
+  tagline?: string;
+  description?: string;
+  energyDelta: number;
+  conditionDelta: number;
+  coachTrustDelta?: number;
+  fansDelta?: number;
+  teammatesDelta?: number;
+  gpaDelta?: number;
+  moneyDelta?: number;
+  scoutVisibilityDelta?: number;
 }
 
 export interface WeeklyActionState {
@@ -132,6 +149,7 @@ export interface CareerState {
   view: CareerView;
   currentNarrativeFile: string;
   lastMatchResult: LastMatchResult | null;
+  lastWeeklyActionResult: WeeklyActionResult | null;
   newsFeed: CareerNewsItem[];
   weeklyActionState: WeeklyActionState;
   ovrBudget: number;
@@ -159,6 +177,7 @@ export interface CareerActions {
   setCurrentYear(year: number): void;
   startWeek(): void;
   takeWeeklyAction(actionId: WeeklyActionDefinitionId): void;
+  dismissWeeklyActionResult(): void;
   unlockMatchIfReady(): void;
   startNarrative(fileName: string): void;
   completeStudyActivity(): void;

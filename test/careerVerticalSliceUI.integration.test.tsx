@@ -78,6 +78,7 @@ describe("Career vertical slice UI", () => {
       view: "BACKSTORY",
       newsFeed: [],
       lastMatchResult: null,
+      lastWeeklyActionResult: null,
       weeklyActionState: {
         ...state.weeklyActionState,
         slotsTotal: 2,
@@ -122,7 +123,12 @@ describe("Career vertical slice UI", () => {
     fireEvent.press(screen.getByText("Film / Coach Trust"));
     expect(useCareerStore.getState().view).toBe("NARRATIVE");
     fireEvent.press(screen.getByText(/Study Film/));
+    expect(screen.getByText("Coach Trust +6")).toBeTruthy();
+    expect(screen.getByText("Continue")).toBeTruthy();
+    fireEvent.press(screen.getByText("Continue"));
     fireEvent.press(screen.getByText("Study"));
+    expect(screen.getByText("GPA +0.1")).toBeTruthy();
+    fireEvent.press(screen.getByText("Continue"));
 
     expect(useCareerStore.getState().view).toBe("HUB");
     expect(useCareerStore.getState().weeklyActionState.matchUnlocked).toBe(true);
@@ -176,6 +182,61 @@ describe("Career vertical slice UI", () => {
     expect(screen.queryAllByText("Accept").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Decline").length).toBeGreaterThan(0);
     expect(screen.getByText("3 of 3 weekly actions remaining.")).toBeTruthy();
+  });
+
+  it("shows CourtFuel, blocks it without cash, and applies it with a popup when affordable", () => {
+    const screen = render(<HomeScreen />);
+
+    act(() => {
+      useCareerStore.getState().initializeCareer({
+        firstName: "Fuel",
+        lastName: "Tester",
+        stateCode: "TX",
+        citySlug: "houston-tx",
+        archetype: "Playmaker",
+        ageStarted: 8,
+        bodyFrame: "Athletic",
+        dominantHand: "Right",
+        primaryPosition: "PG",
+        secondaryPosition: "SG",
+        height: { feet: 6, inches: 2 },
+        weightLbs: 185,
+        generationSeed: 20260429,
+      });
+    });
+
+    expect(screen.getByText("CourtFuel")).toBeTruthy();
+    expect(screen.getByText("Need $25")).toBeTruthy();
+    fireEvent.press(screen.getByText("CourtFuel"));
+    expect(useCareerStore.getState().weeklyActionState.actionsTaken).toHaveLength(0);
+
+    act(() => {
+      useCareerStore.setState((state) => ({
+        player: {
+          ...state.player,
+          bankBalance: 40,
+        },
+      }));
+    });
+
+    fireEvent.press(screen.getByText("CourtFuel"));
+
+    expect(screen.getByText("CourtFuel — Tropical Surge")).toBeTruthy();
+    expect(screen.getByText("Fuel the run.")).toBeTruthy();
+    expect(screen.getByText("Cost $25")).toBeTruthy();
+    expect(useCareerStore.getState().player.bankBalance).toBe(15);
+    expect(useCareerStore.getState().energy).toBe(100);
+    expect(useCareerStore.getState().condition).toBe(100);
+    expect(useCareerStore.getState().financeLedger.at(-1)).toMatchObject({
+      type: "expense",
+      category: "misc",
+      description: "CourtFuel purchase",
+      source: "weekly_action",
+    });
+
+    fireEvent.press(screen.getByText("Continue"));
+    expect(screen.queryByText("CourtFuel — Tropical Surge")).toBeNull();
+    expect(useCareerStore.getState().lastWeeklyActionResult).toBeNull();
   });
 
   it("lets the player accept an offer from the hub inbox", () => {

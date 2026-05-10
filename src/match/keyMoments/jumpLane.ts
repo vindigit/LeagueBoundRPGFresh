@@ -1,3 +1,4 @@
+import { buildChallengePending, createReactionLaneChallenge } from "./actionChallenges";
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, resolveEffectiveQuality } from "./shared";
 import { buildContextualJumpLaneOptions } from "./contextualOptions";
@@ -10,7 +11,7 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
     return undefined;
   }
   const player = getUserPlayer(args.matchContext, { context: args.context });
-  return {
+  return buildChallengePending({
     id: args.id,
     type: "jump_lane",
     context: args.context,
@@ -25,12 +26,11 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
       },
       ...buildContextualJumpLaneOptions(args),
     ],
-    minigame: {
-      type: "steal_reaction",
-      durationMs: 1100,
-      targetCenter: 0.58,
-      targetRadius: 0.09,
-    },
+    challenge: createReactionLaneChallenge({
+      id: `${args.id}-challenge`,
+      promptText: PROMPT,
+      context: "steal_lane",
+    }),
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,
@@ -44,7 +44,7 @@ export const buildJumpLanePending = (args: KeyMomentBuildArgs): KeyMomentPending
       riskBias: 0.01,
     }),
     seedValue: args.seedValue,
-  };
+  });
 };
 
 export const resolveJumpLane = (args: {

@@ -144,6 +144,35 @@ const pendingMinigame: KeyMomentPending = {
   options: [
     { id: "timing_release_jump_shot", label: "Timing Release Jumper", description: "Create space and shoot.", qualityDelta: 0 },
   ],
+  challenge: {
+    id: "screen-pending-minigame-challenge-1",
+    kind: "timing",
+    context: "pullup",
+    title: "Timing Release",
+    subtitle: "Tap when the marker hits the window.",
+    buttonLabel: "Tap to Release",
+    execution: {
+      kind: "timing",
+      timing: {
+        durationMs: 1000,
+        targetCenter: 0.72,
+        targetRadius: 0.1,
+      },
+    },
+    scoring: {
+      successThreshold: 0.66,
+      nearMissThreshold: 0.3,
+      baselineFloor: 0.72,
+      outsideWindowPenalty: 0.5,
+      fallbackPenalty: 0.06,
+    },
+    forgiveness: {
+      windowRadiusBonus: 0,
+      nearMissSoftener: 0,
+      recoveryBonus: 0,
+      fatigueResistance: 0,
+    },
+  },
   minigame: {
     type: "timing_release",
     durationMs: 1000,
@@ -249,10 +278,10 @@ describe("MatchScreen key moment UI", () => {
     expect(resolveKeyMoment).toHaveBeenCalledTimes(1);
     expect(resolveKeyMoment).toHaveBeenCalledWith({
       pendingId: "screen-pending-minigame-1",
-      executionQuality: {
+      executionQuality: expect.objectContaining({
         normalizedScore: expect.any(Number),
         source: "minigame",
-      },
+      }),
     });
   });
 

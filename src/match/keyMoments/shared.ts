@@ -161,7 +161,8 @@ export const resolveEffectiveQuality = (pending: KeyMomentPending, input: KeyMom
   }
 
   if (input.usedFallbackBaseline) {
-    return clamp01((pending.simBaselineQuality ?? 0.55) - 0.06);
+    const fallbackPenalty = pending.challenge?.scoring.fallbackPenalty ?? 0.06;
+    return clamp01((pending.simBaselineQuality ?? 0.55) - fallbackPenalty);
   }
 
   return choiceQuality(pending, input);

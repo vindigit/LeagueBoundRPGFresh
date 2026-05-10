@@ -1,5 +1,6 @@
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { KeyMomentOverlay, scoreTimingRelease, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
+import { scoreTimingChallenge } from "../../../match/keyMoments/actionChallenges";
+import { KeyMomentOverlay, type KeyMomentContextSummary } from "../components/KeyMomentOverlay";
 import type { KeyMomentPending } from "../../../match/keyMoments/types";
 
 const contextSummary: KeyMomentContextSummary = {
@@ -44,6 +45,35 @@ const pendingPlaceholder: KeyMomentPending = {
   type: "create_shot",
   mode: "minigame",
   options: [{ id: "timing_release_jump_shot", label: "Timing Release Jumper", description: "Create space and fire.", qualityDelta: 0 }],
+  challenge: {
+    id: "challenge-pending-placeholder-1",
+    kind: "timing",
+    context: "pullup",
+    title: "Timing Release",
+    subtitle: "Tap when the marker hits the window.",
+    buttonLabel: "Tap to Release",
+    execution: {
+      kind: "timing",
+      timing: {
+        durationMs: 1000,
+        targetCenter: 0.72,
+        targetRadius: 0.1,
+      },
+    },
+    scoring: {
+      successThreshold: 0.66,
+      nearMissThreshold: 0.3,
+      baselineFloor: 0.72,
+      outsideWindowPenalty: 0.5,
+      fallbackPenalty: 0.06,
+    },
+    forgiveness: {
+      windowRadiusBonus: 0,
+      nearMissSoftener: 0,
+      recoveryBonus: 0,
+      fatigueResistance: 0,
+    },
+  },
   minigame: {
     type: "timing_release",
     durationMs: 1000,
@@ -115,10 +145,10 @@ describe("KeyMomentOverlay", () => {
     fireEvent.press(screen.getByTestId("timing-release-button"));
     expect(onResolve).toHaveBeenCalledWith({
       pendingId: "pending-placeholder-1",
-      executionQuality: {
+      executionQuality: expect.objectContaining({
         normalizedScore: expect.any(Number),
         source: "minigame",
-      },
+      }),
     });
     const normalizedScore = onResolve.mock.calls[0][0].executionQuality.normalizedScore as number;
     expect(normalizedScore).toBeGreaterThan(0.95);
@@ -135,8 +165,8 @@ describe("KeyMomentOverlay", () => {
   });
 
   it("scores near-center timing releases higher than early ones", () => {
-    const nearCenter = scoreTimingRelease(0.72, pendingPlaceholder.minigame!);
-    const early = scoreTimingRelease(0.18, pendingPlaceholder.minigame!);
+    const nearCenter = scoreTimingChallenge(0.72, pendingPlaceholder.challenge!).normalizedScore;
+    const early = scoreTimingChallenge(0.18, pendingPlaceholder.challenge!).normalizedScore;
 
     expect(nearCenter).toBeGreaterThan(early);
     expect(nearCenter).toBeGreaterThan(0.95);

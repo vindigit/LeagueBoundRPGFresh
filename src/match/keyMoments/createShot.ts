@@ -1,18 +1,24 @@
+import { buildChallengePending, createTimingShotChallenge } from "./actionChallenges";
 import type { KeyMomentBuildArgs, KeyMomentPending, KeyMomentResolutionInput, KeyMomentResolutionOutput } from "./types";
 import { buildBaselineQuality, buildResolution, getResolvedChoiceId, getUserPlayer, makeOption, resolveEffectiveQuality } from "./shared";
 
 const PROMPT = "Create separation and rise up.";
 const CREATE_SHOT_OPTION_ID = "timing_release_jump_shot";
-const TIMING_RELEASE_DURATION_MS = 1400;
-const TIMING_RELEASE_TARGET_CENTER = 0.72;
-const TIMING_RELEASE_TARGET_RADIUS = 0.1;
 
 export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPending | undefined => {
   if (args.context.offense !== args.context.userTeam) {
     return undefined;
   }
   const player = getUserPlayer(args.matchContext, { context: args.context });
-  return {
+  const challenge = createTimingShotChallenge({
+    id: `${args.id}-challenge`,
+    promptText: PROMPT,
+    context: "pullup",
+    player,
+    keyMomentContext: args.context,
+    variant: "pullup",
+  });
+  return buildChallengePending({
     id: args.id,
     type: "create_shot",
     context: args.context,
@@ -26,12 +32,7 @@ export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPendi
         0,
       ),
     ],
-    minigame: {
-      type: "timing_release",
-      durationMs: TIMING_RELEASE_DURATION_MS,
-      targetCenter: TIMING_RELEASE_TARGET_CENTER,
-      targetRadius: TIMING_RELEASE_TARGET_RADIUS,
-    },
+    challenge,
     simBaselineQuality: buildBaselineQuality({
       player,
       possessionState: args.possessionState,
@@ -45,7 +46,7 @@ export const buildCreateShotPending = (args: KeyMomentBuildArgs): KeyMomentPendi
       riskBias: 0.03,
     }),
     seedValue: args.seedValue,
-  };
+  });
 };
 
 export const resolveCreateShot = (args: {

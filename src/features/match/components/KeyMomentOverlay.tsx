@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import type { KeyMomentPending, KeyMomentResolutionInput, MinigameSpec } from "../../../match/keyMoments/types";
+import type { KeyMomentPending, KeyMomentResolutionInput } from "../../../match/keyMoments/types";
+import { ActionChallengeRenderer } from "./ActionChallengeRenderer";
 
 export interface KeyMomentContextSummary {
   score: string;
@@ -22,28 +23,28 @@ interface KeyMomentOverlayProps {
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 const MINIGAME_TICK_MS = 16;
 
-export const scoreTimingRelease = (progress: number, minigame: MinigameSpec): number => {
+const scoreLegacyMinigame = (progress: number, pending: KeyMomentPending): number => {
+  const minigame = pending.minigame;
+  if (!minigame) {
+    return 0;
+  }
+
   const safeProgress = clamp01(progress);
   const distance = Math.abs(safeProgress - minigame.targetCenter);
   const normalizedDistance = distance / Math.max(minigame.targetRadius, 0.001);
+
+  if (minigame.type === "steal_reaction") {
+    if (normalizedDistance <= 1) {
+      return clamp01(0.65 + (1 - normalizedDistance) * 0.35);
+    }
+    return clamp01(0.65 - (normalizedDistance - 1) * 0.7);
+  }
 
   if (normalizedDistance <= 1) {
     return clamp01(0.72 + (1 - normalizedDistance) * 0.27);
   }
 
   return clamp01(0.72 - (normalizedDistance - 1) * 0.5);
-};
-
-export const scoreStealReaction = (progress: number, minigame: MinigameSpec): number => {
-  const safeProgress = clamp01(progress);
-  const distance = Math.abs(safeProgress - minigame.targetCenter);
-  const normalizedDistance = distance / Math.max(minigame.targetRadius, 0.001);
-
-  if (normalizedDistance <= 1) {
-    return clamp01(0.65 + (1 - normalizedDistance) * 0.35);
-  }
-
-  return clamp01(0.65 - (normalizedDistance - 1) * 0.7);
 };
 
 const ContextChip = ({ label, value }: { label: string; value: string }) => (
@@ -67,13 +68,20 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
   }, [pending?.id]);
 
   useEffect(() => {
-    if (!pending?.minigame || submitting || resolvedRef.current) {
+    const durationMs =
+      pending?.challenge?.execution.kind === "timing"
+        ? pending.challenge.execution.timing.durationMs
+        : pending?.challenge?.execution.kind === "reaction"
+          ? pending.challenge.execution.reaction.durationMs
+          : pending?.minigame?.durationMs;
+
+    if (!durationMs || submitting || resolvedRef.current) {
       return;
     }
 
     const updateProgress = () => {
       const elapsed = Date.now() - startedAtRef.current;
-      const duration = Math.max(pending.minigame?.durationMs ?? 1, 1);
+      const duration = Math.max(durationMs, 1);
       setTimingProgress(clamp01(elapsed / duration));
     };
 
@@ -83,44 +91,68 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
     return () => {
       clearInterval(intervalId);
     };
-  }, [pending?.id, pending?.minigame, submitting]);
+  }, [pending?.id, pending?.minigame, pending?.challenge, submitting]);
 
   if (!feedback && !pending) {
     return null;
   }
 
   const getLiveTimingProgress = (): number => {
-    if (!pending?.minigame) {
+    const durationMs =
+      pending?.challenge?.execution.kind === "timing"
+        ? pending.challenge.execution.timing.durationMs
+        : pending?.challenge?.execution.kind === "reaction"
+          ? pending.challenge.execution.reaction.durationMs
+          : pending?.minigame?.durationMs;
+
+    if (!durationMs) {
       return timingProgress;
     }
 
-    const duration = Math.max(pending.minigame.durationMs, 1);
+    const duration = Math.max(durationMs, 1);
     return clamp01((Date.now() - startedAtRef.current) / duration);
   };
 
-  const submitMinigame = () => {
-    if (submitting || resolvedRef.current || !pending?.minigame) {
+  const lockResolution = () => {
+    if (submitting || resolvedRef.current) {
       return;
     }
-
-    const liveProgress = getLiveTimingProgress();
     resolvedRef.current = true;
     setSubmitting(true);
-    setTimingProgress(liveProgress);
-    const normalizedScore =
-      pending.minigame.type === "steal_reaction"
-        ? scoreStealReaction(liveProgress, pending.minigame)
-        : scoreTimingRelease(liveProgress, pending.minigame);
-    onResolve({
-      pendingId: pending.id,
-      executionQuality: {
-        normalizedScore,
-        source: "minigame",
-      },
-    });
   };
 
   const renderMinigame = () => {
+    if (pending?.challenge) {
+      return (
+        <View>
+          <ActionChallengeRenderer
+            pending={pending}
+            challenge={pending.challenge}
+            progress={getLiveTimingProgress()}
+            submitting={submitting}
+            onResolve={onResolve}
+            onLock={lockResolution}
+          />
+          <Pressable
+            disabled={submitting}
+            className={`mt-4 items-center justify-center rounded-xl py-3 ${submitting ? "bg-slate-700" : "bg-amber-400"}`}
+            onPress={() => {
+              if (submitting || resolvedRef.current || !pending) {
+                return;
+              }
+              resolvedRef.current = true;
+              setSubmitting(true);
+              onResolve({ pendingId: pending.id, usedFallbackBaseline: true });
+            }}
+          >
+            <Text className={`text-sm font-semibold ${submitting ? "text-slate-300" : "text-black"}`}>
+              {submitting ? "Locked" : "Sim It"}
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
+
     if (!pending?.minigame) {
       return null;
     }
@@ -163,7 +195,22 @@ export const KeyMomentOverlay = ({ pending, feedback, contextSummary, onResolve 
           className={`mt-4 items-center justify-center rounded-xl border py-3 ${
             submitting ? "border-slate-700 bg-slate-800" : "border-emerald-400/40 bg-emerald-400/10"
           }`}
-          onPress={submitMinigame}
+          onPress={() => {
+            if (submitting || resolvedRef.current || !pending?.minigame) {
+              return;
+            }
+            const liveProgress = getLiveTimingProgress();
+            resolvedRef.current = true;
+            setSubmitting(true);
+            setTimingProgress(liveProgress);
+            onResolve({
+              pendingId: pending.id,
+              executionQuality: {
+                normalizedScore: scoreLegacyMinigame(liveProgress, pending),
+                source: "minigame",
+              },
+            });
+          }}
         >
           <Text className={`text-sm font-semibold ${submitting ? "text-slate-300" : "text-emerald-200"}`}>
             {submitting ? "Locked" : buttonLabel}

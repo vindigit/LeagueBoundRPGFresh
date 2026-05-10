@@ -1,4 +1,5 @@
 import { buildCreateShotPending } from "../../../match/keyMoments/createShot";
+import { scoreTimingChallenge } from "../../../match/keyMoments/actionChallenges";
 import type { KeyMomentBuildArgs } from "../../../match/keyMoments/types";
 import type { MatchContext, MatchFocus, MatchWorkRate, PossessionState } from "../../../matchEngine";
 import type { Player, PlayerAttributes } from "../../../types/player";
@@ -135,5 +136,69 @@ describe("Key moment baseline quality", () => {
     const highWorkRateDrop = highWorkRateFresh!.simBaselineQuality - highWorkRateTired!.simBaselineQuality;
 
     expect(highWorkRateDrop).toBeGreaterThan(lowWorkRateDrop);
+  });
+
+  it("widens the shooting timing window for better shooters without replacing execution", () => {
+    const weakShooterPending = buildCreateShotPending({
+      ...buildArgs("normal", "offense", 0.15, 1),
+      id: "weak-shooter",
+      matchContext: {
+        ...matchContext,
+        home: {
+          ...matchContext.home,
+          roster: [makePlayer("h1", makeAttributes({ threePoint: 58, midrange: 60 })), makePlayer("h2"), makePlayer("h3"), makePlayer("h4"), makePlayer("h5")] as const,
+        },
+      },
+    });
+    const eliteShooterPending = buildCreateShotPending({
+      ...buildArgs("normal", "offense", 0.15, 1),
+      id: "elite-shooter",
+      matchContext: {
+        ...matchContext,
+        home: {
+          ...matchContext.home,
+          roster: [makePlayer("h1", makeAttributes({ threePoint: 95, midrange: 92 })), makePlayer("h2"), makePlayer("h3"), makePlayer("h4"), makePlayer("h5")] as const,
+        },
+      },
+    });
+
+    expect(weakShooterPending?.challenge?.execution.kind).toBe("timing");
+    expect(eliteShooterPending?.challenge?.execution.kind).toBe("timing");
+
+    const weakScore = scoreTimingChallenge(0.9, weakShooterPending!.challenge!).normalizedScore;
+    const eliteScore = scoreTimingChallenge(0.9, eliteShooterPending!.challenge!).normalizedScore;
+
+    expect(eliteScore).toBeGreaterThan(weakScore);
+    expect(eliteScore).toBeLessThan(1);
+  });
+
+  it("lets stamina protect late-game timing windows under fatigue", () => {
+    const lowStaminaPending = buildCreateShotPending({
+      ...buildArgs("high", "offense", 0.75, 8),
+      id: "low-stamina",
+      matchContext: {
+        ...matchContext,
+        home: {
+          ...matchContext.home,
+          roster: [makePlayer("h1", makeAttributes({ stamina: 52 })), makePlayer("h2"), makePlayer("h3"), makePlayer("h4"), makePlayer("h5")] as const,
+        },
+      },
+    });
+    const highStaminaPending = buildCreateShotPending({
+      ...buildArgs("high", "offense", 0.75, 8),
+      id: "high-stamina",
+      matchContext: {
+        ...matchContext,
+        home: {
+          ...matchContext.home,
+          roster: [makePlayer("h1", makeAttributes({ stamina: 96 })), makePlayer("h2"), makePlayer("h3"), makePlayer("h4"), makePlayer("h5")] as const,
+        },
+      },
+    });
+
+    const lowScore = scoreTimingChallenge(0.81, lowStaminaPending!.challenge!).normalizedScore;
+    const highScore = scoreTimingChallenge(0.81, highStaminaPending!.challenge!).normalizedScore;
+
+    expect(highScore).toBeGreaterThan(lowScore);
   });
 });

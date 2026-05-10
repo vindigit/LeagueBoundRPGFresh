@@ -35,6 +35,7 @@ const formatFinanceCategory = (category: string): string =>
 const formatGpa = (value: number): string => value.toFixed(1);
 const formatInjuryPenalty = (multiplier: number): string => `-${Math.round((1 - multiplier) * 100)}% performance`;
 const formatWeeksRemaining = (weeksRemaining: number): string => `${weeksRemaining} ${weeksRemaining === 1 ? "week" : "weeks"} left`;
+const getHealthStatusTone = (injury: unknown): string => (injury ? "text-amber-200" : "text-emerald-300");
 
 const projectedRoleLabel: Record<ProjectedRole, string> = {
   BENCH: "Bench role",
@@ -83,6 +84,39 @@ const formatWeeklyActionResultLines = (result: WeeklyActionResult): string[] =>
     result.scoutVisibilityDelta ? `Exposure +${result.scoutVisibilityDelta}` : null,
     result.moneyDelta ? `Cost $${Math.abs(result.moneyDelta)}` : null,
   ].filter((value): value is string => Boolean(value));
+
+type DashboardMetricCardProps = {
+  label: string;
+  value: string | number;
+  valueClassName?: string;
+  compact?: boolean;
+};
+
+function DashboardMetricCard({ label, value, valueClassName = "text-white", compact = false }: DashboardMetricCardProps) {
+  return (
+    <View className={`flex-1 justify-between rounded-2xl bg-black/30 px-4 py-4 ${compact ? "min-h-[96px]" : "aspect-square"}`}>
+      <Text className="text-[10px] font-semibold uppercase tracking-[0.18em] text-premium-muted">{label}</Text>
+      <Text className={`mt-3 text-xl font-bold leading-tight ${valueClassName}`}>{value}</Text>
+    </View>
+  );
+}
+
+type DashboardStatusRowProps = {
+  label: string;
+  value: string;
+  detail?: string;
+  valueClassName?: string;
+};
+
+function DashboardStatusRow({ label, value, detail, valueClassName = "text-white" }: DashboardStatusRowProps) {
+  return (
+    <View className="rounded-2xl bg-black/30 px-4 py-4">
+      <Text className="text-[10px] font-semibold uppercase tracking-[0.18em] text-premium-muted">{label}</Text>
+      <Text className={`mt-2 text-[15px] font-semibold ${valueClassName}`}>{value}</Text>
+      {detail ? <Text className="mt-1 text-[11px] uppercase tracking-[0.12em] text-slate-500">{detail}</Text> : null}
+    </View>
+  );
+}
 
 export function HomeScreen() {
   const view = useCareerStore((state) => state.view);
@@ -157,7 +191,7 @@ export function HomeScreen() {
                 {newsFeed.slice(0, 4).map((item) => (
                   <Pressable
                     key={item.id}
-                    className="rounded-lg bg-premium-bg px-3 py-2"
+                    className="rounded-2xl border-l-4 border-sky-500 bg-black/40 px-4 py-4"
                     disabled={!item.isTappable || !item.storyId}
                     onPress={() => {
                       if (item.storyId) {
@@ -165,7 +199,7 @@ export function HomeScreen() {
                       }
                     }}
                   >
-                    <Text className="text-sm font-semibold text-white">{item.headline}</Text>
+                    <Text className="text-[15px] font-semibold leading-6 text-slate-100">{item.headline}</Text>
                     {item.subhead ? <Text className="mt-1 text-xs text-premium-muted">{item.subhead}</Text> : null}
                     {item.isTappable ? <Text className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-sky-300">Open Story</Text> : null}
                   </Pressable>
@@ -176,121 +210,83 @@ export function HomeScreen() {
             )}
           </View>
 
-          <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">
+          <View className="mt-5 rounded-[28px] border border-white/5 bg-[#0F172A] p-5">
             <Text className="text-xs font-semibold uppercase tracking-wider text-premium-muted">Status</Text>
 
-            <View className="mt-3 flex-row flex-wrap gap-3">
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">League</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{formatLeagueLevel(leagueLevel)}</Text>
+            <View className="mt-4 gap-3">
+              <View className="flex-row gap-3">
+                <DashboardMetricCard label="League" value={formatLeagueLevel(leagueLevel)} />
+                <DashboardMetricCard label="Year" value={currentYear} />
+                <DashboardMetricCard label="Week" value={currentWeek} />
               </View>
 
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Year</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{currentYear}</Text>
+              <View className="flex-row gap-3">
+                <DashboardMetricCard label="Bank" value={formatCurrency(bankBalance)} valueClassName="text-premium-accent" />
+                <DashboardMetricCard label="Energy" value={energy} />
+                <DashboardMetricCard label="Condition" value={condition} />
               </View>
 
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Week</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{currentWeek}</Text>
+              <View className="flex-row gap-3">
+                <DashboardMetricCard label="Coach Trust" value={coachTrust} />
+                <DashboardMetricCard label="Fans" value={fans} />
+                <DashboardMetricCard label="Teammates" value={teammates} />
               </View>
 
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Bank</Text>
-                <Text className="mt-1 text-base font-semibold text-premium-accent">{formatCurrency(bankBalance)}</Text>
+              <View className="flex-row gap-3">
+                <DashboardMetricCard label="Exposure" value={scoutVisibility} compact />
+                <DashboardMetricCard
+                  label="GPA"
+                  value={formatGpa(gpa)}
+                  compact
+                  valueClassName={academicallyEligible ? "text-white" : "text-amber-300"}
+                />
               </View>
 
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Energy</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{energy}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Condition</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{condition}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Coach Trust</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{coachTrust}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Fans</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{fans}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Teammates</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{teammates}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">Exposure</Text>
-                <Text className="mt-1 text-base font-semibold text-white">{scoutVisibility}</Text>
-              </View>
-
-              <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">GPA</Text>
-                <Text className={`mt-1 text-base font-semibold ${academicallyEligible ? "text-white" : "text-amber-300"}`}>
-                  {formatGpa(gpa)}
-                </Text>
-              </View>
-
-              {showSchoolPathStatus ? (
-                <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                  <Text className="text-xs text-premium-muted">School Path</Text>
-                  <Text className="mt-1 text-base font-semibold text-white">{formatSchoolPathLabel(schoolPath)}</Text>
-                  {schoolPathProfile ? (
-                    <Text className="mt-1 text-xs text-premium-muted">{schoolPathProfile.playingTimeLabel}</Text>
+              {showSchoolPathStatus || leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+                <View className="flex-row gap-3">
+                  {showSchoolPathStatus ? (
+                    <DashboardMetricCard label="School Path" value={formatSchoolPathLabel(schoolPath)} compact />
+                  ) : null}
+                  {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
+                    <DashboardMetricCard label="Recruiting Buzz" value={recruitingBuzz} compact />
                   ) : null}
                 </View>
               ) : null}
+            </View>
 
-              {leagueLevel === LeagueLevel.HIGH_SCHOOL ? (
-                <View className="min-w-[30%] flex-1 rounded-lg bg-premium-bg p-3">
-                  <Text className="text-xs text-premium-muted">Recruiting Buzz</Text>
-                  <Text className="mt-1 text-base font-semibold text-white">{recruitingBuzz}</Text>
-                </View>
+            <View className="mt-6 gap-3">
+              <DashboardStatusRow label="Loop Status" value={loopStatus} />
+              <DashboardStatusRow
+                label="Weekly Action Budget"
+                value={`${weeklyActionState.slotsRemaining} remaining out of ${weeklyActionState.slotsTotal}`}
+              />
+              <DashboardStatusRow
+                label="Health"
+                value={injury ? "Minor ankle sprain" : "Healthy"}
+                valueClassName={getHealthStatusTone(injury)}
+                detail={
+                  injury
+                    ? `${formatWeeksRemaining(injury.weeksRemaining)} | ${formatInjuryPenalty(injury.performanceMultiplier)} | Wear & Tear: ${wearTear}`
+                    : `Wear & Tear: ${wearTear}`
+                }
+              />
+              {showSchoolPathStatus && schoolPathProfile ? (
+                <DashboardStatusRow label="Path Outlook" value={schoolPathProfile.playingTimeLabel} />
               ) : null}
             </View>
 
-            <View className="mt-3 rounded-lg bg-premium-bg p-3">
-              <Text className="text-xs text-premium-muted">Loop Status</Text>
-              <Text className="mt-1 text-sm font-medium text-white">{loopStatus}</Text>
-            </View>
-
             {activeTournamentMatch ? (
-              <View className="mt-3 rounded-lg bg-premium-bg p-3">
-                <Text className="text-xs text-premium-muted">{middleSchoolTournament?.eventName}</Text>
-                <Text className="mt-1 text-sm font-semibold text-white">{activeTournamentMatch.label}</Text>
+              <View className="mt-6 rounded-2xl bg-black/30 px-4 py-4">
+                <Text className="text-[10px] font-semibold uppercase tracking-[0.18em] text-premium-muted">
+                  {middleSchoolTournament?.eventName}
+                </Text>
+                <Text className="mt-2 text-[15px] font-semibold text-white">{activeTournamentMatch.label}</Text>
                 <Text className="mt-1 text-xs text-premium-muted">
                   vs {activeTournamentMatch.opponentLabel} • {activeTournamentMatch.tutorialFocus.join(" | ")}
                 </Text>
               </View>
             ) : null}
 
-            <View className="mt-3 rounded-lg bg-premium-bg p-3">
-              <Text className="text-xs text-premium-muted">Weekly Action Budget</Text>
-              <Text className="mt-1 text-sm font-medium text-white">
-                {weeklyActionState.slotsRemaining} remaining out of {weeklyActionState.slotsTotal}
-              </Text>
-            </View>
-
-            <View className="mt-3 rounded-lg bg-premium-bg p-3">
-              <Text className="text-xs text-premium-muted">Health</Text>
-              {injury ? (
-                <>
-                  <Text className="mt-1 text-sm font-semibold text-amber-200">Minor ankle sprain</Text>
-                  <Text className="mt-1 text-xs text-premium-muted">
-                    {formatWeeksRemaining(injury.weeksRemaining)} | {formatInjuryPenalty(injury.performanceMultiplier)}
-                  </Text>
-                </>
-              ) : (
-                <Text className="mt-1 text-sm font-medium text-white">Healthy</Text>
-              )}
-              <Text className="mt-2 text-xs text-premium-muted">Wear & Tear: {wearTear}</Text>
-            </View>
           </View>
 
           <View className="mt-5 rounded-2xl border border-premium-surfaceAlt bg-premium-surface p-4">

@@ -1,30 +1,24 @@
-import { getAllAttributesSorted } from "../src/components/playerCardUtils";
-import type { PlayerAttributes } from "../src/types/player";
+import type { PublicAttributes } from "../src/builder/publicAttributes";
+import { getAllPublicAttributesSorted } from "../src/components/playerCardUtils";
 
 describe("playerCardUtils", () => {
-  it("returns all 16 attributes sorted by value descending", () => {
-    const sorted = getAllAttributesSorted({
-      shortRange: 70,
-      dunking: 64,
-      midrange: 62,
-      threePoint: 68,
-      handle: 66,
-      passing: 59,
-      vision: 61,
-      perimeterDefense: 58,
-      interiorDefense: 54,
-      stealing: 63,
-      blocking: 52,
-      offRebounding: 56,
-      defRebounding: 57,
-      speed: 72,
-      strength: 60,
-      stamina: 69,
-    } satisfies PlayerAttributes);
+  it("returns all 7 public attributes sorted by value descending with player-facing labels", () => {
+    const sorted = getAllPublicAttributesSorted({
+      shooting: 70,
+      finishing: 64,
+      playmaking: 72,
+      defending: 58,
+      rebounding: 56,
+      athleticism: 69,
+      stamina: 72,
+    } satisfies PublicAttributes);
 
-    expect(sorted).toHaveLength(16);
-    expect(sorted[0].key).toBe("speed");
+    expect(sorted).toHaveLength(7);
+    expect(sorted[0].key).toBe("playmaking");
     expect(sorted[0].value).toBe(72);
-    expect(sorted[sorted.length - 1].key).toBe("blocking");
+    expect(sorted[0].label).toBe("Playmaking");
+    expect(sorted[1].key).toBe("stamina");
+    expect(sorted[sorted.length - 1].key).toBe("rebounding");
+    expect(sorted[sorted.length - 1].label).toBe("Rebounding");
   });
 });

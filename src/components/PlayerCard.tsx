@@ -1,7 +1,8 @@
 import { ScrollView, Text, View } from "react-native";
+import { inferPublicAttributesFromEngine } from "../builder/publicAttributes";
 import { getBackstoryGrowthOutlook } from "../features/backstory/generator";
 import { useCareerStore } from "../store/useCareerStore";
-import { getAllAttributesSorted } from "./playerCardUtils";
+import { getAllPublicAttributesSorted } from "./playerCardUtils";
 import { BuilderReviewSection, buildBuilderReviewSummary } from "./builderReview";
 import { isBadgeSystemAvailable } from "../builder/badges/availability";
 
@@ -12,7 +13,8 @@ export function PlayerCard() {
   const injury = useCareerStore((state) => state.injury);
   const leagueLevel = useCareerStore((state) => state.leagueLevel);
   const seasonNumber = useCareerStore((state) => state.seasonNumber);
-  const allAttributes = getAllAttributesSorted(attributes);
+  const publicAttributes = dna?.publicAttributes ?? identity?.publicAttributes ?? inferPublicAttributesFromEngine(attributes);
+  const allAttributes = getAllPublicAttributesSorted(publicAttributes);
   const hometownLabel = identity ? `${identity.hometown.city}, ${identity.hometown.state}` : "Unknown hometown";
   const builderReviewSummary = buildBuilderReviewSummary(dna);
   const fallbackGrowthOutlook = !builderReviewSummary && dna ? getBackstoryGrowthOutlook(dna.growthCurve) : null;

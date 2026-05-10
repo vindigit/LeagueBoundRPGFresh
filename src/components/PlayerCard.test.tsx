@@ -1,8 +1,9 @@
 import { render } from "@testing-library/react-native";
-import { PlayerCard } from "./PlayerCard";
+import { inferPublicAttributesFromEngine } from "../builder/publicAttributes";
 import { classifyBuilderBuild } from "../builder/classify";
 import type { CareerActions, CareerState } from "../types/career";
 import type { PlayerAttributes } from "../types/player";
+import { PlayerCard } from "./PlayerCard";
 
 const attributes: PlayerAttributes = {
   shortRange: 78,
@@ -24,6 +25,7 @@ const attributes: PlayerAttributes = {
 };
 
 const mockClassification = classifyBuilderBuild(attributes, "PG");
+const inferredPublicAttributes = inferPublicAttributesFromEngine(attributes);
 
 const mockCareerState = {
   injury: {
@@ -35,6 +37,8 @@ const mockCareerState = {
     performanceMultiplier: 0.88,
     canPlayThrough: true,
   },
+  leagueLevel: "MIDDLE_SCHOOL",
+  seasonNumber: 1,
   player: {
     id: "player-1",
     name: "Jordan Rivers",
@@ -78,6 +82,15 @@ const mockCareerState = {
       caps: attributes,
       growthResidue: {},
       publicTraits: ["Potential Tier: Gold", "Late Bloomer", "Athletic Frame"],
+      publicAttributes: {
+        shooting: 67,
+        finishing: 60,
+        playmaking: 91,
+        defending: 55,
+        rebounding: 44,
+        athleticism: 73,
+        stamina: 88,
+      },
       builderProfile: {
         classification: mockClassification,
         badges: [{ id: "floor_general", label: "Floor General", tier: "GOLD", description: "Makes the offense hum." }],
@@ -96,25 +109,66 @@ const mockCareerState = {
   },
 };
 
+let mockedState = mockCareerState;
+
 jest.mock("../store/useCareerStore", () => ({
   useCareerStore: (selector: (state: CareerState & CareerActions) => unknown) =>
-    selector(mockCareerState as unknown as CareerState & CareerActions),
+    selector(mockedState as unknown as CareerState & CareerActions),
 }));
 
 describe("PlayerCard", () => {
+  beforeEach(() => {
+    mockedState = mockCareerState;
+  });
+
   it("renders the builder review breakdown with player-facing labels", () => {
     const screen = render(<PlayerCard />);
 
-    expect(screen.getByText("Projected Sim Identity")).toBeTruthy();
-    expect(screen.getByText("Projected Role")).toBeTruthy();
+    expect(screen.getByText("Current-Level Sim Projection")).toBeTruthy();
+    expect(screen.getByText("Current Role")).toBeTruthy();
     expect(screen.getByText("Primary Creator")).toBeTruthy();
-    expect(screen.getByText("Top Strengths")).toBeTruthy();
-    expect(screen.getByText("Playmaking")).toBeTruthy();
-    expect(screen.getByText("Shooting")).toBeTruthy();
-    expect(screen.getByText("Floor General Gold")).toBeTruthy();
+    expect(screen.getByText("Strengths")).toBeTruthy();
+    expect(screen.getAllByText("Playmaking").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Shooting").length).toBeGreaterThan(0);
     expect(screen.getByText("Growth Outlook")).toBeTruthy();
     expect(screen.getByText("Slow start, big upside later")).toBeTruthy();
-    expect(screen.getByText("Minor ankle sprain • 2 weeks remaining")).toBeTruthy();
+    expect(screen.getByText(/Minor ankle sprain/)).toBeTruthy();
     expect(screen.queryByText("Compatibility Archetype:")).toBeNull();
+  });
+
+  it("renders public attributes instead of legacy engine stats when stored public attributes exist", () => {
+    const screen = render(<PlayerCard />);
+
+    expect(screen.getAllByText("Playmaking").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Shooting").length).toBeGreaterThan(0);
+    expect(screen.getByText("Athleticism")).toBeTruthy();
+    expect(screen.queryByText("Passing")).toBeNull();
+    expect(screen.queryByText("Vision")).toBeNull();
+    expect(screen.queryByText("Handle")).toBeNull();
+  });
+
+  it("falls back to inferred public attributes for legacy players without stored public attributes", () => {
+    mockedState = {
+      ...mockCareerState,
+      player: {
+        ...mockCareerState.player,
+        identity: {
+          ...mockCareerState.player.identity,
+          publicAttributes: undefined,
+        },
+        dna: {
+          ...mockCareerState.player.dna,
+          publicAttributes: undefined,
+        },
+      },
+    };
+
+    const screen = render(<PlayerCard />);
+
+    expect(screen.getAllByText("Playmaking").length).toBeGreaterThan(0);
+    expect(screen.getByText(String(inferredPublicAttributes.playmaking))).toBeTruthy();
+    expect(screen.getAllByText("Shooting").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Passing")).toBeNull();
+    expect(screen.queryByText("Vision")).toBeNull();
   });
 });

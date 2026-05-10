@@ -8,6 +8,7 @@ import { SchoolPathSelectionScreen } from "../features/career/screens/SchoolPath
 import { getWeeklyActionDefinition } from "../features/career/weeklyActions";
 import { MatchScreen } from "../features/match/screens/MatchScreen";
 import { PostgameScreen } from "../features/match/screens/PostgameScreen";
+import { StoryDetailScreen } from "./StoryDetailScreen";
 import { useCareerStore } from "../store/useCareerStore";
 import { LeagueLevel, type WeeklyActionDefinitionId, type WeeklyActionResult } from "../types/career";
 import type { FinanceLedgerEntry, ProjectedRole } from "../types/careerProgression";
@@ -105,6 +106,7 @@ export function HomeScreen() {
   const newsFeed = useCareerStore((state) => state.newsFeed);
   const weeklyActionState = useCareerStore((state) => state.weeklyActionState);
   const lastWeeklyActionResult = useCareerStore((state) => state.lastWeeklyActionResult);
+  const openStoryDetail = useCareerStore((state) => state.openStoryDetail);
   const takeWeeklyAction = useCareerStore((state) => state.takeWeeklyAction);
   const dismissWeeklyActionResult = useCareerStore((state) => state.dismissWeeklyActionResult);
   const navigateToMatch = useCareerStore((state) => state.navigateToMatch);
@@ -149,10 +151,20 @@ export function HomeScreen() {
             {newsFeed.length > 0 ? (
               <View className="mt-3 gap-2">
                 {newsFeed.slice(0, 4).map((item) => (
-                  <View key={item.id} className="rounded-lg bg-premium-bg px-3 py-2">
+                  <Pressable
+                    key={item.id}
+                    className="rounded-lg bg-premium-bg px-3 py-2"
+                    disabled={!item.isTappable || !item.storyId}
+                    onPress={() => {
+                      if (item.storyId) {
+                        openStoryDetail(item.storyId);
+                      }
+                    }}
+                  >
                     <Text className="text-sm font-semibold text-white">{item.headline}</Text>
                     {item.subhead ? <Text className="mt-1 text-xs text-premium-muted">{item.subhead}</Text> : null}
-                  </View>
+                    {item.isTappable ? <Text className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-sky-300">Open Story</Text> : null}
+                  </Pressable>
                 ))}
               </View>
             ) : (
@@ -447,6 +459,8 @@ export function HomeScreen() {
       {view === "MATCH" ? <MatchScreen /> : null}
 
       {view === "POSTGAME" ? <PostgameScreen /> : null}
+
+      {view === "STORY_DETAIL" ? <StoryDetailScreen /> : null}
 
       {view === "BACKSTORY" ? <BackstoryScreen /> : null}
 

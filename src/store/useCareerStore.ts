@@ -32,6 +32,7 @@ import {
 import {
   createCareerCreationNewsItem,
   createPostgameNewsItem,
+  createPostgameStoryDetail,
   createSchoolPathCommitmentNewsItem,
 } from "../features/backstory/news";
 import { computeOverall } from "../builder/derivedRatings";
@@ -67,7 +68,7 @@ import type {
   StarRating,
 } from "../types/careerProgression";
 import { normalizePlayerStateForInk, type LegacyPlayerStateInput, type Player, type PlayerAttributes } from "../types/player";
-import type { BackstoryInput, BuildBackstoryInput, GeneratedBadgeProfile, HeightPreset, WeightPreset } from "../types/backstory";
+import type { BackstoryInput, BuildBackstoryInput, GeneratedBadgeProfile, HeightPreset, StoryDetail, WeightPreset } from "../types/backstory";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
 
 type CareerStore = CareerState & CareerActions;
@@ -869,6 +870,8 @@ const initialCareerState: CareerState = {
   lastMatchResult: null,
   lastWeeklyActionResult: null,
   newsFeed: [],
+  storiesById: {},
+  selectedStoryId: null,
   weeklyActionState: createDefaultWeeklyActionState(LeagueLevel.MIDDLE_SCHOOL),
   ovrBudget: 60,
   exile: null,
@@ -1147,6 +1150,8 @@ export const useCareerStore = create<CareerStore>()(
           view: "HUB",
           pendingSchoolPathSelection: false,
           newsFeed: [creationNews],
+          storiesById: {},
+          selectedStoryId: null,
           weeklyActionState: createDefaultWeeklyActionState(initialCareerState.leagueLevel),
         }));
       },
@@ -1497,6 +1502,25 @@ export const useCareerStore = create<CareerStore>()(
           view: "HUB",
           lastMatchResult: null,
           lastWeeklyActionResult: null,
+          selectedStoryId: null,
+        }));
+      },
+      openStoryDetail: (storyId) => {
+        set((state) => {
+          if (!state.storiesById[storyId]) {
+            return state;
+          }
+          return {
+            view: "STORY_DETAIL",
+            selectedStoryId: storyId,
+            lastWeeklyActionResult: null,
+          };
+        });
+      },
+      closeStoryDetail: () => {
+        set(() => ({
+          view: "HUB",
+          selectedStoryId: null,
         }));
       },
       applyMatchConsequences: (consequences) => {
@@ -1594,9 +1618,19 @@ export const useCareerStore = create<CareerStore>()(
               ? getSchoolPathProfile(state.schoolPath).weeklyExposureGain + (state.lastMatchResult.didWin ? 2 : 1)
               : 0;
           const nextScoutVisibility = clampVisibility(state.scoutVisibility + visibilityGain);
-          const newsFeed =
+          const storyDetail =
             state.player.identity
-              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, state.lastMatchResult))
+              ? createPostgameStoryDetail({
+                  identity: state.player.identity,
+                  result: state.lastMatchResult,
+                  leagueLevel: state.leagueLevel,
+                  currentYear: state.currentYear,
+                  currentWeek: state.currentWeek,
+                })
+              : null;
+          const newsFeed =
+            state.player.identity && storyDetail
+              ? appendNewsItem(state.newsFeed, createPostgameNewsItem(state.player.identity, state.lastMatchResult, storyDetail.id))
               : state.newsFeed;
           const pendingSchoolPathSelection =
             state.leagueLevel === LeagueLevel.MIDDLE_SCHOOL && state.currentWeek === 1;
@@ -1652,6 +1686,8 @@ export const useCareerStore = create<CareerStore>()(
             lastMatchResult: null,
             lastWeeklyActionResult: null,
             newsFeed,
+            storiesById: storyDetail ? { ...state.storiesById, [storyDetail.id]: storyDetail } : state.storiesById,
+            selectedStoryId: null,
             scoutVisibility: nextScoutVisibility,
             coachTrust: nextMeterState.coachTrust,
             fans: nextMeterState.fans,
@@ -1676,7 +1712,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: "leaguebound-career-storage",
-      version: 16,
+      version: 17,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") {
@@ -1718,6 +1754,8 @@ export const useCareerStore = create<CareerStore>()(
             currentWeek: fallbackCurrentWeek,
             view: getInitialCareerView(),
             newsFeed: [],
+            storiesById: {},
+            selectedStoryId: null,
             weeklyActionState: createDefaultWeeklyActionState(fallbackLeagueLevel),
             pendingSchoolPathSelection: false,
             financeLedger: [],
@@ -1729,6 +1767,8 @@ export const useCareerStore = create<CareerStore>()(
         const normalizedPlayer = normalizePersistedPlayer(typedState.player);
         const migratedPlayer = migratePlayerWithBackstory(normalizedPlayer);
         const newsFeed = Array.isArray(typedState.newsFeed) ? typedState.newsFeed : [];
+        const storiesById =
+          typedState.storiesById && typeof typedState.storiesById === "object" ? (typedState.storiesById as Record<string, StoryDetail>) : {};
         const shouldUseBackstoryView = !isInitializedPlayer(migratedPlayer) && BACKSTORY_V1_ENABLED;
         const leagueLevel = typedState.leagueLevel ?? LeagueLevel.MIDDLE_SCHOOL;
         const currentYear = typedState.currentYear ?? initialCareerState.currentYear;
@@ -1796,6 +1836,8 @@ export const useCareerStore = create<CareerStore>()(
           careerPhase: typedState.careerPhase ?? progressionState.careerPhase,
           view: resolvedView,
           newsFeed,
+          storiesById,
+          selectedStoryId: null,
           weeklyActionState,
           pendingSchoolPathSelection: typedState.pendingSchoolPathSelection ?? false,
           starRating: typedState.starRating ?? progressionState.starRating,
@@ -1863,7 +1905,9 @@ export const useCareerStore = create<CareerStore>()(
         currentNarrativeFile: state.currentNarrativeFile,
         lastMatchResult: normalizeLastMatchResult(state.lastMatchResult),
         newsFeed: state.newsFeed,
+        storiesById: state.storiesById,
         weeklyActionState: state.weeklyActionState,
+        selectedStoryId: null,
         ovrBudget: state.ovrBudget,
         exile: state.exile,
         exileState: state.exileState,

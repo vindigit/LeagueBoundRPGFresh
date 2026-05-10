@@ -1,6 +1,6 @@
 import type { Player, PlayerAttributes } from "./player";
 import type { MatchBoxScore } from "../features/match/store/useMatchStore";
-import type { AttributeGainSource, BackstoryInput, BuildBackstoryInput, CareerNewsItem } from "./backstory";
+import type { AttributeGainSource, BackstoryInput, BuildBackstoryInput, CareerNewsItem, StoryDetail } from "./backstory";
 import type {
   ActiveInjury,
   CareerPhase,
@@ -35,7 +35,7 @@ export enum CareerStatus {
 
 export type ExileStatus = Exclude<ExileMode, "NONE">;
 
-export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME" | "SCHOOL_PATH_SELECT";
+export type CareerView = "BACKSTORY" | "HUB" | "NARRATIVE" | "MATCH" | "POSTGAME" | "SCHOOL_PATH_SELECT" | "STORY_DETAIL";
 
 export interface LastMatchResult {
   homeScore: number;
@@ -151,6 +151,8 @@ export interface CareerState {
   lastMatchResult: LastMatchResult | null;
   lastWeeklyActionResult: WeeklyActionResult | null;
   newsFeed: CareerNewsItem[];
+  storiesById: Record<string, StoryDetail>;
+  selectedStoryId: string | null;
   weeklyActionState: WeeklyActionState;
   ovrBudget: number;
   exile: ExileStatus | null;
@@ -186,6 +188,8 @@ export interface CareerActions {
   closeNarrative(): void;
   navigateToMatch(): void;
   navigateToHub(): void;
+  openStoryDetail(storyId: string): void;
+  closeStoryDetail(): void;
   applyMatchConsequences(consequences: MatchConsequence[]): void;
   completeMatch(result: {
     homeScore: number;

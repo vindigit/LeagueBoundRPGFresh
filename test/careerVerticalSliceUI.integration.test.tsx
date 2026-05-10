@@ -77,6 +77,8 @@ describe("Career vertical slice UI", () => {
       },
       view: "BACKSTORY",
       newsFeed: [],
+      storiesById: {},
+      selectedStoryId: null,
       lastMatchResult: null,
       lastWeeklyActionResult: null,
       weeklyActionState: {
@@ -172,6 +174,10 @@ describe("Career vertical slice UI", () => {
     expect(useCareerStore.getState().leagueLevel).toBe("HIGH_SCHOOL");
     expect(useCareerStore.getState().schoolPath).toBe("STATE_5A");
     expect(useCareerStore.getState().newsFeed.some((item) => item.category === "POSTGAME_RECAP")).toBe(true);
+    const postgameStoryItem = useCareerStore.getState().newsFeed.find((item) => item.category === "POSTGAME_RECAP");
+    expect(postgameStoryItem?.isTappable).toBe(true);
+    expect(postgameStoryItem?.storyId).toBeTruthy();
+    expect(postgameStoryItem?.storyId ? useCareerStore.getState().storiesById[postgameStoryItem.storyId] : null).toBeTruthy();
     expect(useCareerStore.getState().financeLedger).toHaveLength(2);
     expect(screen.getByText("School Path")).toBeTruthy();
     expect(screen.getByText("State 5A")).toBeTruthy();
@@ -182,6 +188,17 @@ describe("Career vertical slice UI", () => {
     expect(screen.queryAllByText("Accept").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Decline").length).toBeGreaterThan(0);
     expect(screen.getByText("3 of 3 weekly actions remaining.")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Open Story"));
+    expect(useCareerStore.getState().view).toBe("STORY_DETAIL");
+    expect(screen.getByText("Recap")).toBeTruthy();
+    expect(screen.getByText("Box Score")).toBeTruthy();
+    expect(screen.getByText("Buzz")).toBeTruthy();
+    expect(screen.getByText("Key Performance")).toBeTruthy();
+    fireEvent.press(screen.getByText("Box Score"));
+    expect(screen.getByText("Final Score")).toBeTruthy();
+    fireEvent.press(screen.getByText("Buzz"));
+    expect(screen.getByText(/Local reaction from around/)).toBeTruthy();
   });
 
   it("shows CourtFuel, blocks it without cash, and applies it with a popup when affordable", () => {

@@ -124,11 +124,176 @@ export interface GeneratedBadgeProfile {
   badges: ResolvedBuilderBadge[];
 }
 
+export type CareerNewsCategory = "LOCAL_BUZZ" | "POSTGAME_RECAP";
+export type StoryType = "POSTGAME";
+export type StoryTabId = "RECAP" | "BOX_SCORE" | "BUZZ";
+export type RecapTier = "STANDARD" | "FEATURE";
+export type RecapStyle = "ESPN" | "ATHLETIC";
+export type StoryAngleTag =
+  | "STATEMENT_WIN"
+  | "STEADY_CONTROL"
+  | "BREAKOUT_PERFORMANCE"
+  | "GRITTY_LOSS"
+  | "TOUGH_SHOOTING_NIGHT"
+  | "BOUNCE_BACK"
+  | "OVERTIME_TEST"
+  | "SEASON_DEFINING"
+  | "INJURY_SHADOWED";
+export type StoryStakesTag =
+  | "REGULAR_SEASON"
+  | "TOURNAMENT"
+  | "PLAYOFF"
+  | "RIVALRY"
+  | "CHAMPIONSHIP"
+  | "SEASON_ENDING";
+export type FeatureReason =
+  | "PLAYOFF_GAME"
+  | "TOURNAMENT_GAME"
+  | "RIVALRY_GAME"
+  | "CHAMPIONSHIP_GAME"
+  | "SEASON_ENDING_LOSS"
+  | "OVERTIME"
+  | "CLOSE_GAME"
+  | "BIG_SCORING_NIGHT"
+  | "STRONG_LOSS"
+  | "ELITE_MATCH_RATING"
+  | "INJURY_GAME";
+export type BuzzAuthorType = "CLASSMATE" | "LOCAL_FAN" | "STUDENT_ACCOUNT" | "COMMUNITY";
+export type BuzzSentiment = "POSITIVE" | "NEGATIVE" | "MIXED" | "FUNNY";
+
 export interface CareerNewsItem {
   id: string;
   createdAt: number;
   week: number;
-  category: "LOCAL_BUZZ" | "POSTGAME_RECAP";
+  category: CareerNewsCategory;
   headline: string;
   subhead?: string;
+  isTappable?: boolean;
+  storyId?: string;
+}
+
+export interface StoryContext {
+  leagueLevel: LeagueLevel;
+  seasonYear: number;
+  week: number;
+  playerTeamLabel: string;
+  opponentTeamLabel: string;
+  homeScore: number;
+  awayScore: number;
+  didWin: boolean;
+  margin: number;
+  overtimePeriods: number;
+  stakesTag: StoryStakesTag;
+  featureReason?: FeatureReason;
+  matchRating: number;
+}
+
+export interface StoryBuzzPost {
+  id: string;
+  authorName: string;
+  authorType: BuzzAuthorType;
+  text: string;
+  sentiment: BuzzSentiment;
+  likes: number;
+  reposts: number;
+  timestampLabel: string;
+}
+
+export interface StoryBuzz {
+  tone: "LOCAL";
+  scope: "LOCAL_ONLY";
+  intro?: string;
+  pinnedPostId?: string;
+  posts: StoryBuzzPost[];
+}
+
+export interface StoryRecap {
+  tier: RecapTier;
+  style: RecapStyle;
+  angleTag: StoryAngleTag;
+  headline: string;
+  subhead?: string;
+  body: string;
+  wordCount: number;
+  publishedAt: number;
+  keyPerformance: {
+    points: number;
+    rebounds: number;
+    assists: number;
+    fieldGoalsMade: number;
+    fieldGoalsAttempted: number;
+    threePointsMade: number;
+    threePointsAttempted: number;
+  };
+  impact: {
+    fansDelta: number;
+    coachTrustDelta: number;
+    teammatesDelta?: number;
+    scoutVisibilityDelta?: number;
+  };
+  momentOfTheNight?: string;
+}
+
+export interface StoryBoxScoreTeam {
+  label: string;
+  totals: {
+    pts: number;
+    reb: number;
+    ast: number;
+    stl: number;
+    blk: number;
+    to: number;
+    fgm: number;
+    fga: number;
+    tpm?: number;
+    tpa?: number;
+    ftm: number;
+    fta: number;
+    pf: number;
+  };
+  players: Array<{
+    id: string;
+    name: string;
+    team: "home" | "away";
+    pts: number;
+    reb: number;
+    ast: number;
+    stl: number;
+    blk: number;
+    to: number;
+    fgm: number;
+    fga: number;
+    tpm?: number;
+    tpa?: number;
+    ftm: number;
+    fta: number;
+    pf: number;
+  }>;
+}
+
+export interface StoryBoxScore {
+  summary: {
+    homeScore: number;
+    awayScore: number;
+    didWin: boolean;
+    overtimePeriods: number;
+  };
+  homeTeam: StoryBoxScoreTeam;
+  awayTeam: StoryBoxScoreTeam;
+  highlightPlayerId: string;
+}
+
+export interface StoryDetail {
+  id: string;
+  storyType: StoryType;
+  createdAt: number;
+  week: number;
+  defaultTab: StoryTabId;
+  availableTabs: StoryTabId[];
+  headline: string;
+  subhead?: string;
+  context: StoryContext;
+  recap: StoryRecap;
+  boxScore: StoryBoxScore;
+  buzz: StoryBuzz;
 }
